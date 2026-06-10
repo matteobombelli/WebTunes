@@ -1,10 +1,10 @@
-# WebTunes — Production Setup (matteob.dev/projects/webtunes)
+# WebTunes — Production Setup (matteobombelli.dev/projects/webtunes)
 
 What you need to set up, in order:
 
 1. An AWS S3 bucket + IAM credentials (file storage)
 2. A Linux box reachable from the internet (runs the Next.js app + Postgres)
-3. A reverse proxy with TLS serving `matteob.dev`, routing `/projects/webtunes` to the app
+3. A reverse proxy with TLS serving `matteobombelli.dev`, routing `/projects/webtunes` to the app
 
 LRCLIB (lyrics) needs no setup — it's a free public API with no key.
 
@@ -23,7 +23,7 @@ LRCLIB (lyrics) needs no setup — it's a free public API with no key.
 ```json
 [
   {
-    "AllowedOrigins": ["https://matteob.dev"],
+    "AllowedOrigins": ["https://matteobombelli.dev"],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag", "Accept-Ranges", "Content-Range", "Content-Length"],
@@ -31,7 +31,7 @@ LRCLIB (lyrics) needs no setup — it's a free public API with no key.
   }
 ]
 ```
-
+DONE
 ### Create scoped credentials
 1. IAM → Policies → **Create policy** → JSON (replace `BUCKET`):
 
@@ -55,15 +55,16 @@ LRCLIB (lyrics) needs no setup — it's a free public API with no key.
 
 2. IAM → Users → **Create user** `webtunes-app` (no console access) → attach the policy
 3. User → Security credentials → **Create access key** (type: "Application running outside AWS") → save both values
-
+DONE — real values live in `.env.production` (gitignored). **Never put the
+actual keys in this file: it is committed to git.**
 ### Production env vars
 
 ```
 S3_ENDPOINT=            # empty = real AWS
 S3_REGION=ca-west-1
-S3_ACCESS_KEY_ID=<from IAM>
-S3_SECRET_ACCESS_KEY=<from IAM>
-S3_BUCKET=webtunes-prod-<your-suffix>
+S3_ACCESS_KEY_ID=<in .env.production>
+S3_SECRET_ACCESS_KEY=<in .env.production>
+S3_BUCKET=webtunes-prod-matteobombelli
 S3_FORCE_PATH_STYLE=false
 ```
 
@@ -71,13 +72,49 @@ S3_FORCE_PATH_STYLE=false
 
 ---
 
-## 2. The server
+## 2. The server — OVHcloud VPS-1 (Hillsboro, OR)
 
-`matteob.dev` currently resolves to `154.5.149.159` with ports 80/443 closed from the internet. Two paths:
+### DNS
+In your domain registrar's DNS panel for `matteobombelli.dev`:
+- Set the `A` record for `matteobombelli.dev` (apex/`@`) to the VPS's public IPv4 (shown in the OVH control panel)
+- Optional: `AAAA` record for the VPS's IPv6, and a `www` CNAME → `matteobombelli.dev`
+- `.dev` is an HSTS-preloaded TLD: browsers force HTTPS, so the site only works once Caddy/certbot has a certificate — that's automatic once DNS points here
 
-- **Home server:** forward ports 80 + 443 on your router to the box, or skip port-forwarding entirely with **Cloudflare Tunnel** (`cloudflared`) — it dials out, so no open ports, and gives you TLS for free. With a Telus residential IP (possibly dynamic), the tunnel is the more robust option.
-- **VPS:** any $5–10/mo box (Hetzner, DigitalOcean, Lightsail) and point the `matteob.dev` A record at it.
+### First login + hardening (Debian 13)
+```bash
+ssh debian@<VPS_IP>
+sudo apt update && sudo apt -y full-upgrade
 
+# Firewall: SSH + web only (ufw isn't preinstalled on Debian)
+sudo apt -y install ufw
+sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+sudo ufw --force enable
+
+# Auto security updates
+sudo apt -y install unattended-upgrades
+sudo dpkg-reconfigure -f noninteractive unattended-upgrades
+
+# SSH keys only — run ONLY if you log in with an SSH key, not a password
+sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+```
+
+### Install the stack
+```bash
+# Node 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt -y install nodejs
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER
+
+# Caddy (reverse proxy + automatic TLS)
+sudo apt -y install debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt -y install caddy
+```
+
+### Deploy WebTunes
 On the box:
 
 ```bash
@@ -96,7 +133,7 @@ Prod `.env.local`:
 ```
 DATABASE_URL=postgres://webtunes:<strong-password>@localhost:5432/webtunes
 AUTH_SECRET=<openssl rand -base64 32>
-AUTH_URL=https://matteob.dev/projects/webtunes/api/auth
+AUTH_URL=https://matteobombelli.dev/projects/webtunes/api/auth
 # + the S3 block from section 1
 ```
 
@@ -131,11 +168,14 @@ The app is built with `basePath: "/projects/webtunes"`, so the proxy just passes
 **Caddy** (simplest — automatic TLS):
 
 ```caddy
-matteob.dev {
+matteobombelli.dev {
     handle /projects/webtunes* {
         reverse_proxy 127.0.0.1:3000
     }
-    # ... whatever serves the rest of matteob.dev
+    handle {
+        # placeholder until the personal site exists; later: root + file_server
+        respond "matteobombelli.dev — coming soon" 200
+    }
 }
 ```
 
@@ -152,15 +192,15 @@ location /projects/webtunes {
 }
 ```
 
-**Cloudflare Tunnel** (no open ports): `cloudflared tunnel` with an ingress rule for `matteob.dev` → `http://localhost:80` (your proxy) or route the path directly to `http://localhost:3000`. Note Cloudflare's free plan caps uploads at 100 MB per request — fine for music files.
+With Caddy, put the site config in `/etc/caddy/Caddyfile` and `sudo systemctl reload caddy`. Certificates are fetched automatically once DNS resolves to the box.
 
 ---
 
 ## Checklist
 
-- [ ] S3 bucket created, CORS set, IAM user + access key saved
-- [ ] Server reachable on 80/443 (or Cloudflare Tunnel running)
+- [x] S3 bucket created, CORS set, IAM user + access key saved
+- [ ] DNS A record → VPS IP; server reachable on 80/443
 - [ ] Postgres running, `drizzle-kit migrate` applied
 - [ ] `.env.local` has prod `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, S3 vars
 - [ ] `npm run build && npm start` behind the proxy
-- [ ] Visit https://matteob.dev/projects/webtunes → register → upload → play
+- [ ] Visit https://matteobombelli.dev/projects/webtunes → register → upload → play
