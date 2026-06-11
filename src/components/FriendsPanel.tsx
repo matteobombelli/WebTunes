@@ -17,6 +17,7 @@ export default function FriendsPanel({
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"friends" | "requests">("friends");
 
   const incoming = requests.filter((r) => r.direction === "incoming");
   const outgoing = requests.filter((r) => r.direction === "outgoing");
@@ -56,7 +57,30 @@ export default function FriendsPanel({
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
+      <div className="flex gap-1 border-b border-neutral-800">
+        {(
+          [
+            ["friends", `Friends (${friends.length})`],
+            ["requests", `Requests${incoming.length ? ` (${incoming.length})` : ""}`],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setTab(value)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+              tab === value
+                ? "border-emerald-500 text-white"
+                : "border-transparent text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "friends" && (
+      <>
       <form onSubmit={send} className="flex items-center gap-2">
         <input
           type="email"
@@ -75,8 +99,14 @@ export default function FriendsPanel({
         </button>
         {message && <span className="text-sm text-neutral-400">{message}</span>}
       </form>
+      </>
+      )}
 
-      {incoming.length > 0 && (
+      {tab === "requests" && incoming.length === 0 && outgoing.length === 0 && (
+        <p className="text-sm text-neutral-500">No pending requests.</p>
+      )}
+
+      {tab === "requests" && incoming.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold uppercase text-neutral-500">
             Incoming requests
@@ -109,7 +139,7 @@ export default function FriendsPanel({
         </section>
       )}
 
-      {outgoing.length > 0 && (
+      {tab === "requests" && outgoing.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold uppercase text-neutral-500">
             Sent requests
@@ -136,10 +166,8 @@ export default function FriendsPanel({
         </section>
       )}
 
+      {tab === "friends" && (
       <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase text-neutral-500">
-          Friends
-        </h2>
         {friends.length === 0 ? (
           <p className="text-sm text-neutral-500">
             No friends yet. Friends automatically share their libraries with each other.
@@ -175,6 +203,7 @@ export default function FriendsPanel({
           </ul>
         )}
       </section>
+      )}
     </div>
   );
 }

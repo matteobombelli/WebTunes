@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { tracks } from "@/db/schema";
+import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { friendIdsOf } from "@/lib/friends";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { uploadObject } from "@/lib/s3";
 
@@ -19,9 +20,37 @@ const AUDIO_EXTENSIONS = new Set([
   "webm",
 ]);
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  // scope=all additionally includes friends' non-private tracks.
+  if (req.nextUrl.searchParams.get("scope") === "all") {
+    const friendIds = await friendIdsOf(user.id);
+    const rows = await db
+      .select({ track: tracks, ownerName: users.name })
+      .from(tracks)
+      .innerJoin(users, eq(tracks.ownerId, users.id))
+      .where(
+        or(
+          eq(tracks.ownerId, user.id),
+          friendIds.length
+            ? and(
+                inArray(tracks.ownerId, friendIds),
+                eq(tracks.isPrivate, false)
+              )
+            : sql`false`
+        )
+      )
+      .orderBy(desc(tracks.createdAt));
+    return NextResponse.json(
+      rows.map((r) => ({
+        ...r.track,
+        createdAt: r.track.createdAt.toISOString(),
+        ownerName: r.track.ownerId === user.id ? null : r.ownerName,
+      }))
+    );
+  }
 
   const rows = await db
     .select()

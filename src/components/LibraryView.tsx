@@ -52,7 +52,7 @@ export default function LibraryView({ tracks }: { tracks: TrackDTO[] }) {
           </select>
         </label>
       </div>
-      <TrackList tracks={sorted} canDelete canEdit />
+      <TrackList tracks={sorted} canDelete canEdit selectable />
     </>
   );
 }

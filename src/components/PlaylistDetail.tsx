@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
+import AddTracksDialog from "@/components/AddTracksDialog";
 import TrackList from "@/components/TrackList";
 
 export default function PlaylistDetail({
@@ -21,6 +22,7 @@ export default function PlaylistDetail({
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(playlist.name);
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const rename = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +155,12 @@ export default function PlaylistDetail({
               ▶ Play all
             </button>
             <button
+              onClick={() => setAdding(true)}
+              className="rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-200 hover:border-neutral-400"
+            >
+              Add songs
+            </button>
+            <button
               onClick={deletePlaylist}
               className="text-sm text-neutral-400 hover:text-red-400"
             >
@@ -171,6 +179,14 @@ export default function PlaylistDetail({
         removeLabel="Remove from playlist"
         onMove={moveTrack}
       />
+
+      {adding && (
+        <AddTracksDialog
+          playlistId={playlist.id}
+          existingTrackIds={tracks.map((t) => t.id)}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }

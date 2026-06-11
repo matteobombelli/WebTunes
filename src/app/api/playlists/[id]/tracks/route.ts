@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
@@ -9,7 +9,10 @@ import { getOwnPlaylist } from "@/lib/playlists";
 
 type Params = { params: Promise<{ id: string }> };
 
-const addSchema = z.object({ trackId: z.string().uuid() });
+const addSchema = z.union([
+  z.object({ trackId: z.string().uuid() }),
+  z.object({ trackIds: z.array(z.string().uuid()).min(1).max(500) }),
+]);
 
 export async function POST(req: NextRequest, { params }: Params) {
   const user = await requireUser();
@@ -23,45 +26,67 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const parsed = addSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "trackId is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "trackId or trackIds is required" },
+      { status: 400 }
+    );
   }
+  const requestedIds =
+    "trackId" in parsed.data ? [parsed.data.trackId] : parsed.data.trackIds;
 
-  const [track] = await db
+  const candidates = await db
     .select({
       id: tracks.id,
       ownerId: tracks.ownerId,
       isPrivate: tracks.isPrivate,
     })
     .from(tracks)
-    .where(eq(tracks.id, parsed.data.trackId));
-  if (!track) {
+    .where(inArray(tracks.id, requestedIds));
+  if (candidates.length !== requestedIds.length) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  if (!(await canAccessTrack(user.id, track))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  for (const track of candidates) {
+    if (!(await canAccessTrack(user.id, track))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
-  const [existing] = await db
+  const existing = await db
     .select({ trackId: playlistTracks.trackId })
     .from(playlistTracks)
     .where(
-      and(eq(playlistTracks.playlistId, id), eq(playlistTracks.trackId, track.id))
+      and(
+        eq(playlistTracks.playlistId, id),
+        inArray(playlistTracks.trackId, requestedIds)
+      )
     );
-  if (existing) {
+  const existingIds = new Set(existing.map((e) => e.trackId));
+  // Preserve request order; silently skip tracks already in the playlist.
+  const toAdd = requestedIds.filter((tid) => !existingIds.has(tid));
+  if (toAdd.length === 0) {
     return NextResponse.json({ error: "Already in playlist" }, { status: 409 });
   }
 
-  await db.insert(playlistTracks).values({
-    playlistId: id,
-    trackId: track.id,
-    position: sql`coalesce((select max(${playlistTracks.position}) + 1
-      from ${playlistTracks} where ${playlistTracks.playlistId} = ${id}), 0)`,
+  await db.transaction(async (tx) => {
+    const [{ base }] = await tx
+      .select({
+        base: sql<number>`coalesce(max(${playlistTracks.position}) + 1, 0)::int`,
+      })
+      .from(playlistTracks)
+      .where(eq(playlistTracks.playlistId, id));
+    await tx.insert(playlistTracks).values(
+      toAdd.map((trackId, i) => ({
+        playlistId: id,
+        trackId,
+        position: base + i,
+      }))
+    );
+    await tx
+      .update(playlists)
+      .set({ updatedAt: new Date() })
+      .where(eq(playlists.id, id));
   });
-  await db
-    .update(playlists)
-    .set({ updatedAt: new Date() })
-    .where(eq(playlists.id, id));
-  return new NextResponse(null, { status: 204 });
+  return NextResponse.json({ added: toAdd.length }, { status: 200 });
 }
 
 const reorderSchema = z.object({ trackIds: z.array(z.string().uuid()).min(1) });
