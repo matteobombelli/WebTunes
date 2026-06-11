@@ -1,6 +1,6 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listOwnTracks } from "@/lib/tracks";
-import LibraryView from "@/components/LibraryView";
+import TrackList from "@/components/TrackList";
 import UploadDialog from "@/components/UploadDialog";
 
 export default async function LibraryPage() {
@@ -18,7 +18,7 @@ export default async function LibraryPage() {
         </div>
         <UploadDialog />
       </div>
-      <LibraryView tracks={trackDTOs} />
+      <TrackList tracks={trackDTOs} canDelete canEdit selectable sortable />
     </div>
   );
 }

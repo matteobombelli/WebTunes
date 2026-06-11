@@ -6,9 +6,33 @@ import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 
-// Mounted only while open (parent renders it conditionally), so all state
-// starts fresh each time the dialog is opened.
+// Stays mounted so the Dialog can animate out; the body mounts per open so
+// the filter and selection start fresh each time.
 export default function AddTracksDialog({
+  playlistId,
+  existingTrackIds,
+  open,
+  onClose,
+}: {
+  playlistId: string;
+  existingTrackIds: string[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog title="Add songs" open={open} onClose={onClose} wide>
+      {open && (
+        <AddTracksBody
+          playlistId={playlistId}
+          existingTrackIds={existingTrackIds}
+          onClose={onClose}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+function AddTracksBody({
   playlistId,
   existingTrackIds,
   onClose,
@@ -81,64 +105,62 @@ export default function AddTracksDialog({
   };
 
   return (
-    <Dialog title="Add songs" open onClose={onClose} wide>
-      <div className="flex flex-col gap-3">
-        <input
-          autoFocus
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter by title, artist, or album"
-          className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-        />
-        <div className="max-h-80 overflow-y-auto rounded-md border border-neutral-800">
-          {candidates === null && (
-            <p className="p-4 text-sm text-neutral-500">Loading…</p>
-          )}
-          {candidates?.length === 0 && (
-            <p className="p-4 text-sm text-neutral-500">
-              No more songs available to add.
-            </p>
-          )}
-          {candidates?.map((t) => (
-            <label
-              key={t.id}
-              className="flex cursor-pointer items-center gap-3 border-b border-neutral-800/60 px-3 py-2 text-sm last:border-b-0 hover:bg-neutral-800/40"
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(t.id)}
-                onChange={() => toggle(t.id)}
-                className="h-4 w-4 shrink-0 accent-emerald-500"
-              />
-              <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
-              <span className="hidden max-w-32 truncate text-neutral-400 sm:block">
-                {t.artist ?? "—"}
-              </span>
-              <span className="shrink-0 text-xs text-neutral-500">
-                {t.ownerName ?? "You"}
-              </span>
-            </label>
-          ))}
-        </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-neutral-400 hover:text-white"
+    <div className="flex flex-col gap-3">
+      <input
+        autoFocus
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filter by title, artist, or album"
+        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+      />
+      <div className="max-h-80 overflow-y-auto rounded-md border border-neutral-800">
+        {candidates === null && (
+          <p className="p-4 text-sm text-neutral-500">Loading…</p>
+        )}
+        {candidates?.length === 0 && (
+          <p className="p-4 text-sm text-neutral-500">
+            No more songs available to add.
+          </p>
+        )}
+        {candidates?.map((t) => (
+          <label
+            key={t.id}
+            className="flex cursor-pointer items-center gap-3 border-b border-neutral-800/60 px-3 py-2 text-sm last:border-b-0 hover:bg-neutral-800/40"
           >
-            Cancel
-          </button>
-          <button
-            onClick={addSelected}
-            disabled={busy || selected.size === 0}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {busy
-              ? "Adding…"
-              : `Add ${selected.size} song${selected.size === 1 ? "" : "s"}`}
-          </button>
-        </div>
+            <input
+              type="checkbox"
+              checked={selected.has(t.id)}
+              onChange={() => toggle(t.id)}
+              className="checkbox shrink-0"
+            />
+            <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+            <span className="hidden max-w-32 truncate text-neutral-400 sm:block">
+              {t.artist ?? "—"}
+            </span>
+            <span className="shrink-0 text-xs text-neutral-500">
+              {t.ownerName ?? "You"}
+            </span>
+          </label>
+        ))}
       </div>
-    </Dialog>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          className="rounded-md px-4 py-2 text-sm text-neutral-400 hover:text-white"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={addSelected}
+          disabled={busy || selected.size === 0}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {busy
+            ? "Adding…"
+            : `Add ${selected.size} song${selected.size === 1 ? "" : "s"}`}
+        </button>
+      </div>
+    </div>
   );
 }

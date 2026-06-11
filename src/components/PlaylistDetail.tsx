@@ -180,13 +180,12 @@ export default function PlaylistDetail({
         onMove={moveTrack}
       />
 
-      {adding && (
-        <AddTracksDialog
-          playlistId={playlist.id}
-          existingTrackIds={tracks.map((t) => t.id)}
-          onClose={() => setAdding(false)}
-        />
-      )}
+      <AddTracksDialog
+        playlistId={playlist.id}
+        existingTrackIds={tracks.map((t) => t.id)}
+        open={adding}
+        onClose={() => setAdding(false)}
+      />
     </div>
   );
 }

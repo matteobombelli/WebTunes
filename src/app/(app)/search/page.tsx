@@ -16,6 +16,8 @@ export default function SearchPage() {
   const [scope, setScope] = useState<(typeof SCOPES)[number]["value"]>("all");
   const [results, setResults] = useState<TrackDTO[] | null>(null);
   const [searching, setSearching] = useState(false);
+  // Bumped after an edit/delete so the results re-query.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const query = q.trim();
 
@@ -43,7 +45,7 @@ export default function SearchPage() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, scope]);
+  }, [query, scope, refreshKey]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -73,16 +75,27 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {searching && <p className="text-sm text-neutral-500">Searching…</p>}
-      {!searching && query && results !== null && (
-        <>
+      {searching && results === null && (
+        <p className="text-sm text-neutral-500">Searching…</p>
+      )}
+      {query && results !== null && (
+        // Keep stale results visible (dimmed) while a new search runs.
+        <div
+          className={`transition-opacity duration-200 ${searching ? "opacity-50" : ""}`}
+        >
           <p className="mb-2 text-sm text-neutral-400">
             {results.length} result{results.length === 1 ? "" : "s"}
           </p>
-          <TrackList tracks={results} showOwner />
-        </>
+          <TrackList
+            tracks={results}
+            showOwner
+            canEdit
+            canDelete
+            onMutated={() => setRefreshKey((k) => k + 1)}
+          />
+        </div>
       )}
-      {!searching && (!query || results === null) && (
+      {!query && (
         <p className="py-8 text-center text-sm text-neutral-500">
           Find songs across your library and your friends&apos; libraries, including
           lyrics search.

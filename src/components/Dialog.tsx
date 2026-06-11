@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+
+const EXIT_MS = 150; // matches the animate-*-out durations in globals.css
 
 export default function Dialog({
   title,
@@ -15,6 +17,26 @@ export default function Dialog({
   children: React.ReactNode;
   wide?: boolean;
 }) {
+  // Stay mounted briefly after close so the exit animation can play.
+  const [closing, setClosing] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(open);
+  // Snapshot of the last open-state children: parents often null their
+  // content state on close, which would blank the panel mid-animation.
+  // (Render-phase state adjustment per react.dev "storing information
+  // from previous renders".)
+  const [lastChildren, setLastChildren] = useState<React.ReactNode>(null);
+  if (open && children !== lastChildren) setLastChildren(children);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setClosing(true);
+  }
+
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => setClosing(false), EXIT_MS);
+    return () => clearTimeout(t);
+  }, [closing]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -24,18 +46,18 @@ export default function Dialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open && !closing) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
+      className={`${open ? "animate-fade-in" : "animate-fade-out"} fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4`}
+      onClick={open ? onClose : undefined}
     >
       <div
         role="dialog"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className={`max-h-[85vh] w-full ${wide ? "max-w-2xl" : "max-w-sm"} overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl`}
+        className={`${open ? "animate-pop-in" : "animate-pop-out"} max-h-[85vh] w-full ${wide ? "max-w-2xl" : "max-w-sm"} overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl`}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
@@ -47,7 +69,7 @@ export default function Dialog({
             ✕
           </button>
         </div>
-        {children}
+        {open ? children : lastChildren}
       </div>
     </div>
   );

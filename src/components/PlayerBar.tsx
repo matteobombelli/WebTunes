@@ -100,7 +100,7 @@ export default function PlayerBar() {
           aria-label={isPlaying ? "Pause" : "Play"}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-500"
         >
-          {isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} className="ml-0.5" />}
+          {isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />}
         </button>
         <button
           onClick={next}

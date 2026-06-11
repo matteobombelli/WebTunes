@@ -24,7 +24,8 @@ function Svg({
 
 export const PlayIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M8 5.14v13.72c0 .9.98 1.45 1.74.98l10.3-6.86a1.15 1.15 0 0 0 0-1.96L9.74 4.16A1.15 1.15 0 0 0 8 5.14z" />
+    {/* Glyph spans x 6.5–18.5: centered with a 0.5 optical right bias. */}
+    <path d="M6.5 5.14v13.72c0 .9.98 1.45 1.74.98l10.3-6.86a1.15 1.15 0 0 0 0-1.96L8.24 4.16a1.15 1.15 0 0 0-1.74.98z" />
   </Svg>
 );
 
@@ -107,6 +108,19 @@ export const UsersIcon = (p: IconProps) => (
 export const LogoutIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10 4a1 1 0 0 1 0 2H7v12h3a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4zm5.3 3.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4-1.4L17.58 13H11a1 1 0 1 1 0-2h6.59l-2.3-2.3a1 1 0 0 1 0-1.4z" />
+  </Svg>
+);
+
+/** Filled chevrons for sort indicators (UpIcon/DownIcon are move arrows). */
+export const ChevronUpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 7l7 9H5l7-9z" />
+  </Svg>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 17L5 8h14l-7 9z" />
   </Svg>
 );
 
