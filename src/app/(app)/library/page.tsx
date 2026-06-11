@@ -1,6 +1,6 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listOwnTracks } from "@/lib/tracks";
-import TrackList from "@/components/TrackList";
+import LibraryBrowser from "@/components/LibraryBrowser";
 import UploadDialog from "@/components/UploadDialog";
 
 export default async function LibraryPage() {
@@ -10,15 +10,10 @@ export default async function LibraryPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Your Library</h1>
-          <p className="text-sm text-neutral-400">
-            {trackDTOs.length} track{trackDTOs.length === 1 ? "" : "s"}
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold">Your Library</h1>
         <UploadDialog />
       </div>
-      <TrackList tracks={trackDTOs} canDelete canEdit selectable sortable />
+      <LibraryBrowser initialTracks={trackDTOs} />
     </div>
   );
 }

@@ -256,8 +256,18 @@ export default function TrackList({
     }
   };
 
+  // Only the viewer's own tracks can be deleted; a selection made in a
+  // shared view (search, friends) may also contain friends' tracks.
+  const deletableSelectedIds = useMemo(
+    () =>
+      view
+        .filter((t) => validSelected.has(t.id) && !t.ownerName)
+        .map((t) => t.id),
+    [view, validSelected]
+  );
+
   const bulkDelete = async () => {
-    const ids = view.filter((t) => validSelected.has(t.id)).map((t) => t.id);
+    const ids = deletableSelectedIds;
     const noun = `${ids.length} song${ids.length === 1 ? "" : "s"}`;
     if (!confirm(`Are you sure you want to delete ${noun}?`)) return;
     setBulkBusy(true);
@@ -297,7 +307,7 @@ export default function TrackList({
           trackIds={view.filter((t) => validSelected.has(t.id)).map((t) => t.id)}
           onAdded={() => setSelected(new Set())}
         />
-        {canDelete && (
+        {canDelete && deletableSelectedIds.length > 0 && (
           <button
             onClick={bulkDelete}
             disabled={bulkBusy}

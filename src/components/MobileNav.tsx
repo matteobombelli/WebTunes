@@ -7,13 +7,11 @@ import {
   ListIcon,
   LogoutIcon,
   MusicIcon,
-  SearchIcon,
   UsersIcon,
 } from "@/components/icons";
 
 const NAV = [
   { href: "/library", label: "Library", Icon: MusicIcon },
-  { href: "/search", label: "Search", Icon: SearchIcon },
   { href: "/playlists", label: "Playlists", Icon: ListIcon },
   { href: "/friends", label: "Friends", Icon: UsersIcon },
 ];
