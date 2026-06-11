@@ -27,13 +27,17 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const [track] = await db
-    .select({ id: tracks.id, ownerId: tracks.ownerId })
+    .select({
+      id: tracks.id,
+      ownerId: tracks.ownerId,
+      isPrivate: tracks.isPrivate,
+    })
     .from(tracks)
     .where(eq(tracks.id, parsed.data.trackId));
   if (!track) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  if (!(await canAccessTrack(user.id, track.ownerId))) {
+  if (!(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -12,6 +12,7 @@ export type TrackDTO = {
   fileSize: number | null;
   lyrics: string | null;
   lyricsSource: "embedded" | "lrclib" | "none";
+  isPrivate: boolean;
   createdAt: string;
   /** Present when the track belongs to someone else (friend views, search). */
   ownerName?: string | null;

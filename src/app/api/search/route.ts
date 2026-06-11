@@ -33,6 +33,9 @@ export async function GET(req: NextRequest) {
     sql`${tracks.album} ilike ${pattern}`
   );
 
+  // Friends' private tracks are invisible; own private tracks still match.
+  const visible = or(eq(tracks.ownerId, user.id), eq(tracks.isPrivate, false));
+
   const rows = await db
     .select({
       track: tracks,
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
     })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(and(inArray(tracks.ownerId, ownerIds), matches))
+    .where(and(inArray(tracks.ownerId, ownerIds), visible, matches))
     .orderBy(({ rank }) => [desc(rank), desc(tracks.createdAt)])
     .limit(100);
 

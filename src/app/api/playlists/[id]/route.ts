@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
@@ -19,12 +19,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
+  // A friend's track that has since been made private is hidden entirely.
   const rows = await db
     .select({ track: tracks, ownerName: users.name })
     .from(playlistTracks)
     .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
     .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(eq(playlistTracks.playlistId, id))
+    .where(
+      and(
+        eq(playlistTracks.playlistId, id),
+        or(eq(tracks.ownerId, user.id), eq(tracks.isPrivate, false))
+      )
+    )
     .orderBy(asc(playlistTracks.position));
 
   return NextResponse.json({

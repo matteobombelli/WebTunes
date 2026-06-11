@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
@@ -27,7 +27,7 @@ export default async function FriendLibraryPage({
   const rows = await db
     .select()
     .from(tracks)
-    .where(eq(tracks.ownerId, userId))
+    .where(and(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false)))
     .orderBy(desc(tracks.createdAt));
 
   const trackDTOs: TrackDTO[] = rows.map((t) => ({

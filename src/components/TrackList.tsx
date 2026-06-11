@@ -5,7 +5,15 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
-import { DownIcon, PlusIcon, UpIcon, XIcon } from "@/components/icons";
+import {
+  DownIcon,
+  LockIcon,
+  PencilIcon,
+  PlusIcon,
+  UpIcon,
+  XIcon,
+} from "@/components/icons";
+import EditTrackDialog from "@/components/EditTrackDialog";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -82,6 +90,7 @@ export default function TrackList({
   tracks,
   showOwner = false,
   canDelete = false,
+  canEdit = false,
   onRemove,
   removeLabel,
   onMove,
@@ -89,6 +98,8 @@ export default function TrackList({
   tracks: TrackDTO[];
   showOwner?: boolean;
   canDelete?: boolean;
+  /** Shows the edit (pencil) action on the viewer's own tracks. */
+  canEdit?: boolean;
   /** Custom remove handler (e.g. remove from playlist instead of deleting). */
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
@@ -99,6 +110,7 @@ export default function TrackList({
   const playQueue = usePlayerStore((s) => s.playQueue);
   const current = useCurrentTrack();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<TrackDTO | null>(null);
 
   const remove = async (track: TrackDTO) => {
     setBusyId(track.id);
@@ -116,6 +128,7 @@ export default function TrackList({
   }
 
   return (
+    <>
     <table className="w-full text-left text-sm">
       <thead className="text-xs uppercase text-neutral-500">
         <tr className="border-b border-neutral-800">
@@ -141,9 +154,12 @@ export default function TrackList({
                 <button
                   onClick={() => playQueue(tracks, i)}
                   title={`Play ${track.title}`}
-                  className="block w-full truncate text-left font-medium hover:text-emerald-400 hover:underline"
+                  className="flex w-full items-center gap-1.5 text-left font-medium hover:text-emerald-400 hover:underline"
                 >
-                  {track.title}
+                  <span className="truncate">{track.title}</span>
+                  {track.isPrivate && !track.ownerName && (
+                    <LockIcon size={12} className="shrink-0 text-neutral-500" />
+                  )}
                 </button>
               </td>
               <td className="max-w-40 truncate py-2 text-neutral-400">
@@ -180,6 +196,16 @@ export default function TrackList({
                       </button>
                     </>
                   )}
+                  {canEdit && !track.ownerName && (
+                    <button
+                      onClick={() => setEditing(track)}
+                      aria-label="Edit track"
+                      title="Edit track"
+                      className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+                    >
+                      <PencilIcon size={15} />
+                    </button>
+                  )}
                   <AddToPlaylistMenu trackId={track.id} />
                   {(canDelete || onRemove) && (
                     <button
@@ -199,5 +225,14 @@ export default function TrackList({
         })}
       </tbody>
     </table>
+    {editing && (
+      <EditTrackDialog
+        key={editing.id}
+        track={editing}
+        open
+        onClose={() => setEditing(null)}
+      />
+    )}
+    </>
   );
 }

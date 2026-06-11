@@ -166,6 +166,7 @@ export default function PlaylistDetail({
       <TrackList
         tracks={tracks}
         showOwner
+        canEdit
         onRemove={removeTrack}
         removeLabel="Remove from playlist"
         onMove={moveTrack}

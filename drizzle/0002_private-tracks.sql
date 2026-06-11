@@ -1,0 +1,1 @@
+ALTER TABLE "tracks" ADD COLUMN "is_private" boolean DEFAULT false NOT NULL;

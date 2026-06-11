@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   index,
   check,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -82,6 +83,7 @@ export const tracks = pgTable(
     })
       .notNull()
       .default("none"),
+    isPrivate: boolean("is_private").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     // search_vector tsvector generated column + GIN index added via raw SQL
     // in the migration (drizzle has no native tsvector type).

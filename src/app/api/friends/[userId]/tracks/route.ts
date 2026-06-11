@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
@@ -24,7 +24,7 @@ export async function GET(
   const rows = await db
     .select()
     .from(tracks)
-    .where(eq(tracks.ownerId, userId))
+    .where(and(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false)))
     .orderBy(desc(tracks.createdAt));
 
   return NextResponse.json(

@@ -44,11 +44,15 @@ export async function friendIdsOf(userId: string): Promise<string[]> {
   );
 }
 
-/** A user may access a track they own or one owned by an accepted friend. */
+/**
+ * A user may access a track they own, or a non-private track owned by an
+ * accepted friend.
+ */
 export async function canAccessTrack(
   userId: string,
-  ownerId: string
+  track: { ownerId: string; isPrivate: boolean }
 ): Promise<boolean> {
-  if (userId === ownerId) return true;
-  return areFriends(userId, ownerId);
+  if (userId === track.ownerId) return true;
+  if (track.isPrivate) return false;
+  return areFriends(userId, track.ownerId);
 }

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { tracks } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import type { TrackDTO } from "@/lib/types";
-import TrackList from "@/components/TrackList";
+import LibraryView from "@/components/LibraryView";
 import UploadDialog from "@/components/UploadDialog";
 
 export default async function LibraryPage() {
@@ -33,7 +33,7 @@ export default async function LibraryPage() {
         </div>
         <UploadDialog />
       </div>
-      <TrackList tracks={trackDTOs} canDelete />
+      <LibraryView tracks={trackDTOs} />
     </div>
   );
 }

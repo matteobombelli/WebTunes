@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/db";
 import { playlistTracks, tracks, users } from "@/db/schema";
@@ -19,12 +19,18 @@ export default async function PlaylistPage({
   const playlist = await getOwnPlaylist(id, session.user.id);
   if (!playlist) notFound();
 
+  // A friend's track that has since been made private is hidden entirely.
   const rows = await db
     .select({ track: tracks, ownerName: users.name })
     .from(playlistTracks)
     .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
     .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(eq(playlistTracks.playlistId, id))
+    .where(
+      and(
+        eq(playlistTracks.playlistId, id),
+        or(eq(tracks.ownerId, session.user.id), eq(tracks.isPrivate, false))
+      )
+    )
     .orderBy(asc(playlistTracks.position));
 
   const trackDTOs: TrackDTO[] = rows.map((r) => ({

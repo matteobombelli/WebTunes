@@ -15,13 +15,18 @@ export async function GET(
 
   const { id } = await params;
   const [track] = await db
-    .select({ id: tracks.id, ownerId: tracks.ownerId, s3Key: tracks.s3Key })
+    .select({
+      id: tracks.id,
+      ownerId: tracks.ownerId,
+      isPrivate: tracks.isPrivate,
+      s3Key: tracks.s3Key,
+    })
     .from(tracks)
     .where(eq(tracks.id, id));
   if (!track) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  if (!(await canAccessTrack(user.id, track.ownerId))) {
+  if (!(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
