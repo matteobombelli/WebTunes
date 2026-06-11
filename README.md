@@ -28,6 +28,24 @@ npm run dev                 # http://localhost:3000/projects/webtunes
 
 Note the basePath: the app lives under `/projects/webtunes` even in dev.
 
+## Demo accounts
+
+`node scripts/seed-demo.mjs` seeds two pre-friended demo accounts, each with
+10 royalty-free tracks (music by Kevin MacLeod, incompetech.com, CC BY 4.0;
+album names are demo groupings). Each account has one private track so the
+sharing/privacy features can be demonstrated.
+
+| Name  | Email           | Password |
+|-------|-----------------|----------|
+| Demo1 | demo1@demo.demo | Demo1    |
+| Demo2 | demo2@demo.demo | Demo2    |
+
+The script is idempotent (safe to re-run), needs the database and S3 bucket
+from `docker compose up -d` plus internet access to download the tracks, and
+reads `.env.local` for credentials. The passwords are deliberately short for
+demos — seeding writes the hash directly, bypassing the 8-character
+registration minimum.
+
 ## Commands
 
 | Command | What |
