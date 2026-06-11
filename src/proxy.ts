@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const AUTH_PAGES = ["/login", "/register"];
+const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/reset-password"];
 
 // Lightweight gate: checks cookie presence only (database sessions cannot be
 // validated at the edge). Real enforcement lives in requireUser()/auth() on

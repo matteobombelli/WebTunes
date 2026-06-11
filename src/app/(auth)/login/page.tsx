@@ -45,6 +45,14 @@ export default function LoginPage() {
           Register
         </Link>
       </p>
+      <p className="-mt-2 text-center text-sm">
+        <Link
+          href="/forgot-password"
+          className="text-neutral-400 underline-offset-2 hover:text-emerald-400 hover:underline"
+        >
+          Forgot password?
+        </Link>
+      </p>
     </form>
   );
 }
