@@ -1,10 +1,10 @@
-# WebTunes — Production Setup (matteobombelli.dev/projects/webtunes)
+# WebTunes — Production Setup (matteob.dev/projects/webtunes)
 
 What you need to set up, in order:
 
 1. An AWS S3 bucket + IAM credentials (file storage)
 2. A Linux box reachable from the internet (runs the Next.js app + Postgres)
-3. A reverse proxy with TLS serving `matteobombelli.dev`, routing `/projects/webtunes` to the app
+3. A reverse proxy with TLS serving `matteob.dev`, routing `/projects/webtunes` to the app
 
 LRCLIB (lyrics) needs no setup — it's a free public API with no key.
 
@@ -23,7 +23,7 @@ LRCLIB (lyrics) needs no setup — it's a free public API with no key.
 ```json
 [
   {
-    "AllowedOrigins": ["https://matteobombelli.dev"],
+    "AllowedOrigins": ["https://matteob.dev"],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag", "Accept-Ranges", "Content-Range", "Content-Length"],
@@ -75,9 +75,9 @@ S3_FORCE_PATH_STYLE=false
 ## 2. The server — OVHcloud VPS-1 (Hillsboro, OR)
 
 ### DNS
-In your domain registrar's DNS panel for `matteobombelli.dev`:
-- Set the `A` record for `matteobombelli.dev` (apex/`@`) to the VPS's public IPv4 (shown in the OVH control panel)
-- Optional: `AAAA` record for the VPS's IPv6, and a `www` CNAME → `matteobombelli.dev`
+In your domain registrar's DNS panel for `matteob.dev`:
+- Set the `A` record for `matteob.dev` (apex/`@`) to the VPS's public IPv4 (shown in the OVH control panel)
+- Optional: `AAAA` record for the VPS's IPv6, and a `www` CNAME → `matteob.dev`
 - `.dev` is an HSTS-preloaded TLD: browsers force HTTPS, so the site only works once Caddy/certbot has a certificate — that's automatic once DNS points here
 
 ### First login + hardening (Debian 13)
@@ -133,7 +133,7 @@ Prod `.env.local`:
 ```
 DATABASE_URL=postgres://webtunes:<strong-password>@localhost:5432/webtunes
 AUTH_SECRET=<openssl rand -base64 32>
-AUTH_URL=https://matteobombelli.dev/projects/webtunes/api/auth
+AUTH_URL=https://matteob.dev/projects/webtunes/api/auth
 # + the S3 block from section 1
 ```
 
@@ -168,13 +168,13 @@ The app is built with `basePath: "/projects/webtunes"`, so the proxy just passes
 **Caddy** (simplest — automatic TLS):
 
 ```caddy
-matteobombelli.dev {
+matteob.dev {
     handle /projects/webtunes* {
         reverse_proxy 127.0.0.1:3000
     }
     handle {
         # placeholder until the personal site exists; later: root + file_server
-        respond "matteobombelli.dev — coming soon" 200
+        respond "matteob.dev — coming soon" 200
     }
 }
 ```
@@ -203,4 +203,4 @@ With Caddy, put the site config in `/etc/caddy/Caddyfile` and `sudo systemctl re
 - [ ] Postgres running, `drizzle-kit migrate` applied
 - [ ] `.env.local` has prod `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, S3 vars
 - [ ] `npm run build && npm start` behind the proxy
-- [ ] Visit https://matteobombelli.dev/projects/webtunes → register → upload → play
+- [ ] Visit https://matteob.dev/projects/webtunes → register → upload → play
