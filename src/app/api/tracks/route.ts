@@ -1,12 +1,11 @@
 import { randomUUID } from "crypto";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { tracks, users } from "@/db/schema";
+import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { friendIdsOf } from "@/lib/friends";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { uploadObject } from "@/lib/s3";
+import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 const AUDIO_EXTENSIONS = new Set([
@@ -26,38 +25,9 @@ export async function GET(req: NextRequest) {
 
   // scope=all additionally includes friends' non-private tracks.
   if (req.nextUrl.searchParams.get("scope") === "all") {
-    const friendIds = await friendIdsOf(user.id);
-    const rows = await db
-      .select({ track: tracks, ownerName: users.name })
-      .from(tracks)
-      .innerJoin(users, eq(tracks.ownerId, users.id))
-      .where(
-        or(
-          eq(tracks.ownerId, user.id),
-          friendIds.length
-            ? and(
-                inArray(tracks.ownerId, friendIds),
-                eq(tracks.isPrivate, false)
-              )
-            : sql`false`
-        )
-      )
-      .orderBy(desc(tracks.createdAt));
-    return NextResponse.json(
-      rows.map((r) => ({
-        ...r.track,
-        createdAt: r.track.createdAt.toISOString(),
-        ownerName: r.track.ownerId === user.id ? null : r.ownerName,
-      }))
-    );
+    return NextResponse.json(await listAccessibleTracks(user.id));
   }
-
-  const rows = await db
-    .select()
-    .from(tracks)
-    .where(eq(tracks.ownerId, user.id))
-    .orderBy(desc(tracks.createdAt));
-  return NextResponse.json(rows);
+  return NextResponse.json(await listOwnTracks(user.id));
 }
 
 export async function POST(req: NextRequest) {
@@ -110,5 +80,5 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
-  return NextResponse.json(track, { status: 201 });
+  return NextResponse.json(toTrackDTO(track), { status: 201 });
 }

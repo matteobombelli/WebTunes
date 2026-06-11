@@ -1,10 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
-import { notFound, redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { tracks, users } from "@/db/schema";
-import { auth } from "@/lib/auth";
+import { users } from "@/db/schema";
+import { requirePageUser } from "@/lib/auth-helpers";
 import { areFriends } from "@/lib/friends";
-import type { TrackDTO } from "@/lib/types";
+import { listFriendTracks } from "@/lib/tracks";
 import TrackList from "@/components/TrackList";
 
 export default async function FriendLibraryPage({
@@ -12,11 +12,10 @@ export default async function FriendLibraryPage({
 }: {
   params: Promise<{ userId: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  const user = await requirePageUser();
 
   const { userId } = await params;
-  if (!(await areFriends(session.user.id, userId))) notFound();
+  if (!(await areFriends(user.id, userId))) notFound();
 
   const [friend] = await db
     .select({ name: users.name, email: users.email })
@@ -24,17 +23,7 @@ export default async function FriendLibraryPage({
     .where(eq(users.id, userId));
   if (!friend) notFound();
 
-  const rows = await db
-    .select()
-    .from(tracks)
-    .where(and(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false)))
-    .orderBy(desc(tracks.createdAt));
-
-  const trackDTOs: TrackDTO[] = rows.map((t) => ({
-    ...t,
-    createdAt: t.createdAt.toISOString(),
-    ownerName: friend.name ?? friend.email,
-  }));
+  const trackDTOs = await listFriendTracks(userId, friend.name ?? friend.email);
 
   return (
     <div className="mx-auto max-w-5xl">

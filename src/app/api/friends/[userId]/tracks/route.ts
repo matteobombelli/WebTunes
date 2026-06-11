@@ -1,9 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { tracks, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { areFriends } from "@/lib/friends";
+import { listFriendTracks } from "@/lib/tracks";
 
 export async function GET(
   _req: NextRequest,
@@ -21,17 +22,5 @@ export async function GET(
     .select({ name: users.name })
     .from(users)
     .where(eq(users.id, userId));
-  const rows = await db
-    .select()
-    .from(tracks)
-    .where(and(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false)))
-    .orderBy(desc(tracks.createdAt));
-
-  return NextResponse.json(
-    rows.map((t) => ({
-      ...t,
-      createdAt: t.createdAt.toISOString(),
-      ownerName: owner?.name ?? null,
-    }))
-  );
+  return NextResponse.json(await listFriendTracks(userId, owner?.name ?? null));
 }

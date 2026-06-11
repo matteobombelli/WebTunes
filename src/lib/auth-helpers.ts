@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
@@ -12,6 +13,13 @@ export async function requireUser(): Promise<SessionUser | null> {
     email: session.user.email ?? "",
     name: session.user.name ?? null,
   };
+}
+
+/** Returns the signed-in user for pages, redirecting to /login when absent. */
+export async function requirePageUser(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!user) redirect("/login");
+  return user;
 }
 
 export function unauthorized() {

@@ -12,18 +12,24 @@ export const registerSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export async function createUser(input: RegisterInput) {
+export type CreateUserResult =
+  | { user: { id: string; email: string; name: string | null } }
+  | { error: string };
+
+export async function createUser(
+  input: RegisterInput
+): Promise<CreateUserResult> {
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, input.email));
   if (existing) {
-    return { error: "An account with that email already exists" } as const;
+    return { error: "An account with that email already exists" };
   }
   const passwordHash = await hash(input.password, 12);
   const [user] = await db
     .insert(users)
     .values({ name: input.name, email: input.email, passwordHash })
     .returning({ id: users.id, email: users.email, name: users.name });
-  return { user } as const;
+  return { user };
 }

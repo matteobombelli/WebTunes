@@ -1,10 +1,14 @@
-import { and, asc, eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { playlists, playlistTracks, tracks, users } from "@/db/schema";
+import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { getOwnPlaylist, toPlaylistDTO } from "@/lib/playlists";
+import {
+  getOwnPlaylist,
+  getPlaylistTracks,
+  toPlaylistDTO,
+} from "@/lib/playlists";
 import { deleteObject } from "@/lib/s3";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,27 +23,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
-  // A friend's track that has since been made private is hidden entirely.
-  const rows = await db
-    .select({ track: tracks, ownerName: users.name })
-    .from(playlistTracks)
-    .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
-    .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(
-      and(
-        eq(playlistTracks.playlistId, id),
-        or(eq(tracks.ownerId, user.id), eq(tracks.isPrivate, false))
-      )
-    )
-    .orderBy(asc(playlistTracks.position));
-
+  const trackDTOs = await getPlaylistTracks(id, user.id);
   return NextResponse.json({
-    ...(await toPlaylistDTO(playlist, rows.length)),
-    tracks: rows.map((r) => ({
-      ...r.track,
-      createdAt: r.track.createdAt.toISOString(),
-      ownerName: r.track.ownerId === user.id ? null : r.ownerName,
-    })),
+    ...(await toPlaylistDTO(playlist, trackDTOs.length)),
+    tracks: trackDTOs,
   });
 }
 

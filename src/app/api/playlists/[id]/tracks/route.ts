@@ -118,6 +118,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
           )
         );
     }
+    await tx
+      .update(playlists)
+      .set({ updatedAt: new Date() })
+      .where(eq(playlists.id, id));
   });
   return new NextResponse(null, { status: 204 });
 }

@@ -1,26 +1,11 @@
-import { desc, eq } from "drizzle-orm";
-import { redirect } from "next/navigation";
-import { db } from "@/db";
-import { tracks } from "@/db/schema";
-import { auth } from "@/lib/auth";
-import type { TrackDTO } from "@/lib/types";
+import { requirePageUser } from "@/lib/auth-helpers";
+import { listOwnTracks } from "@/lib/tracks";
 import LibraryView from "@/components/LibraryView";
 import UploadDialog from "@/components/UploadDialog";
 
 export default async function LibraryPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-
-  const rows = await db
-    .select()
-    .from(tracks)
-    .where(eq(tracks.ownerId, session.user.id))
-    .orderBy(desc(tracks.createdAt));
-
-  const trackDTOs: TrackDTO[] = rows.map((t) => ({
-    ...t,
-    createdAt: t.createdAt.toISOString(),
-  }));
+  const user = await requirePageUser();
+  const trackDTOs = await listOwnTracks(user.id);
 
   return (
     <div className="mx-auto max-w-5xl">

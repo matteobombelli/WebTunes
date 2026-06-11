@@ -39,7 +39,7 @@ export async function registerAction(
   }
 
   const result = await createUser(parsed.data);
-  if ("error" in result) return { error: result.error ?? "Registration failed" };
+  if ("error" in result) return { error: result.error };
 
   try {
     await signIn("credentials", {

@@ -21,20 +21,28 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!query) return;
+    // Abort superseded requests so a slow old search can't overwrite a new one.
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
         const tracks = await api<TrackDTO[]>(
-          `/search?q=${encodeURIComponent(query)}&scope=${scope}`
+          `/search?q=${encodeURIComponent(query)}&scope=${scope}`,
+          { signal: controller.signal }
         );
         setResults(tracks);
-      } catch {
-        setResults([]);
-      } finally {
         setSearching(false);
+      } catch {
+        if (!controller.signal.aborted) {
+          setResults([]);
+          setSearching(false);
+        }
       }
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query, scope]);
 
   return (

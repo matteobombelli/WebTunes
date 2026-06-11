@@ -1,46 +1,15 @@
 import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { friendships, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { pendingRequestsFor } from "@/lib/friends";
 
 export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
-
-  const requester = alias(users, "requester");
-  const addressee = alias(users, "addressee");
-  const rows = await db
-    .select({
-      id: friendships.id,
-      requesterId: friendships.requesterId,
-      createdAt: friendships.createdAt,
-      requester: { id: requester.id, name: requester.name, email: requester.email },
-      addressee: { id: addressee.id, name: addressee.name, email: addressee.email },
-    })
-    .from(friendships)
-    .innerJoin(requester, eq(friendships.requesterId, requester.id))
-    .innerJoin(addressee, eq(friendships.addresseeId, addressee.id))
-    .where(
-      and(
-        eq(friendships.status, "pending"),
-        or(
-          eq(friendships.requesterId, user.id),
-          eq(friendships.addresseeId, user.id)
-        )
-      )
-    );
-
-  return NextResponse.json(
-    rows.map((r) => ({
-      id: r.id,
-      direction: r.requesterId === user.id ? "outgoing" : "incoming",
-      user: r.requesterId === user.id ? r.addressee : r.requester,
-      createdAt: r.createdAt.toISOString(),
-    }))
-  );
+  return NextResponse.json(await pendingRequestsFor(user.id));
 }
 
 const requestSchema = z.object({ email: z.string().trim().toLowerCase().email() });

@@ -1,29 +1,11 @@
-import { desc, eq, sql } from "drizzle-orm";
-import { redirect } from "next/navigation";
-import { db } from "@/db";
-import { playlists, playlistTracks } from "@/db/schema";
-import { auth } from "@/lib/auth";
-import { toPlaylistDTO } from "@/lib/playlists";
+import { requirePageUser } from "@/lib/auth-helpers";
+import { listPlaylistsWithCount } from "@/lib/playlists";
 import CreatePlaylistButton from "@/components/CreatePlaylistButton";
 import PlaylistCard from "@/components/PlaylistCard";
 
 export default async function PlaylistsPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-
-  const rows = await db
-    .select({
-      playlist: playlists,
-      trackCount: sql<number>`(select count(*)::int from ${playlistTracks}
-        where ${playlistTracks.playlistId} = ${playlists.id})`,
-    })
-    .from(playlists)
-    .where(eq(playlists.ownerId, session.user.id))
-    .orderBy(desc(playlists.updatedAt));
-
-  const dtos = await Promise.all(
-    rows.map((r) => toPlaylistDTO(r.playlist, r.trackCount))
-  );
+  const user = await requirePageUser();
+  const dtos = await listPlaylistsWithCount(user.id);
 
   return (
     <div className="mx-auto max-w-5xl">

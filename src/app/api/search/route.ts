@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { friendIdsOf } from "@/lib/friends";
+import { toTrackDTO } from "@/lib/tracks";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -49,10 +50,8 @@ export async function GET(req: NextRequest) {
     .limit(100);
 
   return NextResponse.json(
-    rows.map((r) => ({
-      ...r.track,
-      createdAt: r.track.createdAt.toISOString(),
-      ownerName: r.track.ownerId === user.id ? null : r.ownerName,
-    }))
+    rows.map((r) =>
+      toTrackDTO(r.track, r.track.ownerId === user.id ? null : r.ownerName)
+    )
   );
 }

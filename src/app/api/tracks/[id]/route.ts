@@ -6,6 +6,7 @@ import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { deleteObject } from "@/lib/s3";
+import { toTrackDTO } from "@/lib/tracks";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,10 +47,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .set(updates)
     .where(eq(tracks.id, id))
     .returning();
-  return NextResponse.json({
-    ...updated,
-    createdAt: updated.createdAt.toISOString(),
-  });
+  return NextResponse.json(toTrackDTO(updated));
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -64,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  return NextResponse.json(track);
+  return NextResponse.json(toTrackDTO(track));
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
@@ -80,11 +78,11 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  await db.delete(tracks).where(eq(tracks.id, id));
   try {
     await deleteObject(track.s3Key);
   } catch {
     // Orphaned object beats a track row pointing at deleted audio.
   }
-  await db.delete(tracks).where(eq(tracks.id, id));
   return new NextResponse(null, { status: 204 });
 }
