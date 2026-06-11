@@ -199,8 +199,11 @@ With Caddy, put the site config in `/etc/caddy/Caddyfile` and `sudo systemctl re
 ## Checklist
 
 - [x] S3 bucket created, CORS set, IAM user + access key saved
-- [ ] DNS A record → VPS IP; server reachable on 80/443
-- [ ] Postgres running, `drizzle-kit migrate` applied
-- [ ] `.env.local` has prod `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, S3 vars
-- [ ] `npm run build && npm start` behind the proxy
+- [x] DNS A record → VPS IP; server reachable on 80/443
+- [x] Postgres running, `drizzle-kit migrate` applied (bound to 127.0.0.1 —
+      published Docker ports bypass ufw, so never expose 5432 on 0.0.0.0)
+- [x] `.env.local` has prod `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, S3 vars,
+      `RESEND_API_KEY`
+- [x] `npm run build && npm start` behind the proxy (systemd unit `webtunes`,
+      deployed 2026-06-11; app lives in `/home/debian/WebTunes` on the VPS)
 - [ ] Visit https://matteob.dev/projects/webtunes → register → upload → play

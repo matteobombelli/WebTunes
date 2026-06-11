@@ -61,7 +61,7 @@ setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
 
 ## Known TODOs
 
-- Resend is set up (domain `matteob.dev` verified, send-only API key in local
-  `.env.local`, end-to-end tested 2026-06-11). Remaining: set `RESEND_API_KEY`
-  in the prod env on the VPS at deploy time. Without the key, `lib/email.ts`
-  falls back to logging the reset link to the server console.
+- None — deployed to production 2026-06-11 (OVH VPS, see `docs/DEPLOYMENT.md`).
+  Resend domain `matteob.dev` verified; send-only key set locally and in prod.
+  Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to
+  the server console (dev behavior).
