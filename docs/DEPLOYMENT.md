@@ -61,7 +61,7 @@ actual keys in this file: it is committed to git.**
 
 ```
 S3_ENDPOINT=            # empty = real AWS
-S3_REGION=ca-west-1
+S3_REGION=us-east-2
 S3_ACCESS_KEY_ID=<in .env.production>
 S3_SECRET_ACCESS_KEY=<in .env.production>
 S3_BUCKET=webtunes-prod-matteobombelli
