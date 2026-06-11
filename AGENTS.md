@@ -61,6 +61,7 @@ setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
 
 ## Known TODOs
 
-- `RESEND_API_KEY` not yet provisioned (as of 2026-06-10): password-reset email
-  falls back to logging the reset link to the server console (`lib/email.ts`).
-  Set the key in `.env.production` once the Resend account is ready.
+- Resend is set up (domain `matteob.dev` verified, send-only API key in local
+  `.env.local`, end-to-end tested 2026-06-11). Remaining: set `RESEND_API_KEY`
+  in the prod env on the VPS at deploy time. Without the key, `lib/email.ts`
+  falls back to logging the reset link to the server console.
