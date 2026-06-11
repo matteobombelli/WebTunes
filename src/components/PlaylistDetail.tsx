@@ -83,7 +83,7 @@ export default function PlaylistDetail({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex items-end gap-5">
+      <div className="mb-6 flex flex-wrap items-end gap-5">
         <button
           onClick={() => coverInputRef.current?.click()}
           title="Change cover"
@@ -94,10 +94,10 @@ export default function PlaylistDetail({
             <img
               src={playlist.coverUrl}
               alt=""
-              className="h-36 w-36 rounded-lg object-cover"
+              className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
             />
           ) : (
-            <div className="flex h-36 w-36 items-center justify-center rounded-lg bg-neutral-800 text-5xl">
+            <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-5xl sm:h-36 sm:w-36">
               🎶
             </div>
           )}

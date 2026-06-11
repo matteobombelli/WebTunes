@@ -80,6 +80,36 @@ export const LockIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const MusicIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 5.5a1 1 0 0 1 .76-.97l8-2A1 1 0 0 1 19 3.5V15a3 3 0 1 1-2-2.83V6.78l-6 1.5V17a3 3 0 1 1-2-2.83V5.5z" />
+  </Svg>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.25 4.25a1 1 0 0 0 1.4-1.42l-4.24-4.24A7.5 7.5 0 0 0 10.5 3zm-5.5 7.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z" />
+  </Svg>
+);
+
+export const ListIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm1 5a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H5z" />
+  </Svg>
+);
+
+export const UsersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 19a6 6 0 0 1 12 0v1H3v-1zm13.5-7a3.5 3.5 0 1 0-2.04-6.34 6 6 0 0 1 0 5.68A3.48 3.48 0 0 0 16.5 12zm.5 2c-.45 0-.89.06-1.3.18A7.97 7.97 0 0 1 17 19v1h4v-1a5 5 0 0 0-4-5z" />
+  </Svg>
+);
+
+export const LogoutIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 4a1 1 0 0 1 0 2H7v12h3a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4zm5.3 3.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4-1.4L17.58 13H11a1 1 0 1 1 0-2h6.59l-2.3-2.3a1 1 0 0 1 0-1.4z" />
+  </Svg>
+);
+
 export const UpIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 5l6 7h-4v7h-4v-7H6l6-7z" />

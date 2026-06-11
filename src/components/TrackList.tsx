@@ -248,9 +248,9 @@ export default function TrackList({
             </th>
           )}
           <th className="py-2">Title</th>
-          <th className="py-2">Artist</th>
+          <th className="hidden py-2 sm:table-cell">Artist</th>
           <th className="hidden py-2 md:table-cell">Album</th>
-          {showOwner && <th className="py-2">Owner</th>}
+          {showOwner && <th className="hidden py-2 md:table-cell">Owner</th>}
           <th className="w-14 py-2 text-right">⏱</th>
           <th className="w-20 py-2"></th>
         </tr>
@@ -288,14 +288,16 @@ export default function TrackList({
                   )}
                 </button>
               </td>
-              <td className="max-w-40 truncate py-2 text-neutral-400">
+              <td className="hidden max-w-40 truncate py-2 text-neutral-400 sm:table-cell">
                 {track.artist ?? "—"}
               </td>
               <td className="hidden max-w-40 truncate py-2 text-neutral-400 md:table-cell">
                 {track.album ?? "—"}
               </td>
               {showOwner && (
-                <td className="py-2 text-neutral-400">{track.ownerName ?? "You"}</td>
+                <td className="hidden py-2 text-neutral-400 md:table-cell">
+                  {track.ownerName ?? "You"}
+                </td>
               )}
               <td className="py-2 text-right tabular-nums text-neutral-400">
                 {formatDuration(track.durationSec)}

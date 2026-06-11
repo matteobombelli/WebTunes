@@ -21,7 +21,7 @@ export default function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900">
+    <aside className="hidden w-56 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 md:flex">
       <Link href="/library" className="px-5 py-5 text-xl font-bold tracking-tight">
         <span className="text-emerald-500">Web</span>Tunes
       </Link>
