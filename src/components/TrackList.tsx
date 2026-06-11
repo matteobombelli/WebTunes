@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
+import { DownIcon, PlusIcon, UpIcon, XIcon } from "@/components/icons";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -51,7 +52,7 @@ function AddToPlaylistMenu({ trackId }: { trackId: string }) {
         className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
         title="Add to playlist"
       >
-        ＋
+        <PlusIcon size={16} />
       </button>
       {open && (
         <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-neutral-700 bg-neutral-800 py-1 text-sm shadow-lg">
@@ -118,7 +119,6 @@ export default function TrackList({
     <table className="w-full text-left text-sm">
       <thead className="text-xs uppercase text-neutral-500">
         <tr className="border-b border-neutral-800">
-          <th className="w-10 py-2"></th>
           <th className="py-2">Title</th>
           <th className="py-2">Artist</th>
           <th className="hidden py-2 md:table-cell">Album</th>
@@ -137,16 +137,15 @@ export default function TrackList({
                 isCurrent ? "text-emerald-400" : "text-neutral-200"
               }`}
             >
-              <td className="py-2">
+              <td className="max-w-60 py-2">
                 <button
                   onClick={() => playQueue(tracks, i)}
-                  aria-label={`Play ${track.title}`}
-                  className="rounded-full p-1 text-neutral-400 hover:text-emerald-400"
+                  title={`Play ${track.title}`}
+                  className="block w-full truncate text-left font-medium hover:text-emerald-400 hover:underline"
                 >
-                  ▶
+                  {track.title}
                 </button>
               </td>
-              <td className="max-w-60 truncate py-2 font-medium">{track.title}</td>
               <td className="max-w-40 truncate py-2 text-neutral-400">
                 {track.artist ?? "—"}
               </td>
@@ -160,7 +159,7 @@ export default function TrackList({
                 {formatDuration(track.durationSec)}
               </td>
               <td className="py-2">
-                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100">
+                <div className="flex items-center justify-end gap-1 md:opacity-0 md:group-hover:opacity-100">
                   {onMove && (
                     <>
                       <button
@@ -169,7 +168,7 @@ export default function TrackList({
                         aria-label="Move up"
                         className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
                       >
-                        ↑
+                        <UpIcon size={14} />
                       </button>
                       <button
                         onClick={() => onMove(track, 1)}
@@ -177,7 +176,7 @@ export default function TrackList({
                         aria-label="Move down"
                         className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
                       >
-                        ↓
+                        <DownIcon size={14} />
                       </button>
                     </>
                   )}
@@ -190,7 +189,7 @@ export default function TrackList({
                       title={removeLabel ?? "Delete track"}
                       className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-red-400 disabled:opacity-50"
                     >
-                      ✕
+                      <XIcon size={16} />
                     </button>
                   )}
                 </div>
