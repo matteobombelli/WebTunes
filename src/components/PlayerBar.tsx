@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
+import QueuePanel from "@/components/QueuePanel";
 import {
   NextIcon,
   PauseIcon,
   PlayIcon,
   PrevIcon,
+  QueueIcon,
+  ShuffleIcon,
   VolumeIcon,
 } from "@/components/icons";
 
@@ -27,8 +30,19 @@ export default function PlayerBar() {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
   const seekRequest = usePlayerStore((s) => s.seekRequest);
-  const { toggle, next, prev, seekTo, setVolume, _setProgress, _setPlaying, _clearSeek } =
-    usePlayerStore.getState();
+  const shuffled = usePlayerStore((s) => s.shuffled);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const {
+    toggle,
+    next,
+    prev,
+    seekTo,
+    setVolume,
+    toggleShuffle,
+    _setProgress,
+    _setPlaying,
+    _clearSeek,
+  } = usePlayerStore.getState();
 
   // Point the audio element at the track's stable stream URL (302s to a
   // presigned S3 URL online; served from the offline cache by the SW).
@@ -172,7 +186,8 @@ export default function PlayerBar() {
   );
 
   return (
-    <div className="border-t border-neutral-800 bg-neutral-900">
+    <div className="relative border-t border-neutral-800 bg-neutral-900">
+      {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
       <audio
         ref={audioRef}
         onTimeUpdate={(e) =>
@@ -189,6 +204,14 @@ export default function PlayerBar() {
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">{trackInfo}</div>
           <div className="flex shrink-0 items-center gap-1">
+            {transportButton(
+              toggleShuffle,
+              shuffled ? "Disable shuffle" : "Enable shuffle",
+              <ShuffleIcon size={18} />,
+              `h-10 w-10 active:bg-neutral-800 ${
+                shuffled ? "text-emerald-400" : "text-neutral-400"
+              }`
+            )}
             {transportButton(
               prev,
               "Previous",
@@ -207,6 +230,14 @@ export default function PlayerBar() {
               <NextIcon size={20} />,
               "h-11 w-11 text-neutral-300 active:bg-neutral-800"
             )}
+            {transportButton(
+              () => setQueueOpen((o) => !o),
+              queueOpen ? "Hide queue" : "Show queue",
+              <QueueIcon size={18} />,
+              `h-10 w-10 active:bg-neutral-800 ${
+                queueOpen ? "text-emerald-400" : "text-neutral-400"
+              }`
+            )}
           </div>
         </div>
       </div>
@@ -216,6 +247,16 @@ export default function PlayerBar() {
         <div className="w-56 min-w-0 shrink-0">{trackInfo}</div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {transportButton(
+            toggleShuffle,
+            shuffled ? "Disable shuffle" : "Enable shuffle",
+            <ShuffleIcon size={16} />,
+            `h-10 w-10 hover:bg-neutral-800 ${
+              shuffled
+                ? "text-emerald-400 hover:text-emerald-300"
+                : "text-neutral-400 hover:text-white"
+            }`
+          )}
           {transportButton(
             prev,
             "Previous",
@@ -237,6 +278,17 @@ export default function PlayerBar() {
         </div>
 
         {seekBar("flex min-w-0 flex-1")}
+
+        {transportButton(
+          () => setQueueOpen((o) => !o),
+          queueOpen ? "Hide queue" : "Show queue",
+          <QueueIcon size={16} />,
+          `h-10 w-10 shrink-0 hover:bg-neutral-800 ${
+            queueOpen
+              ? "text-emerald-400 hover:text-emerald-300"
+              : "text-neutral-400 hover:text-white"
+          }`
+        )}
 
         <div className="flex w-32 shrink-0 items-center gap-2">
           <VolumeIcon size={16} className="shrink-0 text-neutral-400" />

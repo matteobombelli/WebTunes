@@ -131,6 +131,18 @@ export const ChevronDownIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ShuffleIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
+  </Svg>
+);
+
+export const QueueIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
+  </Svg>
+);
+
 export const UpIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 5l6 7h-4v7h-4v-7H6l6-7z" />

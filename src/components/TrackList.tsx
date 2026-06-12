@@ -12,6 +12,7 @@ import {
   LockIcon,
   PencilIcon,
   PlusIcon,
+  QueueIcon,
   UpIcon,
   XIcon,
 } from "@/components/icons";
@@ -137,6 +138,51 @@ function AddToPlaylistMenu({
               {p.name}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
+  const [open, setOpen] = useState(false);
+  // Keeps the menu mounted briefly after close so it can animate out.
+  const [menuClosing, setMenuClosing] = useState(false);
+
+  const close = () => {
+    setOpen(false);
+    setMenuClosing(true);
+    setTimeout(() => setMenuClosing(false), 150);
+  };
+
+  const option = (label: string, action: (tracks: TrackDTO[]) => void) => (
+    <button
+      onClick={() => {
+        action(tracks);
+        close();
+      }}
+      className="block w-full px-3 py-1 text-left text-neutral-200 hover:bg-neutral-700"
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-label="Add to queue"
+        title="Add to queue"
+        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+      >
+        <QueueIcon size={16} />
+      </button>
+      {(open || menuClosing) && (
+        <div
+          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-10 mt-1 w-36 rounded-md border border-neutral-700 bg-neutral-800 py-1 text-sm shadow-lg`}
+        >
+          {option("Play next", usePlayerStore.getState().playNext)}
+          {option("Add to queue", usePlayerStore.getState().addToQueue)}
         </div>
       )}
     </div>
@@ -311,6 +357,17 @@ export default function TrackList({
         />
         <button
           onClick={() => {
+            usePlayerStore
+              .getState()
+              .addToQueue(view.filter((t) => validSelected.has(t.id)));
+            setSelected(new Set());
+          }}
+          className="rounded-md px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-neutral-700"
+        >
+          Add to queue
+        </button>
+        <button
+          onClick={() => {
             useDownloadsStore
               .getState()
               .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
@@ -368,7 +425,7 @@ export default function TrackList({
             <th className="hidden w-24 py-2 md:table-cell">Owner</th>
           )}
           <th className="w-14 py-2 text-right">{sortHeader("duration", "⏱")}</th>
-          <th className={`${onMove ? "w-40" : "w-32"} py-2`}></th>
+          <th className={`${onMove ? "w-48" : "w-40"} py-2`}></th>
         </tr>
       </thead>
       <tbody>
@@ -450,6 +507,7 @@ export default function TrackList({
                       <PencilIcon size={15} />
                     </button>
                   )}
+                  <AddToQueueMenu tracks={[track]} />
                   <DownloadButton track={track} />
                   <AddToPlaylistMenu trackIds={[track.id]} />
                   {(onRemove || (canDelete && !track.ownerName)) && (
