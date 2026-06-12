@@ -15,7 +15,9 @@ import {
   UpIcon,
   XIcon,
 } from "@/components/icons";
+import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
+import { useDownloadsStore } from "@/stores/downloads";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -307,6 +309,17 @@ export default function TrackList({
           trackIds={view.filter((t) => validSelected.has(t.id)).map((t) => t.id)}
           onAdded={() => setSelected(new Set())}
         />
+        <button
+          onClick={() => {
+            useDownloadsStore
+              .getState()
+              .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
+            setSelected(new Set());
+          }}
+          className="rounded-md px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-neutral-700"
+        >
+          Download
+        </button>
         {canDelete && deletableSelectedIds.length > 0 && (
           <button
             onClick={bulkDelete}
@@ -355,7 +368,7 @@ export default function TrackList({
             <th className="hidden w-24 py-2 md:table-cell">Owner</th>
           )}
           <th className="w-14 py-2 text-right">{sortHeader("duration", "⏱")}</th>
-          <th className={`${onMove ? "w-32" : "w-24"} py-2`}></th>
+          <th className={`${onMove ? "w-40" : "w-32"} py-2`}></th>
         </tr>
       </thead>
       <tbody>
@@ -437,6 +450,7 @@ export default function TrackList({
                       <PencilIcon size={15} />
                     </button>
                   )}
+                  <DownloadButton track={track} />
                   <AddToPlaylistMenu trackIds={[track.id]} />
                   {(onRemove || (canDelete && !track.ownerName)) && (
                     <button

@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
       { source: "/search", destination: "/library", permanent: false },
     ];
   },
+  // The service worker must never be served stale, or updates to its
+  // caching logic would take a browser-dependent eternity to roll out.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

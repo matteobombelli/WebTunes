@@ -7,6 +7,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
+import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import TrackList from "@/components/TrackList";
 
 export default function PlaylistDetail({
@@ -160,6 +161,10 @@ export default function PlaylistDetail({
             >
               Add songs
             </button>
+            <PlaylistDownloadButton
+              playlistId={playlist.id}
+              playlistName={playlist.name}
+            />
             <button
               onClick={deletePlaylist}
               className="text-sm text-neutral-400 hover:text-red-400"

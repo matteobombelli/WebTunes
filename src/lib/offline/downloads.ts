@@ -1,0 +1,168 @@
+// Download/remove/sync orchestration for offline playback. Pure async
+// functions over IndexedDB metadata (db.ts) + Cache Storage audio
+// (audio-cache.ts); queueing and UI state live in src/stores/downloads.ts.
+
+import { api } from "@/lib/api";
+import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import { deleteAudio, hasAudio, putAudio } from "./audio-cache";
+import {
+  deleteDownloadedPlaylist,
+  deleteDownloadedTrack,
+  getDownloadedPlaylists,
+  getDownloadedTrack,
+  putDownloadedPlaylist,
+  putDownloadedTrack,
+  type DownloadedPlaylist,
+} from "./db";
+
+type PlaylistWithTracks = PlaylistDTO & { tracks: TrackDTO[] };
+
+/**
+ * Fetches a track's audio into the offline cache and records its metadata.
+ * Already-downloaded tracks are not re-fetched (but get pinned if asked).
+ */
+export async function downloadTrack(
+  track: TrackDTO,
+  pin: boolean,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<void> {
+  const existing = await getDownloadedTrack(track.id);
+  if (existing && (await hasAudio(track.id))) {
+    if (pin && !existing.pinned) {
+      await putDownloadedTrack({ ...existing, pinned: true });
+    }
+    return;
+  }
+
+  // Downloads can't ride the stable /stream URL: the SW intercepts it, and
+  // we need a CORS-readable body — so fetch the presigned URL directly.
+  const { url } = await api<{ url: string }>(`/tracks/${track.id}/stream-url`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+
+  const total =
+    Number(res.headers.get("Content-Length")) || track.fileSize || 0;
+  let blob: Blob;
+  if (res.body && onProgress) {
+    const reader = res.body.getReader();
+    const chunks: BlobPart[] = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress(loaded, total);
+    }
+    blob = new Blob(chunks);
+  } else {
+    blob = await res.blob();
+  }
+
+  await putAudio(track.id, blob, track.mimeType);
+  await putDownloadedTrack({
+    ...track,
+    downloadedAt: new Date().toISOString(),
+    pinned: pin || (existing?.pinned ?? false),
+  });
+}
+
+/**
+ * Records a playlist for offline use and returns the tracks whose audio
+ * still needs downloading (the caller queues them).
+ */
+export async function downloadPlaylist(
+  playlistId: string
+): Promise<{ playlist: DownloadedPlaylist; toDownload: TrackDTO[] }> {
+  const { tracks, ...dto } = await api<PlaylistWithTracks>(
+    `/playlists/${playlistId}`
+  );
+  const playlist: DownloadedPlaylist = {
+    ...dto,
+    trackIds: tracks.map((t) => t.id),
+    syncedAt: new Date().toISOString(),
+  };
+  await putDownloadedPlaylist(playlist);
+  const toDownload: TrackDTO[] = [];
+  for (const track of tracks) {
+    if (!(await hasAudio(track.id))) toDownload.push(track);
+  }
+  return { playlist, toDownload };
+}
+
+/** True if any downloaded playlist (other than `except`) contains the track. */
+async function isReferenced(trackId: string, except?: string): Promise<boolean> {
+  const playlists = await getDownloadedPlaylists();
+  return playlists.some(
+    (p) => p.id !== except && p.trackIds.includes(trackId)
+  );
+}
+
+/**
+ * Removes a direct download. The audio stays if a downloaded playlist still
+ * references the track (the record just loses its pin).
+ */
+export async function removeTrack(trackId: string): Promise<void> {
+  const existing = await getDownloadedTrack(trackId);
+  if (await isReferenced(trackId)) {
+    if (existing?.pinned) {
+      await putDownloadedTrack({ ...existing, pinned: false });
+    }
+    return;
+  }
+  await deleteAudio(trackId);
+  await deleteDownloadedTrack(trackId);
+}
+
+/** Drops unpinned, no-longer-referenced former members of a playlist. */
+async function collectRemoved(trackIds: string[], playlistId: string) {
+  for (const trackId of trackIds) {
+    const track = await getDownloadedTrack(trackId);
+    if (track?.pinned) continue;
+    if (await isReferenced(trackId, playlistId)) continue;
+    await deleteAudio(trackId);
+    await deleteDownloadedTrack(trackId);
+  }
+}
+
+export async function removePlaylist(playlistId: string): Promise<void> {
+  const playlists = await getDownloadedPlaylists();
+  const playlist = playlists.find((p) => p.id === playlistId);
+  if (!playlist) return;
+  await deleteDownloadedPlaylist(playlistId);
+  await collectRemoved(playlist.trackIds, playlistId);
+}
+
+/**
+ * Reconciles every downloaded playlist with the server: refreshes metadata
+ * and order, garbage-collects tracks that left the playlist, and returns
+ * tracks that still need audio (newly added or previously interrupted).
+ * Unreachable playlists (deleted server-side, offline, auth) are kept as-is:
+ * downloads persist until the user removes them.
+ */
+export async function syncPlaylists(): Promise<TrackDTO[]> {
+  const toDownload = new Map<string, TrackDTO>();
+  for (const local of await getDownloadedPlaylists()) {
+    let remote: PlaylistWithTracks;
+    try {
+      remote = await api<PlaylistWithTracks>(`/playlists/${local.id}`);
+    } catch {
+      continue;
+    }
+    const { tracks, ...dto } = remote;
+    const remoteIds = new Set(tracks.map((t) => t.id));
+    await putDownloadedPlaylist({
+      ...dto,
+      trackIds: tracks.map((t) => t.id),
+      syncedAt: new Date().toISOString(),
+    });
+    await collectRemoved(
+      local.trackIds.filter((id) => !remoteIds.has(id)),
+      local.id
+    );
+    for (const track of tracks) {
+      if (!(await hasAudio(track.id))) toDownload.set(track.id, track);
+    }
+  }
+  return [...toDownload.values()];
+}

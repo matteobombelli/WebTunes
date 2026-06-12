@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import {
+  DownloadIcon,
   ListIcon,
   LogoutIcon,
   MusicIcon,
@@ -14,6 +15,7 @@ const NAV = [
   { href: "/library", label: "Library", Icon: MusicIcon },
   { href: "/playlists", label: "Playlists", Icon: ListIcon },
   { href: "/friends", label: "Friends", Icon: UsersIcon },
+  { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
 
 /** Bottom tab bar, shown below md. */

@@ -30,5 +30,9 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  // PWA assets (sw.js, manifest, icons) must be reachable logged-out, or SW
+  // registration/installation breaks.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|apple-icon\\.png|icon-.*\\.png|.*\\.svg$).*)",
+  ],
 };

@@ -68,6 +68,14 @@ setup, and architecture rationale.
 - Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
   `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 100mb;
   default 10MB silently truncates bodies and breaks track uploads).
+- Offline/PWA (see `PWA-PLAN.md`): the player streams via the stable
+  `GET /api/tracks/[id]/stream` (302 to presigned URL); `public/sw.js` serves
+  downloaded tracks from the `wt-audio` cache with Range-aware 206s (iOS
+  refuses plain 200s). Cache names and the hardcoded basePath in `sw.js` must
+  stay in sync with `src/lib/offline/*` and `src/lib/base-path.ts`. Download
+  metadata mirrors DTOs into IndexedDB (`src/lib/offline/db.ts`); queue/UI
+  state in `src/stores/downloads.ts`. Downloads persist until manually
+  deleted; downloaded playlists auto-sync on app load when online.
 
 ## Production logs
 
@@ -82,7 +90,10 @@ setup, and architecture rationale.
 
 ## Known TODOs
 
-- None — deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
+- PWA offline (built 2026-06-12, not yet deployed): apply prod S3 CORS
+  (`node scripts/apply-s3-cors.mjs`) before the first prod download; do the
+  real-device iOS pass and record the blessed mode in `PWA-PLAN.md`.
+- Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to
   the server console (dev behavior).

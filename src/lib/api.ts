@@ -21,3 +21,9 @@ export async function api<T = unknown>(
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
+
+// Stable stream URL for a track (302s to a presigned S3 URL). The service
+// worker matches this exact path shape to serve downloaded audio offline.
+export function streamSrc(trackId: string): string {
+  return `${BASE_PATH}/api/tracks/${trackId}/stream`;
+}

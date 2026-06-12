@@ -105,6 +105,13 @@ export const UsersIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const DownloadIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1z" />
+    <rect x="4" y="18" width="16" height="2" rx="1" />
+  </Svg>
+);
+
 export const LogoutIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10 4a1 1 0 0 1 0 2H7v12h3a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4zm5.3 3.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4-1.4L17.58 13H11a1 1 0 1 1 0-2h6.59l-2.3-2.3a1 1 0 0 1 0-1.4z" />

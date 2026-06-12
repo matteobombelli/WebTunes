@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { api } from "@/lib/api";
+import { streamSrc } from "@/lib/api";
+import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
   NextIcon,
@@ -29,23 +30,15 @@ export default function PlayerBar() {
   const { toggle, next, prev, seekTo, setVolume, _setProgress, _setPlaying, _clearSeek } =
     usePlayerStore.getState();
 
-  // Load a fresh presigned URL whenever the track changes.
+  // Point the audio element at the track's stable stream URL (302s to a
+  // presigned S3 URL online; served from the offline cache by the SW).
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    let cancelled = false;
-    api<{ url: string }>(`/tracks/${track.id}/stream-url`)
-      .then(({ url }) => {
-        if (cancelled) return;
-        audio.src = url;
-        if (usePlayerStore.getState().isPlaying) {
-          audio.play().catch(() => _setPlaying(false));
-        }
-      })
-      .catch(() => _setPlaying(false));
-    return () => {
-      cancelled = true;
-    };
+    audio.src = streamSrc(track.id);
+    if (usePlayerStore.getState().isPlaying) {
+      audio.play().catch(() => _setPlaying(false));
+    }
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -66,6 +59,68 @@ export default function PlayerBar() {
       _clearSeek();
     }
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lock-screen / hardware-key controls (MediaSession API).
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    const session = navigator.mediaSession;
+    const { toggle, next, prev, seekTo } = usePlayerStore.getState();
+    session.setActionHandler("play", () => {
+      if (!usePlayerStore.getState().isPlaying) toggle();
+    });
+    session.setActionHandler("pause", () => {
+      if (usePlayerStore.getState().isPlaying) toggle();
+    });
+    session.setActionHandler("previoustrack", prev);
+    session.setActionHandler("nexttrack", next);
+    try {
+      session.setActionHandler("seekto", (details) => {
+        if (details.seekTime !== undefined) seekTo(details.seekTime);
+      });
+    } catch {
+      // Older browsers don't know "seekto".
+    }
+    return () => {
+      for (const action of ["play", "pause", "previoustrack", "nexttrack", "seekto"] as const) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {
+          // Unsupported action.
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !track) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title,
+      artist: track.artist ?? undefined,
+      album: track.album ?? undefined,
+      artwork: [
+        { src: `${BASE_PATH}/icon-512.png`, sizes: "512x512", type: "image/png" },
+      ],
+    });
+  }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        position: Math.min(currentTime, duration),
+        playbackRate: 1,
+      });
+    } catch {
+      // Invalid state mid-track-change; the next tick fixes it.
+    }
+  }, [currentTime, duration]);
 
   if (!track) return null;
 

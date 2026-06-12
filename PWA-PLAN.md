@@ -5,7 +5,24 @@ Goal: WebTunes should load and play downloaded music while fully offline,
 implementation is standard web APIs (service worker + Cache Storage/IndexedDB),
 so desktop browsers get it for free.
 
-Status: planned, not started (brainstormed 2026-06-12). No code exists yet.
+Status: **implemented 2026-06-12** (steps 1–6 below; verified on desktop with a
+production build — offline page load, offline playback with SW-served 206
+Range responses, playlist download/auto-sync/GC). Remaining:
+
+- Apply prod S3 CORS: `node scripts/apply-s3-cors.mjs` (dev MinIO already
+  configured in docker-compose.yml).
+- The real-device iOS pass (step 6): install to home screen, test offline
+  launch + locked-screen playback + track auto-advance, standalone vs
+  Safari-tab, and document the blessed mode here.
+
+Implementation notes: `public/sw.js` (cache names `wt-shell-vN` / `wt-audio`;
+the basePath is hardcoded there and must match `src/lib/base-path.ts`),
+`src/lib/offline/` (IndexedDB + audio cache + orchestration),
+`src/stores/downloads.ts` (queue/UI state), `/downloads` page
+(`DownloadsBrowser`), `ServiceWorkerRegistrar` (registration + offline-page
+priming, mounted in the (app) layout). Downloads persist until manually
+deleted (no purge on access loss); downloaded playlists auto-sync on app
+load when online.
 
 ## Scope
 

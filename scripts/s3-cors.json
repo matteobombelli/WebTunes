@@ -1,0 +1,11 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://matteob.dev"],
+      "AllowedMethods": ["GET", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges", "ETag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}
