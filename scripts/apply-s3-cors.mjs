@@ -42,13 +42,22 @@ const env = loadEnv();
 const bucket = env.S3_BUCKET;
 const corsConfig = JSON.parse(readFileSync(join(root, "scripts/s3-cors.json"), "utf8"));
 
+// Client construction must mirror src/lib/s3.ts exactly — the VPS relies on
+// S3_ENDPOINT (and dev MinIO on path-style); deriving the endpoint from
+// bucket+region alone resolves to a hostname that doesn't exist there.
 const client = new S3Client({
   region: env.S3_REGION,
+  endpoint: env.S3_ENDPOINT || undefined,
+  forcePathStyle: env.S3_FORCE_PATH_STYLE === "true",
   credentials: {
     accessKeyId: env.S3_ACCESS_KEY_ID,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY,
   },
 });
+
+console.log(
+  `bucket=${bucket} region=${env.S3_REGION} endpoint=${env.S3_ENDPOINT || "(default AWS)"}`
+);
 
 await client.send(
   new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: corsConfig })
