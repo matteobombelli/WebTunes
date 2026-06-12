@@ -90,11 +90,15 @@ setup, and architecture rationale.
 
 ## Known TODOs
 
-- PWA offline (built 2026-06-12, not yet deployed): prod S3 CORS applied
+- PWA offline (deployed to prod 2026-06-12): prod S3 CORS applied
   2026-06-12 via the Cloudflare dashboard — the R2 token in `.env.local` is
   object-scoped, so `scripts/apply-s3-cors.mjs` gets AccessDenied unless run
   with an Admin Read & Write R2 token in the environment. Remaining: the
   real-device iOS pass; record the blessed mode in `PWA-PLAN.md`.
+- Deploys are build-in-place (`npm run build` in the live repo): the running
+  server keeps references into the old `.next` and throws "Element type is
+  invalid" render errors once it's replaced — restart `webtunes.service`
+  immediately after building.
 - Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to
