@@ -5,6 +5,7 @@ import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { getPresignedGetUrl } from "@/lib/s3";
+import { isUuid } from "@/lib/validate";
 
 // Stable per-track stream URL: the player (and the service worker's offline
 // cache) key on this URL, while the redirect target rotates per request.
@@ -16,6 +17,9 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+  }
   const [track] = await db
     .select({
       id: tracks.id,

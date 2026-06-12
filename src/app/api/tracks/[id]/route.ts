@@ -7,8 +7,13 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { deleteObject } from "@/lib/s3";
 import { toTrackDTO } from "@/lib/tracks";
+import { isUuid } from "@/lib/validate";
 
 type Params = { params: Promise<{ id: string }> };
+
+function trackNotFound() {
+  return NextResponse.json({ error: "Track not found" }, { status: 404 });
+}
 
 const patchSchema = z
   .object({
@@ -24,10 +29,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
+  if (!isUuid(id)) return trackNotFound();
   const [track] = await db.select().from(tracks).where(eq(tracks.id, id));
-  if (!track) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
+  if (!track) return trackNotFound();
   if (track.ownerId !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -55,10 +59,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
+  if (!isUuid(id)) return trackNotFound();
   const [track] = await db.select().from(tracks).where(eq(tracks.id, id));
-  if (!track) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
+  if (!track) return trackNotFound();
   if (!(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -70,10 +73,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
+  if (!isUuid(id)) return trackNotFound();
   const [track] = await db.select().from(tracks).where(eq(tracks.id, id));
-  if (!track) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
+  if (!track) return trackNotFound();
   if (track.ownerId !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

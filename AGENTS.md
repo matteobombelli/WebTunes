@@ -50,6 +50,14 @@ setup, and architecture rationale.
 
 - Dates cross the API boundary as ISO strings; always map rows through
   `toTrackDTO`/`toPlaylistDTO` rather than returning raw Drizzle rows.
+- Guard `[id]`-style path params with `isUuid` (`lib/validate.ts`) before
+  querying uuid columns — Postgres throws on bad casts, turning a 404 into a
+  500. Unauthenticated auth endpoints (login, forgot-password) go through
+  `lib/rate-limit.ts` (in-memory; fine while the app is one Node process).
+- Check-then-insert flows catch unique violations via `isUniqueViolation`
+  (`src/db/index.ts`) and return their normal 409/conflict message.
+- Local secrets (e.g. `POSTGRES_PASSWORD` for docker-compose interpolation)
+  live in gitignored `.env*` files — never hardcode them in committed files.
 - When deleting a row that owns an S3 object, delete the DB row first, then
   the object (a leaked S3 object is harmless; a row pointing at deleted audio
   is not). Swallow S3 delete errors.

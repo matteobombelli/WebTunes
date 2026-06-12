@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { areFriends } from "@/lib/friends";
 import { listFriendTracks } from "@/lib/tracks";
+import { isUuid } from "@/lib/validate";
 
 export async function GET(
   _req: NextRequest,
@@ -14,7 +15,7 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { userId } = await params;
-  if (!(await areFriends(user.id, userId))) {
+  if (!isUuid(userId) || !(await areFriends(user.id, userId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

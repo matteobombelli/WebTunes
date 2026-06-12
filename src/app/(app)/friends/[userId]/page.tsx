@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { requirePageUser } from "@/lib/auth-helpers";
 import { areFriends } from "@/lib/friends";
 import { listFriendTracks } from "@/lib/tracks";
+import { isUuid } from "@/lib/validate";
 import TrackList from "@/components/TrackList";
 
 export default async function FriendLibraryPage({
@@ -15,6 +16,7 @@ export default async function FriendLibraryPage({
   const user = await requirePageUser();
 
   const { userId } = await params;
+  if (!isUuid(userId)) notFound();
   if (!(await areFriends(user.id, userId))) notFound();
 
   const [friend] = await db

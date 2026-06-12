@@ -3,10 +3,13 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: webtunes
-      POSTGRES_PASSWORD: webtunes
+      # Real deployments set POSTGRES_PASSWORD in .env (gitignored) next to
+      # this file; the weak default is for throwaway dev databases only.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webtunes}
       POSTGRES_DB: webtunes
     ports:
-      - "5432:5432"
+      # Loopback only — never expose the database on a public interface.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,8 +28,8 @@ services:
       # origin must be CORS-allowed (prod equivalent: scripts/s3-cors.json).
       MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:3000
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - miniodata:/data
     healthcheck:

@@ -5,6 +5,7 @@ import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { getPresignedGetUrl } from "@/lib/s3";
+import { isUuid } from "@/lib/validate";
 
 export async function GET(
   _req: NextRequest,
@@ -14,6 +15,9 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+  }
   const [track] = await db
     .select({
       id: tracks.id,

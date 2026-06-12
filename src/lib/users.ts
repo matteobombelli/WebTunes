@@ -1,7 +1,7 @@
 import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, isUniqueViolation } from "@/db";
 import { users } from "@/db/schema";
 
 export const registerSchema = z.object({
@@ -27,11 +27,19 @@ export async function createUser(
     return { error: "An account with that email already exists" };
   }
   const passwordHash = await hash(input.password, 12);
-  const [user] = await db
-    .insert(users)
-    .values({ name: input.name, email: input.email, passwordHash })
-    .returning({ id: users.id, email: users.email, name: users.name });
-  return { user };
+  try {
+    const [user] = await db
+      .insert(users)
+      .values({ name: input.name, email: input.email, passwordHash })
+      .returning({ id: users.id, email: users.email, name: users.name });
+    return { user };
+  } catch (err) {
+    // Concurrent registration slipped past the existence check.
+    if (isUniqueViolation(err)) {
+      return { error: "An account with that email already exists" };
+    }
+    throw err;
+  }
 }
 
 export type UserSettings = { hideFriendDuplicates: boolean };

@@ -35,8 +35,11 @@ export async function POST(
     return NextResponse.json({ error: "Image exceeds the 5 MB limit" }, { status: 400 });
   }
 
-  // Key includes the extension, so replace the old object if it differs.
-  const s3Key = `covers/${user.id}/${id}.${ext || "img"}`;
+  // Key includes the extension (allowlisted — the client filename is
+  // untrusted), so replace the old object if it differs.
+  const s3Key = `covers/${user.id}/${id}.${
+    IMAGE_EXTENSIONS.has(ext) ? ext : "img"
+  }`;
   if (playlist.coverS3Key && playlist.coverS3Key !== s3Key) {
     try {
       await deleteObject(playlist.coverS3Key);

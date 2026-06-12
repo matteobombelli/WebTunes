@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { passwordResetTokens, users } from "@/db/schema";
 import { BASE_PATH } from "@/lib/base-path";
 import { sendEmail } from "@/lib/email";
+import { rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({ email: z.string().trim().toLowerCase().email() });
 
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Always 200 so the endpoint doesn't reveal which emails have accounts.
+  // Rate-limited per submitted address (account or not) so an attacker can't
+  // flood someone's inbox with reset emails; the silent 200 keeps the
+  // limiter itself from becoming an enumeration oracle.
+  if (!rateLimit(`forgot:${parsed.data.email}`, 3, 60 * 60 * 1000)) {
+    return NextResponse.json({ ok: true });
+  }
   const [user] = await db
     .select({ id: users.id, email: users.email })
     .from(users)

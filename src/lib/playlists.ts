@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   playlists,
@@ -7,9 +7,11 @@ import {
   users,
   type Playlist,
 } from "@/db/schema";
+import { friendIdsOf } from "@/lib/friends";
 import { getPresignedGetUrl } from "@/lib/s3";
 import { toTrackDTO } from "@/lib/tracks";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import { isUuid } from "@/lib/validate";
 
 export async function toPlaylistDTO(
   playlist: Playlist,
@@ -33,6 +35,7 @@ export async function toPlaylistDTO(
 
 /** Loads a playlist only if it belongs to the given user. */
 export async function getOwnPlaylist(playlistId: string, userId: string) {
+  if (!isUuid(playlistId)) return null;
   const [playlist] = await db
     .select()
     .from(playlists)
@@ -58,13 +61,15 @@ export async function listPlaylistsWithCount(
 }
 
 /**
- * A playlist's tracks in order. A friend's track that has since been made
- * private is hidden entirely.
+ * A playlist's tracks in order, filtered by the canAccessTrack rule: a
+ * member track that has since been made private or whose owner is no longer
+ * a friend is hidden entirely (it couldn't be streamed anyway).
  */
 export async function getPlaylistTracks(
   playlistId: string,
   userId: string
 ): Promise<TrackDTO[]> {
+  const friendIds = await friendIdsOf(userId);
   const rows = await db
     .select({ track: tracks, ownerName: users.name })
     .from(playlistTracks)
@@ -73,7 +78,15 @@ export async function getPlaylistTracks(
     .where(
       and(
         eq(playlistTracks.playlistId, playlistId),
-        or(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false))
+        or(
+          eq(tracks.ownerId, userId),
+          friendIds.length
+            ? and(
+                inArray(tracks.ownerId, friendIds),
+                eq(tracks.isPrivate, false)
+              )
+            : sql`false`
+        )
       )
     )
     .orderBy(asc(playlistTracks.position));

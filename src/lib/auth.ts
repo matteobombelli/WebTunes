@@ -8,8 +8,15 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users, accounts, sessions, verificationTokens } from "@/db/schema";
 import { BASE_PATH } from "@/lib/base-path";
+import { clearRateLimit, rateLimit } from "@/lib/rate-limit";
 
 const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
+const LOGIN_ATTEMPT_LIMIT = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+// Compared against when the email has no account, so both paths cost one
+// bcrypt verify and response timing can't be used to enumerate emails.
+const TIMING_EQUALIZER_HASH =
+  "$2b$12$Xp1JwVhng6w4U3mq9WrFeezPVMuaA2umYkRdGBrZqvFCJMthbNpSK";
 
 const adapter = DrizzleAdapter(db, {
   usersTable: users,
@@ -38,13 +45,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .toLowerCase();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
+        if (!rateLimit(`login:${email}`, LOGIN_ATTEMPT_LIMIT, LOGIN_WINDOW_MS)) {
+          return null;
+        }
         const [user] = await db
           .select()
           .from(users)
           .where(eq(users.email, email));
-        if (!user) return null;
+        if (!user) {
+          await compare(password, TIMING_EQUALIZER_HASH);
+          return null;
+        }
         const valid = await compare(password, user.passwordHash);
         if (!valid) return null;
+        clearRateLimit(`login:${email}`);
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

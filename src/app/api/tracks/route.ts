@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { db, isUniqueViolation } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { extractTrackMetadata } from "@/lib/metadata";
-import { uploadObject } from "@/lib/s3";
+import { deleteObject, uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
@@ -80,26 +80,45 @@ export async function POST(req: NextRequest) {
   const meta = await extractTrackMetadata(buffer, file.type, file.name);
 
   const trackId = randomUUID();
-  const s3Key = `audio/${user.id}/${trackId}.${ext || "bin"}`;
+  // The client-supplied filename is untrusted; only allowlisted extensions
+  // make it into the S3 key.
+  const s3Key = `audio/${user.id}/${trackId}.${
+    AUDIO_EXTENSIONS.has(ext) ? ext : "bin"
+  }`;
   await uploadObject(s3Key, buffer, file.type || undefined);
 
-  const [track] = await db
-    .insert(tracks)
-    .values({
-      id: trackId,
-      ownerId: user.id,
-      title: meta.title,
-      artist: meta.artist,
-      album: meta.album,
-      durationSec: meta.durationSec,
-      s3Key,
-      mimeType: file.type || null,
-      fileSize: file.size,
-      contentHash,
-      lyrics: meta.lyrics,
-      lyricsSource: meta.lyricsSource,
-    })
-    .returning();
-
-  return NextResponse.json(toTrackDTO(track), { status: 201 });
+  try {
+    const [track] = await db
+      .insert(tracks)
+      .values({
+        id: trackId,
+        ownerId: user.id,
+        title: meta.title,
+        artist: meta.artist,
+        album: meta.album,
+        durationSec: meta.durationSec,
+        s3Key,
+        mimeType: file.type || null,
+        fileSize: file.size,
+        contentHash,
+        lyrics: meta.lyrics,
+        lyricsSource: meta.lyricsSource,
+      })
+      .returning();
+    return NextResponse.json(toTrackDTO(track), { status: 201 });
+  } catch (err) {
+    // Concurrent upload of the same file slipped past the dedupe check.
+    if (isUniqueViolation(err)) {
+      try {
+        await deleteObject(s3Key);
+      } catch {
+        // Orphaned object is harmless.
+      }
+      return NextResponse.json(
+        { error: "Already in your library" },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { friendships } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { isUuid } from "@/lib/validate";
 
 /** Unfriend: removes an accepted friendship in either direction. */
 export async function DELETE(
@@ -13,6 +14,9 @@ export async function DELETE(
   if (!user) return unauthorized();
 
   const { userId } = await params;
+  if (!isUuid(userId)) {
+    return NextResponse.json({ error: "Not friends" }, { status: 404 });
+  }
   const [deleted] = await db
     .delete(friendships)
     .where(

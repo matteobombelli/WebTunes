@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { playlistTracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { getOwnPlaylist } from "@/lib/playlists";
+import { isUuid } from "@/lib/validate";
 
 export async function DELETE(
   _req: NextRequest,
@@ -17,6 +18,8 @@ export async function DELETE(
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
+  // Removing a non-member is already a no-op 204; a non-UUID id is the same.
+  if (!isUuid(trackId)) return new NextResponse(null, { status: 204 });
 
   await db.transaction(async (tx) => {
     const [removed] = await tx
