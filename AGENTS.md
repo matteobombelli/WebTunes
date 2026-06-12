@@ -58,6 +58,20 @@ setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
 - Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
+- Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
+  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 100mb;
+  default 10MB silently truncates bodies and breaks track uploads).
+
+## Production logs
+
+- The app runs on the OVH VPS as systemd unit `webtunes.service`
+  (`sh -c next start` under user `debian`, repo at `/home/debian/WebTunes`).
+  All app output goes to the journal: `journalctl -u webtunes.service`
+  (add `-q` to silence the "not seeing other users' messages" hint; the
+  `debian` user is not in `adm`/`systemd-journal`, but the unit's own logs
+  are visible).
+- Postgres runs via `docker compose` on the VPS — `docker compose logs` from
+  `/home/debian/WebTunes` for DB-side issues.
 
 ## Known TODOs
 
