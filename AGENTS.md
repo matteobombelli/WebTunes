@@ -10,7 +10,7 @@ Already-applied v16 conventions in this repo: `src/proxy.ts` (not `middleware.ts
 
 Self-hosted music library app: per-user libraries in S3, playlists, friend
 sharing, full-text search (incl. lyrics). See `README.md` for stack, local
-setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
+setup, and architecture rationale.
 
 ## Commands
 
@@ -82,7 +82,7 @@ setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
 
 ## Known TODOs
 
-- None — deployed to production 2026-06-11 (OVH VPS, see `docs/DEPLOYMENT.md`).
+- None — deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to
   the server console (dev behavior).
