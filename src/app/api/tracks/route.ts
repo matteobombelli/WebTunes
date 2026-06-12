@@ -1,4 +1,5 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
+import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { tracks } from "@/db/schema";
@@ -6,6 +7,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
+import { getUserSettings } from "@/lib/users";
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 const AUDIO_EXTENSIONS = new Set([
@@ -25,7 +27,10 @@ export async function GET(req: NextRequest) {
 
   // scope=all additionally includes friends' non-private tracks.
   if (req.nextUrl.searchParams.get("scope") === "all") {
-    return NextResponse.json(await listAccessibleTracks(user.id));
+    const { hideFriendDuplicates } = await getUserSettings(user.id);
+    return NextResponse.json(
+      await listAccessibleTracks(user.id, hideFriendDuplicates)
+    );
   }
   return NextResponse.json(await listOwnTracks(user.id));
 }
@@ -57,6 +62,21 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  const contentHash = createHash("sha256").update(buffer).digest("hex");
+  const [duplicate] = await db
+    .select({ title: tracks.title })
+    .from(tracks)
+    .where(
+      and(eq(tracks.ownerId, user.id), eq(tracks.contentHash, contentHash))
+    );
+  if (duplicate) {
+    return NextResponse.json(
+      { error: `Already in your library as "${duplicate.title}"` },
+      { status: 409 }
+    );
+  }
+
   const meta = await extractTrackMetadata(buffer, file.type, file.name);
 
   const trackId = randomUUID();
@@ -75,6 +95,7 @@ export async function POST(req: NextRequest) {
       s3Key,
       mimeType: file.type || null,
       fileSize: file.size,
+      contentHash,
       lyrics: meta.lyrics,
       lyricsSource: meta.lyricsSource,
     })

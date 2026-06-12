@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { friendIdsOf } from "@/lib/friends";
-import { toTrackDTO } from "@/lib/tracks";
+import { notDuplicateOfOwn, toTrackDTO } from "@/lib/tracks";
+import { getUserSettings } from "@/lib/users";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -37,6 +38,13 @@ export async function GET(req: NextRequest) {
   // Friends' private tracks are invisible; own private tracks still match.
   const visible = or(eq(tracks.ownerId, user.id), eq(tracks.isPrivate, false));
 
+  // Hide friends' copies of songs the user already owns (own rows untouched).
+  const { hideFriendDuplicates } = await getUserSettings(user.id);
+  const noFriendDupes =
+    scope !== "own" && hideFriendDuplicates
+      ? or(eq(tracks.ownerId, user.id), notDuplicateOfOwn(user.id))
+      : undefined;
+
   const rows = await db
     .select({
       track: tracks,
@@ -45,7 +53,7 @@ export async function GET(req: NextRequest) {
     })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(and(inArray(tracks.ownerId, ownerIds), visible, matches))
+    .where(and(inArray(tracks.ownerId, ownerIds), visible, matches, noFriendDupes))
     .orderBy(({ rank }) => [desc(rank), desc(tracks.createdAt)])
     .limit(100);
 

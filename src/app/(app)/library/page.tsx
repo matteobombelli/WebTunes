@@ -1,11 +1,15 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listOwnTracks } from "@/lib/tracks";
+import { getUserSettings } from "@/lib/users";
 import LibraryBrowser from "@/components/LibraryBrowser";
 import UploadDialog from "@/components/UploadDialog";
 
 export default async function LibraryPage() {
   const user = await requirePageUser();
-  const trackDTOs = await listOwnTracks(user.id);
+  const [trackDTOs, settings] = await Promise.all([
+    listOwnTracks(user.id),
+    getUserSettings(user.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -13,7 +17,10 @@ export default async function LibraryPage() {
         <h1 className="text-2xl font-bold">Your Library</h1>
         <UploadDialog />
       </div>
-      <LibraryBrowser initialTracks={trackDTOs} />
+      <LibraryBrowser
+        initialTracks={trackDTOs}
+        initialHideDuplicates={settings.hideFriendDuplicates}
+      />
     </div>
   );
 }

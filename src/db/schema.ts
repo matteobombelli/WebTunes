@@ -20,6 +20,9 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("image"),
   passwordHash: text("password_hash").notNull(),
+  hideFriendDuplicates: boolean("hide_friend_duplicates")
+    .notNull()
+    .default(true),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -86,6 +89,8 @@ export const tracks = pgTable(
     s3Key: text("s3_key").notNull().unique(),
     mimeType: text("mime_type"),
     fileSize: integer("file_size"),
+    // sha256 of the file bytes; null for tracks uploaded before dedupe.
+    contentHash: text("content_hash"),
     lyrics: text("lyrics"),
     lyricsSource: text("lyrics_source", {
       enum: ["embedded", "lrclib", "none"],
@@ -97,7 +102,11 @@ export const tracks = pgTable(
     // search_vector tsvector generated column + GIN index added via raw SQL
     // in the migration (drizzle has no native tsvector type).
   },
-  (t) => [index("tracks_owner_id_idx").on(t.ownerId)]
+  (t) => [
+    index("tracks_owner_id_idx").on(t.ownerId),
+    // Same file can't enter the same library twice (legacy NULL hashes exempt).
+    uniqueIndex("tracks_owner_content_hash_idx").on(t.ownerId, t.contentHash),
+  ]
 );
 
 export const friendships = pgTable(

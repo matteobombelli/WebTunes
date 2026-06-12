@@ -58,6 +58,13 @@ setup, and architecture rationale; `docs/DEPLOYMENT.md` for the prod runbook.
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
 - Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
+- Duplicate handling: uploads are rejected (409) when the file's sha256 already
+  exists in the owner's library (`tracks.content_hash`, unique per owner;
+  pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`
+  (default true, toggled from the library page via `PATCH /api/settings`)
+  hides friends' tracks whose normalized title+artist matches one of the
+  viewer's own (`notDuplicateOfOwn` in `lib/tracks.ts`) in scope=all/friends
+  listings and search; friend profile pages are intentionally unfiltered.
 - Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
   `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 100mb;
   default 10MB silently truncates bodies and breaks track uploads).

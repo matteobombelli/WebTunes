@@ -9,7 +9,24 @@ export function toTrackDTO(
   track: Track,
   ownerName: string | null = null
 ): TrackDTO {
-  return { ...track, createdAt: track.createdAt.toISOString(), ownerName };
+  // contentHash is a server-side dedupe detail; keep it off the wire.
+  const { contentHash, ...rest } = track;
+  void contentHash;
+  return { ...rest, createdAt: track.createdAt.toISOString(), ownerName };
+}
+
+/**
+ * SQL filter: the (outer) tracks row is not a duplicate of one of the
+ * viewer's own tracks. "Duplicate" = same title + artist, case- and
+ * whitespace-insensitive. Apply to friend-owned rows only.
+ */
+export function notDuplicateOfOwn(userId: string) {
+  return sql`not exists (
+    select 1 from ${tracks} own
+    where own.owner_id = ${userId}
+      and lower(btrim(own.title)) = lower(btrim(${tracks.title}))
+      and lower(btrim(coalesce(own.artist, ''))) = lower(btrim(coalesce(${tracks.artist}, '')))
+  )`;
 }
 
 /** The user's own tracks, newest first. */
@@ -22,9 +39,14 @@ export async function listOwnTracks(userId: string): Promise<TrackDTO[]> {
   return rows.map((t) => toTrackDTO(t));
 }
 
-/** Own tracks plus friends' non-private tracks, newest first. */
+/**
+ * Own tracks plus friends' non-private tracks, newest first. With
+ * hideFriendDuplicates, friends' copies of songs the user already has
+ * (per notDuplicateOfOwn) are excluded.
+ */
 export async function listAccessibleTracks(
-  userId: string
+  userId: string,
+  hideFriendDuplicates: boolean
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(userId);
   const rows = await db
@@ -35,7 +57,11 @@ export async function listAccessibleTracks(
       or(
         eq(tracks.ownerId, userId),
         friendIds.length
-          ? and(inArray(tracks.ownerId, friendIds), eq(tracks.isPrivate, false))
+          ? and(
+              inArray(tracks.ownerId, friendIds),
+              eq(tracks.isPrivate, false),
+              hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined
+            )
           : sql`false`
       )
     )

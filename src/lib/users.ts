@@ -33,3 +33,25 @@ export async function createUser(
     .returning({ id: users.id, email: users.email, name: users.name });
   return { user };
 }
+
+export type UserSettings = { hideFriendDuplicates: boolean };
+
+export async function getUserSettings(userId: string): Promise<UserSettings> {
+  const [row] = await db
+    .select({ hideFriendDuplicates: users.hideFriendDuplicates })
+    .from(users)
+    .where(eq(users.id, userId));
+  return row ?? { hideFriendDuplicates: true };
+}
+
+export async function updateUserSettings(
+  userId: string,
+  settings: Partial<UserSettings>
+): Promise<UserSettings> {
+  const [row] = await db
+    .update(users)
+    .set(settings)
+    .where(eq(users.id, userId))
+    .returning({ hideFriendDuplicates: users.hideFriendDuplicates });
+  return row;
+}

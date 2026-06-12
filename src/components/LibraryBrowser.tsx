@@ -19,15 +19,34 @@ type Scope = (typeof SCOPES)[number]["value"];
 // client-fetched results.
 export default function LibraryBrowser({
   initialTracks,
+  initialHideDuplicates,
 }: {
   initialTracks: TrackDTO[];
+  initialHideDuplicates: boolean;
 }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = useState<Scope>("own");
   const [results, setResults] = useState<TrackDTO[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(initialHideDuplicates);
   // Bumped after an edit/delete so client-fetched views re-query.
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // The server reads the setting per request, so persist it first, then
+  // refetch. Optimistic checkbox; reverted if the save fails.
+  const toggleHideDuplicates = async (value: boolean) => {
+    setHideDuplicates(value);
+    try {
+      await api("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideFriendDuplicates: value }),
+      });
+      setRefreshKey((k) => k + 1);
+    } catch {
+      setHideDuplicates(!value);
+    }
+  };
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
@@ -105,6 +124,15 @@ export default function LibraryBrowser({
             </button>
           ))}
         </div>
+        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-neutral-400">
+          <input
+            type="checkbox"
+            checked={hideDuplicates}
+            onChange={(e) => toggleHideDuplicates(e.target.checked)}
+            className="h-4 w-4 accent-emerald-600"
+          />
+          Hide duplicates from friends&apos; libraries
+        </label>
       </div>
 
       {tracks === null ? (
