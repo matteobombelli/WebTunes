@@ -90,9 +90,11 @@ setup, and architecture rationale.
 
 ## Known TODOs
 
-- PWA offline (built 2026-06-12, not yet deployed): apply prod S3 CORS
-  (`node scripts/apply-s3-cors.mjs`) before the first prod download; do the
-  real-device iOS pass and record the blessed mode in `PWA-PLAN.md`.
+- PWA offline (built 2026-06-12, not yet deployed): prod S3 CORS applied
+  2026-06-12 via the Cloudflare dashboard — the R2 token in `.env.local` is
+  object-scoped, so `scripts/apply-s3-cors.mjs` gets AccessDenied unless run
+  with an Admin Read & Write R2 token in the environment. Remaining: the
+  real-device iOS pass; record the blessed mode in `PWA-PLAN.md`.
 - Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to

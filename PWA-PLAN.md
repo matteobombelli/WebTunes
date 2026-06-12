@@ -9,8 +9,12 @@ Status: **implemented 2026-06-12** (steps 1–6 below; verified on desktop with 
 production build — offline page load, offline playback with SW-served 206
 Range responses, playlist download/auto-sync/GC). Remaining:
 
-- Apply prod S3 CORS: `node scripts/apply-s3-cors.mjs` (dev MinIO already
-  configured in docker-compose.yml).
+- ~~Apply prod S3 CORS~~ — done 2026-06-12 via the Cloudflare dashboard
+  (rules from `scripts/s3-cors.json`; verified preflight + ranged GET against
+  a presigned URL). The R2 token in `.env.local` is object-scoped, so
+  `scripts/apply-s3-cors.mjs` needs an Admin Read & Write token in the env
+  to re-apply after CORS changes. Dev MinIO is already configured in
+  docker-compose.yml.
 - The real-device iOS pass (step 6): install to home screen, test offline
   launch + locked-screen playback + track auto-advance, standalone vs
   Safari-tab, and document the blessed mode here.
