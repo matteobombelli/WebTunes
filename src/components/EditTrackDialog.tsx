@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { BASE_PATH } from "@/lib/base-path";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
+import TrackArt from "@/components/TrackArt";
 
 // Stays mounted with track=null so the Dialog can animate out; the inner
 // form mounts per track (keyed) so its state starts fresh each time.
@@ -49,6 +51,41 @@ function EditTrackForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const artInputRef = useRef<HTMLInputElement>(null);
+  // Local preview of a just-uploaded image: the stable /art URL doesn't change
+  // on replacement, so a fresh object URL gives instant feedback in the dialog.
+  const [artPreview, setArtPreview] = useState<string | null>(null);
+  const [artBusy, setArtBusy] = useState(false);
+  const [artError, setArtError] = useState<string | null>(null);
+
+  const uploadArt = async (file: File | undefined) => {
+    if (!file) return;
+    setArtBusy(true);
+    setArtError(null);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/tracks/${track.id}/art`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? `Upload failed (${res.status})`);
+      }
+      setArtPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
+      router.refresh();
+      onSaved?.();
+    } catch (err) {
+      setArtError(err instanceof Error ? err.message : "Failed to upload art");
+    } finally {
+      setArtBusy(false);
+    }
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -79,6 +116,47 @@ function EditTrackForm({
 
   return (
     <form onSubmit={save} className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => artInputRef.current?.click()}
+          title="Change album art"
+          className="group relative shrink-0"
+        >
+          {artPreview ? (
+            // Local object URL of the just-uploaded file.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={artPreview}
+              alt=""
+              className="h-16 w-16 rounded object-cover"
+            />
+          ) : (
+            <TrackArt track={track} size="h-16 w-16" iconSize={28} />
+          )}
+          <span className="absolute inset-0 hidden items-center justify-center rounded bg-black/60 text-[10px] font-medium text-white group-hover:flex">
+            Change
+          </span>
+        </button>
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => artInputRef.current?.click()}
+            disabled={artBusy}
+            className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:border-neutral-400 disabled:opacity-50"
+          >
+            {artBusy ? "Uploading…" : "Upload album art"}
+          </button>
+          {artError && <p className="text-xs text-red-400">{artError}</p>}
+        </div>
+      </div>
+      <input
+        ref={artInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => uploadArt(e.target.files?.[0])}
+      />
       <label className="flex flex-col gap-1 text-xs text-neutral-400">
         Title
         <input
