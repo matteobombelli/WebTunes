@@ -11,17 +11,20 @@ import { getUserSettings } from "@/lib/users";
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
-// Map an embedded picture's mime type to a file extension for the S3 key.
-function imageExt(mime: string | null): string {
+// An embedded picture's mime type is attacker-controlled (it comes from the
+// uploaded file's tag), so derive both the S3 key extension and the stored
+// Content-Type from a fixed allowlist rather than echoing the tag verbatim —
+// otherwise a crafted file could set e.g. text/html on the served object.
+function imageKind(mime: string | null): { ext: string; type: string } {
   switch (mime) {
     case "image/png":
-      return "png";
+      return { ext: "png", type: "image/png" };
     case "image/webp":
-      return "webp";
+      return { ext: "webp", type: "image/webp" };
     case "image/gif":
-      return "gif";
+      return { ext: "gif", type: "image/gif" };
     default:
-      return "jpg"; // jpeg is by far the most common embedded cover format
+      return { ext: "jpg", type: "image/jpeg" }; // jpeg: the common case
   }
 }
 const AUDIO_EXTENSIONS = new Set([
@@ -105,9 +108,9 @@ export async function POST(req: NextRequest) {
   let artS3Key: string | null = null;
   if (meta.artBuffer) {
     try {
-      const artExt = imageExt(meta.artMime);
-      artS3Key = `art/${user.id}/${trackId}.${artExt}`;
-      await uploadObject(artS3Key, meta.artBuffer, meta.artMime || undefined);
+      const art = imageKind(meta.artMime);
+      artS3Key = `art/${user.id}/${trackId}.${art.ext}`;
+      await uploadObject(artS3Key, meta.artBuffer, art.type);
     } catch {
       artS3Key = null; // leave the track artless rather than orphan a row
     }

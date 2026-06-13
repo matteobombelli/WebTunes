@@ -12,13 +12,17 @@
 //                 (/api/tracks/:id/stream). Written by the download manager
 //                 (src/lib/offline/), read here. NEVER deleted on activate:
 //                 it holds user downloads that must outlive SW updates.
+//   wt-art      — downloaded track cover art, keyed by the stable art URL
+//                 (/api/tracks/:id/art). Same lifecycle as wt-audio.
 
 const BASE_PATH = "/projects/webtunes";
-const SHELL_CACHE = "wt-shell-v1";
+const SHELL_CACHE = "wt-shell-v2";
 const AUDIO_CACHE = "wt-audio";
+const ART_CACHE = "wt-art";
 const OFFLINE_FALLBACK = `${BASE_PATH}/downloads`;
 
 const STREAM_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/stream$`);
+const ART_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/art$`);
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -46,6 +50,8 @@ self.addEventListener("fetch", (event) => {
 
   if (STREAM_PATH.test(url.pathname)) {
     event.respondWith(serveStream(request));
+  } else if (ART_PATH.test(url.pathname)) {
+    event.respondWith(serveArt(request));
   } else if (url.pathname.startsWith(`${BASE_PATH}/_next/static/`)) {
     event.respondWith(cacheFirst(request));
   } else if (request.mode === "navigate") {
@@ -96,6 +102,17 @@ async function serveStream(request) {
       "Accept-Ranges": "bytes",
     },
   });
+}
+
+/**
+ * Downloaded cover art. Cache hit → serve the stored image (no Range dance;
+ * <img> requests don't need 206). Cache miss → network (the route 302s to a
+ * presigned S3 URL, which the image request follows when online).
+ */
+async function serveArt(request) {
+  const cache = await caches.open(ART_CACHE);
+  const cached = await cache.match(request.url);
+  return cached || fetch(request);
 }
 
 /** null → no/unusable Range header (serve full); "invalid" → 416. */

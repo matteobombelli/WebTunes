@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BASE_PATH } from "@/lib/base-path";
+import { artSrc } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { MusicIcon } from "@/components/icons";
 
@@ -31,7 +31,7 @@ export default function TrackArt({
       // Presigned S3 redirect; next/image cannot optimize short-lived URLs.
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={`${BASE_PATH}/api/tracks/${track.id}/art`}
+        src={artSrc(track.id)}
         alt=""
         onError={() => setFailed(true)}
         className={`${base} object-cover`}

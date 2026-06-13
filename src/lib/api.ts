@@ -27,3 +27,9 @@ export async function api<T = unknown>(
 export function streamSrc(trackId: string): string {
   return `${BASE_PATH}/api/tracks/${trackId}/stream`;
 }
+
+// Stable cover-art URL for a track (302s to a presigned S3 URL). The service
+// worker matches this exact path shape to serve downloaded art offline.
+export function artSrc(trackId: string): string {
+  return `${BASE_PATH}/api/tracks/${trackId}/art`;
+}

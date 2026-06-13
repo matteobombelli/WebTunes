@@ -1,0 +1,138 @@
+"use client";
+
+import { create } from "zustand";
+import { BASE_PATH } from "@/lib/base-path";
+
+export type UploadItem = {
+  name: string;
+  status: "uploading" | "done" | "error" | "canceled";
+  progress: number; // 0–100, bytes sent for the current file
+  detail?: string;
+};
+
+type UploadsState = {
+  items: UploadItem[];
+  busy: boolean;
+  /** Starts a batch (no-op while one is already running). */
+  start: (files: File[]) => void;
+  /** Aborts the in-flight upload and skips any remaining files. */
+  cancel: () => void;
+  /** Dismisses a finished batch's results. */
+  clear: () => void;
+};
+
+// Module-level so cancel() can reach the in-flight request from anywhere.
+let activeXhr: XMLHttpRequest | null = null;
+let canceled = false;
+
+// XMLHttpRequest (not fetch) is the only browser API that reports upload
+// progress, so the per-file POST is sent through it here.
+function uploadFile(
+  file: File,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    const xhr = new XMLHttpRequest();
+    activeXhr = xhr;
+    xhr.open("POST", `${BASE_PATH}/api/tracks`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      let message = `Upload failed (${xhr.status})`;
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (typeof data?.error === "string") message = data.error;
+      } catch {
+        // non-JSON error body
+      }
+      reject(new Error(message));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.onabort = () => reject(new Error("Canceled"));
+    xhr.onloadend = () => {
+      if (activeXhr === xhr) activeXhr = null;
+    };
+    xhr.send(form);
+  });
+}
+
+// Module-level store: survives client-side navigation, so an in-flight batch
+// (and its results) stays visible when you leave the library and come back.
+export const useUploadsStore = create<UploadsState>((set, get) => ({
+  items: [],
+  busy: false,
+
+  start: (files) => {
+    if (get().busy || files.length === 0) return;
+    canceled = false;
+    set({
+      busy: true,
+      items: files.map((f) => ({
+        name: f.name,
+        status: "uploading",
+        progress: 0,
+      })),
+    });
+
+    void (async () => {
+      for (const [i, file] of files.entries()) {
+        if (canceled) break;
+        try {
+          await uploadFile(file, (percent) =>
+            set((s) => ({
+              items: s.items.map((it, j) =>
+                j === i ? { ...it, progress: percent } : it
+              ),
+            }))
+          );
+          set((s) => ({
+            items: s.items.map((it, j) =>
+              j === i ? { ...it, status: "done", progress: 100 } : it
+            ),
+          }));
+        } catch (err) {
+          set((s) => ({
+            items: s.items.map((it, j) =>
+              j === i
+                ? canceled
+                  ? { ...it, status: "canceled" }
+                  : {
+                      ...it,
+                      status: "error",
+                      detail: err instanceof Error ? err.message : "failed",
+                    }
+                : it
+            ),
+          }));
+        }
+      }
+      // Mark any files we never got to (and the aborted one) as canceled.
+      if (canceled) {
+        set((s) => ({
+          items: s.items.map((it) =>
+            it.status === "uploading" ? { ...it, status: "canceled" } : it
+          ),
+        }));
+      }
+      set({ busy: false });
+    })();
+  },
+
+  cancel: () => {
+    if (!get().busy) return;
+    canceled = true;
+    activeXhr?.abort();
+  },
+
+  clear: () => {
+    if (get().busy) return;
+    set({ items: [] });
+  },
+}));

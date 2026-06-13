@@ -4,6 +4,7 @@
 
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import { deleteArt, hasArt, putArt } from "./art-cache";
 import { deleteAudio, hasAudio, putAudio } from "./audio-cache";
 import {
   deleteDownloadedPlaylist,
@@ -16,6 +17,22 @@ import {
 } from "./db";
 
 type PlaylistWithTracks = PlaylistDTO & { tracks: TrackDTO[] };
+
+/**
+ * Caches a track's cover art for offline display. Best-effort: a track with no
+ * embedded art, or a failed art fetch, just stays online-only for its art.
+ */
+async function cacheArt(track: TrackDTO): Promise<void> {
+  if (!track.artS3Key || (await hasArt(track.id))) return;
+  try {
+    const { url } = await api<{ url: string }>(`/tracks/${track.id}/art-url`);
+    const res = await fetch(url);
+    if (!res.ok) return;
+    await putArt(track.id, await res.blob());
+  } catch {
+    // Art is non-essential; never fail a download over it.
+  }
+}
 
 /**
  * Fetches a track's audio into the offline cache and records its metadata.
@@ -31,6 +48,7 @@ export async function downloadTrack(
     if (pin && !existing.pinned) {
       await putDownloadedTrack({ ...existing, pinned: true });
     }
+    await cacheArt(track); // backfill art for tracks downloaded before this feature
     return;
   }
 
@@ -60,6 +78,7 @@ export async function downloadTrack(
   }
 
   await putAudio(track.id, blob, track.mimeType);
+  await cacheArt(track);
   await putDownloadedTrack({
     ...track,
     downloadedAt: new Date().toISOString(),
@@ -111,6 +130,7 @@ export async function removeTrack(trackId: string): Promise<void> {
     return;
   }
   await deleteAudio(trackId);
+  await deleteArt(trackId);
   await deleteDownloadedTrack(trackId);
 }
 
@@ -121,6 +141,7 @@ async function collectRemoved(trackIds: string[], playlistId: string) {
     if (track?.pinned) continue;
     if (await isReferenced(trackId, playlistId)) continue;
     await deleteAudio(trackId);
+    await deleteArt(trackId);
     await deleteDownloadedTrack(trackId);
   }
 }

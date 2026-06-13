@@ -172,3 +172,10 @@ export const ClockIcon = (p: IconProps) => (
     <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm-1 3v5l4 2.4.8-1.3-3.3-2V8h-1.5z" />
   </Svg>
 );
+
+/** Vertical kebab menu (more actions). */
+export const EllipsisIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+  </Svg>
+);

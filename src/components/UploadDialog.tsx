@@ -1,96 +1,29 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { BASE_PATH } from "@/lib/base-path";
+import { useEffect, useRef } from "react";
 import { CheckIcon, XIcon } from "@/components/icons";
-
-type UploadItem = {
-  name: string;
-  status: "uploading" | "done" | "error";
-  progress: number; // 0–100, bytes sent for the current file
-  detail?: string;
-};
-
-// XMLHttpRequest (not fetch) is the only browser API that reports upload
-// progress, so the per-file POST is sent through it here.
-function uploadFile(
-  file: File,
-  onProgress: (percent: number) => void
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${BASE_PATH}/api/tracks`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-        return;
-      }
-      let message = `Upload failed (${xhr.status})`;
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (typeof data?.error === "string") message = data.error;
-      } catch {
-        // non-JSON error body
-      }
-      reject(new Error(message));
-    };
-    xhr.onerror = () => reject(new Error("Upload failed"));
-    xhr.send(form);
-  });
-}
+import { useUploadsStore } from "@/stores/uploads";
 
 export default function UploadDialog() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [items, setItems] = useState<UploadItem[]>([]);
-  const [busy, setBusy] = useState(false);
+  const items = useUploadsStore((s) => s.items);
+  const busy = useUploadsStore((s) => s.busy);
+  const start = useUploadsStore((s) => s.start);
+  const cancel = useUploadsStore((s) => s.cancel);
+  const clear = useUploadsStore((s) => s.clear);
 
-  const onFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
-    setBusy(true);
-    setItems(
-      Array.from(files).map((f) => ({
-        name: f.name,
-        status: "uploading",
-        progress: 0,
-      }))
-    );
+  // Refresh the server-rendered library list once a batch finishes. Lives here
+  // (not in the store) because only a mounted page can call the router; if the
+  // user is elsewhere when it finishes, navigating back refetches anyway.
+  const prevBusy = useRef(busy);
+  useEffect(() => {
+    if (prevBusy.current && !busy) router.refresh();
+    prevBusy.current = busy;
+  }, [busy, router]);
 
-    for (const [i, file] of Array.from(files).entries()) {
-      try {
-        await uploadFile(file, (percent) =>
-          setItems((prev) =>
-            prev.map((it, j) => (j === i ? { ...it, progress: percent } : it))
-          )
-        );
-        setItems((prev) =>
-          prev.map((it, j) =>
-            j === i ? { ...it, status: "done", progress: 100 } : it
-          )
-        );
-      } catch (err) {
-        setItems((prev) =>
-          prev.map((it, j) =>
-            j === i
-              ? {
-                  ...it,
-                  status: "error",
-                  detail: err instanceof Error ? err.message : "failed",
-                }
-              : it
-          )
-        );
-      }
-    }
-    setBusy(false);
-    router.refresh();
-  };
+  const done = items.filter((it) => it.status !== "uploading").length;
 
   return (
     <div className="flex flex-col items-end gap-2">
@@ -100,7 +33,10 @@ export default function UploadDialog() {
         accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav"
         multiple
         hidden
-        onChange={(e) => onFiles(e.target.files)}
+        onChange={(e) => {
+          if (e.target.files) start(Array.from(e.target.files));
+          e.target.value = ""; // allow re-selecting the same file
+        }}
       />
       <button
         onClick={() => inputRef.current?.click()}
@@ -113,10 +49,27 @@ export default function UploadDialog() {
         <div className="w-64 rounded-md border border-neutral-800 bg-neutral-900/90 text-xs text-neutral-400 shadow-lg">
           <div className="flex items-center justify-between border-b border-neutral-800 px-2.5 py-1.5 font-medium text-neutral-300">
             <span>{busy ? "Uploading…" : "Uploads"}</span>
-            <span className="tabular-nums">
-              {items.filter((it) => it.status !== "uploading").length}/
-              {items.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="tabular-nums">
+                {done}/{items.length}
+              </span>
+              {busy ? (
+                <button
+                  onClick={cancel}
+                  className="font-medium text-neutral-400 hover:text-red-400"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={clear}
+                  aria-label="Dismiss"
+                  className="text-neutral-500 hover:text-white"
+                >
+                  <XIcon size={13} />
+                </button>
+              )}
+            </div>
           </div>
           <ul className="max-h-64 space-y-1 overflow-y-auto p-2.5">
             {items.map((it, i) => (
@@ -128,7 +81,14 @@ export default function UploadDialog() {
                   {it.status === "error" && (
                     <XIcon size={13} className="shrink-0 text-red-400" />
                   )}
-                  <span className="truncate">{it.name}</span>
+                  {it.status === "canceled" && (
+                    <XIcon size={13} className="shrink-0 text-neutral-500" />
+                  )}
+                  <span
+                    className={`truncate ${it.status === "canceled" ? "text-neutral-500 line-through" : ""}`}
+                  >
+                    {it.name}
+                  </span>
                 </div>
                 {it.status === "uploading" && (
                   <div className="mt-0.5 h-1 w-full overflow-hidden rounded bg-neutral-800">
