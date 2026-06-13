@@ -3,12 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
+import {
+  DownloadIcon,
+  FolderIcon,
+  MusicIcon,
+  UsersIcon,
+} from "@/components/icons";
 
 const NAV = [
-  { href: "/library", label: "Library", icon: "🎵" },
-  { href: "/playlists", label: "Playlists", icon: "📂" },
-  { href: "/friends", label: "Friends", icon: "👥" },
-  { href: "/downloads", label: "Downloads", icon: "⬇️" },
+  { href: "/library", label: "Library", Icon: MusicIcon },
+  { href: "/playlists", label: "Playlists", Icon: FolderIcon },
+  { href: "/friends", label: "Friends", Icon: UsersIcon },
+  { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
 
 export default function Sidebar({
@@ -32,13 +38,13 @@ export default function Sidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
+              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
                 active
                   ? "bg-neutral-800 text-white"
                   : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
               }`}
             >
-              <span className="mr-2">{item.icon}</span>
+              <item.Icon size={16} />
               {item.label}
             </Link>
           );

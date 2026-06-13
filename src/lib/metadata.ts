@@ -7,6 +7,9 @@ export type TrackMetadata = {
   durationSec: number | null;
   lyrics: string | null;
   lyricsSource: "embedded" | "lrclib" | "none";
+  /** Embedded cover art, if any. Best-effort; never blocks an upload. */
+  artBuffer: Buffer | null;
+  artMime: string | null;
 };
 
 function embeddedLyrics(meta: IAudioMetadata): string | null {
@@ -70,7 +73,14 @@ export async function extractTrackMetadata(
 ): Promise<TrackMetadata> {
   let meta: IAudioMetadata | null = null;
   try {
-    meta = await parseBuffer(buffer, { mimeType, size: buffer.length });
+    // duration:true makes music-metadata scan to the last page when the
+    // header lacks a duration (e.g. Ogg/Opus, whose length lives in the
+    // final page's granule position).
+    meta = await parseBuffer(
+      buffer,
+      { mimeType, size: buffer.length },
+      { duration: true }
+    );
   } catch {
     // Unparseable tags — fall back to the filename.
   }
@@ -93,5 +103,18 @@ export async function extractTrackMetadata(
     if (lyrics) lyricsSource = "lrclib";
   }
 
-  return { title, artist, album, durationSec, lyrics, lyricsSource };
+  const picture = meta?.common.picture?.[0];
+  const artBuffer = picture?.data ? Buffer.from(picture.data) : null;
+  const artMime = picture?.format ?? null;
+
+  return {
+    title,
+    artist,
+    album,
+    durationSec,
+    lyrics,
+    lyricsSource,
+    artBuffer,
+    artMime,
+  };
 }

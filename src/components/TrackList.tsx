@@ -8,6 +8,7 @@ import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
+  ClockIcon,
   DownIcon,
   LockIcon,
   PencilIcon,
@@ -18,6 +19,7 @@ import {
 } from "@/components/icons";
 import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
+import TrackArt from "@/components/TrackArt";
 import { useDownloadsStore } from "@/stores/downloads";
 
 function formatDuration(seconds: number | null): string {
@@ -71,7 +73,7 @@ function AddToPlaylistMenu({
     if (open) {
       setOpen(false);
       setMenuClosing(true);
-      setTimeout(() => setMenuClosing(false), 150);
+      setTimeout(() => setMenuClosing(false), 100);
       return;
     }
     setOpen(true);
@@ -340,7 +342,7 @@ export default function TrackList({
     {/* Space is always reserved so selecting doesn't shift the table. */}
     {selectable && (
       <div
-        className={`mb-3 flex h-11 items-center gap-3 rounded-md border px-4 transition-all duration-200 ${
+        className={`mb-3 flex h-11 items-center gap-3 rounded-md border px-4 transition-all duration-100 ${
           validSelected.size > 0
             ? "border-neutral-700 bg-neutral-800/60 opacity-100"
             : "pointer-events-none border-transparent opacity-0"
@@ -424,7 +426,12 @@ export default function TrackList({
           {showOwner && (
             <th className="hidden w-24 py-2 md:table-cell">Owner</th>
           )}
-          <th className="w-14 py-2 text-right">{sortHeader("duration", "⏱")}</th>
+          <th className="w-14 py-2 text-right">
+            {sortHeader(
+              "duration",
+              <ClockIcon size={14} className="inline-block align-middle" />
+            )}
+          </th>
           <th className={`${onMove ? "w-48" : "w-40"} py-2`}></th>
         </tr>
       </thead>
@@ -453,9 +460,10 @@ export default function TrackList({
                 <button
                   onClick={() => playQueue(view, i)}
                   title={`Play ${track.title}`}
-                  className="flex w-full items-center gap-1.5 text-left font-medium hover:text-emerald-400 hover:underline"
+                  className="flex w-full items-center gap-2 text-left font-medium hover:text-emerald-400"
                 >
-                  <span className="truncate">{track.title}</span>
+                  <TrackArt track={track} size="h-9 w-9" iconSize={18} />
+                  <span className="truncate hover:underline">{track.title}</span>
                   {track.isPrivate && !track.ownerName && (
                     <LockIcon size={12} className="shrink-0 text-neutral-500" />
                   )}

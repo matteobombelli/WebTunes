@@ -154,3 +154,21 @@ export const DownIcon = (p: IconProps) => (
     <path d="M12 19l-6-7h4V5h4v7h4l-6 7z" />
   </Svg>
 );
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.55 17.05 4.5 12l1.4-1.4 3.65 3.6 8.15-8.15 1.4 1.4-9.55 9.6z" />
+  </Svg>
+);
+
+export const FolderIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-8l-2-2H4z" />
+  </Svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm-1 3v5l4 2.4.8-1.3-3.3-2V8h-1.5z" />
+  </Svg>
+);

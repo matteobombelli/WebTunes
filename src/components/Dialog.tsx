@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { XIcon } from "@/components/icons";
 
-const EXIT_MS = 150; // matches the animate-*-out durations in globals.css
+const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
 
 export default function Dialog({
   title,
@@ -66,7 +67,7 @@ export default function Dialog({
             aria-label="Close"
             className="rounded p-1 text-neutral-400 hover:bg-neutral-800 hover:text-white"
           >
-            ✕
+            <XIcon size={18} />
           </button>
         </div>
         {open ? children : lastChildren}

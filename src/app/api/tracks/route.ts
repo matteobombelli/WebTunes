@@ -10,6 +10,20 @@ import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
+
+// Map an embedded picture's mime type to a file extension for the S3 key.
+function imageExt(mime: string | null): string {
+  switch (mime) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "jpg"; // jpeg is by far the most common embedded cover format
+  }
+}
 const AUDIO_EXTENSIONS = new Set([
   "mp3",
   "m4a",
@@ -87,6 +101,18 @@ export async function POST(req: NextRequest) {
   }`;
   await uploadObject(s3Key, buffer, file.type || undefined);
 
+  // Cover art is best-effort: a failed art upload must not fail the track.
+  let artS3Key: string | null = null;
+  if (meta.artBuffer) {
+    try {
+      const artExt = imageExt(meta.artMime);
+      artS3Key = `art/${user.id}/${trackId}.${artExt}`;
+      await uploadObject(artS3Key, meta.artBuffer, meta.artMime || undefined);
+    } catch {
+      artS3Key = null; // leave the track artless rather than orphan a row
+    }
+  }
+
   try {
     const [track] = await db
       .insert(tracks)
@@ -98,6 +124,7 @@ export async function POST(req: NextRequest) {
         album: meta.album,
         durationSec: meta.durationSec,
         s3Key,
+        artS3Key,
         mimeType: file.type || null,
         fileSize: file.size,
         contentHash,
@@ -111,6 +138,7 @@ export async function POST(req: NextRequest) {
     if (isUniqueViolation(err)) {
       try {
         await deleteObject(s3Key);
+        if (artS3Key) await deleteObject(artS3Key);
       } catch {
         // Orphaned object is harmless.
       }

@@ -87,6 +87,8 @@ export const tracks = pgTable(
     album: text("album"),
     durationSec: integer("duration_sec"),
     s3Key: text("s3_key").notNull().unique(),
+    // S3 key of embedded cover art extracted on upload; null when none.
+    artS3Key: text("art_s3_key"),
     mimeType: text("mime_type"),
     fileSize: integer("file_size"),
     // sha256 of the file bytes; null for tracks uploaded before dedupe.

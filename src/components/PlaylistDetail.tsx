@@ -8,6 +8,7 @@ import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
+import { MusicIcon, PlayIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 
 export default function PlaylistDetail({
@@ -98,8 +99,8 @@ export default function PlaylistDetail({
               className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
             />
           ) : (
-            <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-5xl sm:h-36 sm:w-36">
-              🎶
+            <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-neutral-600 sm:h-36 sm:w-36">
+              <MusicIcon size={56} />
             </div>
           )}
           <span className="absolute inset-0 hidden items-center justify-center rounded-lg bg-black/60 text-sm text-white group-hover:flex">
@@ -151,9 +152,10 @@ export default function PlaylistDetail({
             <button
               onClick={() => tracks.length && playQueue(tracks, 0)}
               disabled={tracks.length === 0}
-              className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
             >
-              ▶ Play all
+              <PlayIcon size={16} />
+              Play all
             </button>
             <button
               onClick={() => setAdding(true)}

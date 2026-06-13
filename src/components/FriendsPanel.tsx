@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
+import { XIcon } from "@/components/icons";
 
 export default function FriendsPanel({
   friends,
@@ -194,9 +195,9 @@ export default function FriendsPanel({
                 <button
                   onClick={() => unfriend(f)}
                   title="Unfriend"
-                  className="text-xs text-neutral-500 hover:text-red-400"
+                  className="text-neutral-500 hover:text-red-400"
                 >
-                  ✕
+                  <XIcon size={14} />
                 </button>
               </li>
             ))}

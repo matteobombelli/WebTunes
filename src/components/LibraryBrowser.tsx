@@ -140,7 +140,7 @@ export default function LibraryBrowser({
       ) : (
         // Keep stale results visible (dimmed) while a new fetch runs.
         <div
-          className={`transition-opacity duration-200 ${dimmed ? "opacity-50" : ""}`}
+          className={`transition-opacity duration-100 ${dimmed ? "opacity-50" : ""}`}
         >
           <p className="mb-2 text-sm text-neutral-400">
             {tracks.length} {countNoun}

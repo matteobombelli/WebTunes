@@ -30,11 +30,11 @@ a,
 input,
 select {
   transition:
-    color 0.15s ease,
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease,
-    transform 0.15s ease;
+    color 0.1s ease,
+    background-color 0.1s ease,
+    border-color 0.1s ease,
+    opacity 0.1s ease,
+    transform 0.1s ease;
 }
 button:not(:disabled):active {
   transform: scale(0.97);
@@ -77,16 +77,20 @@ button:not(:disabled):active {
   }
 }
 .animate-pop-in {
-  animation: pop-in 0.15s ease-out;
+  animation: pop-in 0.1s ease-out;
 }
 .animate-fade-in {
-  animation: fade-in 0.15s ease-out;
+  animation: fade-in 0.1s ease-out;
 }
 .animate-pop-out {
-  animation: pop-out 0.15s ease-in forwards;
+  animation: pop-out 0.1s ease-in forwards;
 }
 .animate-fade-out {
-  animation: fade-out 0.15s ease-in forwards;
+  animation: fade-out 0.1s ease-in forwards;
+}
+/* Tailwind's default pulse is 2s; tighten it so spinners feel responsive. */
+.animate-pulse {
+  animation-duration: 1.2s;
 }
 
 /* Themed checkboxes (replaces the default native look) */
@@ -106,7 +110,7 @@ input[type="checkbox"].checkbox::before {
   width: 0.6rem;
   height: 0.6rem;
   transform: scale(0);
-  transition: transform 0.1s ease-in-out;
+  transition: transform 0.07s ease-in-out;
   background: #fff;
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }

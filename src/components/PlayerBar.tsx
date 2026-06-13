@@ -5,6 +5,7 @@ import { streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import QueuePanel from "@/components/QueuePanel";
+import TrackArt from "@/components/TrackArt";
 import {
   NextIcon,
   PauseIcon,
@@ -202,6 +203,7 @@ export default function PlayerBar() {
       <div className="flex flex-col gap-1 px-4 pb-2 pt-3 md:hidden">
         {seekBar("flex")}
         <div className="flex items-center gap-2">
+          <TrackArt track={track} size="h-10 w-10" iconSize={18} />
           <div className="min-w-0 flex-1">{trackInfo}</div>
           <div className="flex shrink-0 items-center gap-1">
             {transportButton(
@@ -244,7 +246,10 @@ export default function PlayerBar() {
 
       {/* Desktop (md and up): the original single row, unchanged. */}
       <div className="hidden items-center gap-3 py-3 pl-4 pr-6 md:flex">
-        <div className="w-56 min-w-0 shrink-0">{trackInfo}</div>
+        <div className="flex w-56 shrink-0 items-center gap-2">
+          <TrackArt track={track} size="h-11 w-11" iconSize={20} />
+          <div className="min-w-0 flex-1">{trackInfo}</div>
+        </div>
 
         <div className="flex shrink-0 items-center gap-1">
           {transportButton(

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PlaylistDTO } from "@/lib/types";
+import { MusicIcon } from "@/components/icons";
 
 export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
   return (
@@ -16,8 +17,8 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
           className="aspect-square w-full rounded-md object-cover"
         />
       ) : (
-        <div className="flex aspect-square w-full items-center justify-center rounded-md bg-neutral-800 text-4xl">
-          🎶
+        <div className="flex aspect-square w-full items-center justify-center rounded-md bg-neutral-800 text-neutral-600">
+          <MusicIcon size={48} />
         </div>
       )}
       <p className="mt-2 truncate font-medium text-neutral-100 group-hover:text-white">

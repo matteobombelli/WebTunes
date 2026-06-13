@@ -8,6 +8,8 @@ export type TrackDTO = {
   album: string | null;
   durationSec: number | null;
   s3Key: string;
+  /** S3 key of embedded cover art; null when the file had none. */
+  artS3Key: string | null;
   mimeType: string | null;
   fileSize: number | null;
   lyrics: string | null;
