@@ -4,17 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { passwordResetTokens, users } from "@/db/schema";
-import { BASE_PATH } from "@/lib/base-path";
+import { getAppBaseUrl } from "@/lib/app-url";
 import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({ email: z.string().trim().toLowerCase().email() });
-
-function appBaseUrl(req: NextRequest): string {
-  const authUrl = process.env.AUTH_URL;
-  if (authUrl) return authUrl.replace(/\/api\/auth\/?$/, "");
-  return `${req.nextUrl.origin}${BASE_PATH}`;
-}
 
 export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
@@ -42,7 +36,7 @@ export async function POST(req: NextRequest) {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
 
-    const resetUrl = `${appBaseUrl(req)}/reset-password?token=${token}`;
+    const resetUrl = `${getAppBaseUrl(req.headers)}/reset-password?token=${token}`;
     try {
       await sendEmail({
         to: user.email,

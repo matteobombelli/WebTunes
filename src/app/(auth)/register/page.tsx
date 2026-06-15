@@ -12,6 +12,18 @@ export default function RegisterPage() {
     initialState
   );
 
+  if (state.notice) {
+    return (
+      <div className="flex flex-col gap-4 text-sm">
+        <h2 className="text-lg font-semibold">Check your email</h2>
+        <p className="text-neutral-400">{state.notice}</p>
+        <Link href="/login" className="text-emerald-400 hover:underline">
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold">Create account</h2>

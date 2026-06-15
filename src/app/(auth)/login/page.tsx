@@ -1,10 +1,48 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api";
 import { loginAction, type AuthFormState } from "../actions";
 
 const initialState: AuthFormState = { error: null };
+
+function ResendVerification({ email }: { email: string }) {
+  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+
+  const resend = async () => {
+    setStatus("sending");
+    try {
+      await api("/auth/verify/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } finally {
+      setStatus("sent");
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-amber-700/50 bg-amber-950/30 p-3 text-sm text-amber-200">
+      <p>Please verify your email before signing in.</p>
+      {status === "sent" ? (
+        <p className="mt-1 text-amber-300/80">
+          If that account needs verifying, a new link is on its way.
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={resend}
+          disabled={status === "sending"}
+          className="mt-1 font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          {status === "sending" ? "Sending…" : "Resend verification email"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(
@@ -32,6 +70,9 @@ export default function LoginPage() {
         className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
       {state.error && <p className="text-sm text-red-400">{state.error}</p>}
+      {state.unverifiedEmail && (
+        <ResendVerification email={state.unverifiedEmail} />
+      )}
       <button
         type="submit"
         disabled={pending}

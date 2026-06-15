@@ -75,6 +75,15 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   usedAt: timestamp("used_at", { mode: "date" }),
 });
 
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  usedAt: timestamp("used_at", { mode: "date" }),
+});
+
 export const tracks = pgTable(
   "tracks",
   {

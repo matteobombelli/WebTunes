@@ -50,6 +50,13 @@
       "when": 1781553363748,
       "tag": "0006_supreme_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781554888207,
+      "tag": "0007_lumpy_forge",
+      "breakpoints": true
     }
   ]
 }
