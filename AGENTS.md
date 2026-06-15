@@ -32,17 +32,25 @@ setup, and architecture rationale.
   - `auth.ts` — Auth.js config (see gotcha below); `auth-helpers.ts` —
     `requireUser()` (API, returns null → 401) and `requirePageUser()` (pages,
     redirects to /login)
-  - `users.ts` — registration; `base-path.ts` — basePath constant (single
-    source of truth, imported by `next.config.ts` and `api.ts`)
+  - `users.ts` — registration; `verification.ts` — email-verification tokens
+    (hashed; `sendVerificationEmail`); `base-path.ts` — basePath constant
+    (single source of truth, imported by `next.config.ts` and `api.ts`);
+    `app-url.ts` — absolute base URL (origin + basePath) for email links
   - `api.ts` — client fetch wrapper that prepends basePath; `s3.ts`, `email.ts`,
-    `metadata.ts`, `types.ts` (DTO shapes shared with client)
+    `metadata.ts`, `types.ts` (DTO shapes shared with client);
+    `client-ip.ts` — best-effort client IP for rate limiting (fails closed)
+  - `offline/` — PWA download internals: `db.ts` (IndexedDB metadata),
+    `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
 - `src/app/api/` — REST-ish JSON routes. Some GET endpoints are unused by the
   web client but are **intentional public surface for a future mobile client —
   do not delete them**. Routes stay thin: auth check + zod validation + lib call.
 - `src/app/(app)/` — authenticated pages (server components fetching via lib,
-  passing DTOs to client components); `(auth)/` — login/register/reset pages.
-- `src/components/` — client components; `src/stores/player.ts` — zustand
-  player state (PlayerBar owns the single `<audio>` element).
+  passing DTOs to client components): library, album, artist, playlists,
+  friends, downloads. `(auth)/` — login/register/forgot-password/reset-password/
+  verify-email pages (+ `actions.ts` for the rate-limited form posts).
+- `src/components/` — client components; `src/stores/` — zustand stores:
+  `player.ts` (PlayerBar owns the single `<audio>` element), `downloads.ts`
+  (offline queue/UI state), `uploads.ts` (top upload bar; survives navigation).
 - `src/proxy.ts` — cookie-presence gate only; real auth enforcement is
   server-side in `requireUser`/`requirePageUser`.
 
@@ -52,8 +60,11 @@ setup, and architecture rationale.
   `toTrackDTO`/`toPlaylistDTO` rather than returning raw Drizzle rows.
 - Guard `[id]`-style path params with `isUuid` (`lib/validate.ts`) before
   querying uuid columns — Postgres throws on bad casts, turning a 404 into a
-  500. Unauthenticated auth endpoints (login, forgot-password) go through
-  `lib/rate-limit.ts` (in-memory; fine while the app is one Node process).
+  500. Unauthenticated auth endpoints (login, register, forgot-password,
+  verify resend) go through `lib/rate-limit.ts` (in-memory; fine while the app
+  is one Node process), keyed by client IP from `lib/client-ip.ts`.
+- Security headers (CSP, HSTS, `X-Frame-Options`, etc.) are set globally in
+  `next.config.ts`'s `headers()`; the CSP allows Next's inline bootstrap.
 - Check-then-insert flows catch unique violations via `isUniqueViolation`
   (`src/db/index.ts`) and return their normal 409/conflict message.
 - Local secrets (e.g. `POSTGRES_PASSWORD` for docker-compose interpolation)
@@ -76,7 +87,7 @@ setup, and architecture rationale.
 - Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
   `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 100mb;
   default 10MB silently truncates bodies and breaks track uploads).
-- Offline/PWA (see `PWA-PLAN.md`): the player streams via the stable
+- Offline/PWA: the player streams via the stable
   `GET /api/tracks/[id]/stream` (302 to presigned URL); `public/sw.js` serves
   downloaded tracks from the `wt-audio` cache with Range-aware 206s (iOS
   refuses plain 200s). Cache names and the hardcoded basePath in `sw.js` must
@@ -101,13 +112,13 @@ setup, and architecture rationale.
 - PWA offline (deployed to prod 2026-06-12): prod S3 CORS applied
   2026-06-12 via the Cloudflare dashboard — the R2 token in `.env.local` is
   object-scoped, so `scripts/apply-s3-cors.mjs` gets AccessDenied unless run
-  with an Admin Read & Write R2 token in the environment. Remaining: the
-  real-device iOS pass; record the blessed mode in `PWA-PLAN.md`.
+  with an Admin Read & Write R2 token in the environment. (The `PWA-PLAN.md`
+  design doc was removed once the feature shipped.)
 - Deploys are build-in-place (`npm run build` in the live repo): the running
   server keeps references into the old `.next` and throws "Element type is
   invalid" render errors once it's replaced — restart `webtunes.service`
   immediately after building.
 - Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
-  Without `RESEND_API_KEY`, `lib/email.ts` falls back to logging reset links to
-  the server console (dev behavior).
+  Without `RESEND_API_KEY`, `lib/email.ts` logs the message (reset links,
+  verification links) to the server console instead of sending (dev behavior).

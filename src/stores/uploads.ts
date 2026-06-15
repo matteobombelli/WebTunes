@@ -5,10 +5,14 @@ import { BASE_PATH } from "@/lib/base-path";
 
 export type UploadItem = {
   name: string;
-  status: "uploading" | "done" | "error" | "canceled";
+  status: "uploading" | "done" | "duplicate" | "error" | "canceled";
   progress: number; // 0–100, bytes sent for the current file
   detail?: string;
 };
+
+// Thrown when the server rejects a file as already in the library (409), so the
+// batch can count it as a duplicate rather than a real failure.
+class DuplicateError extends Error {}
 
 type UploadsState = {
   items: UploadItem[];
@@ -52,7 +56,9 @@ function uploadFile(
       } catch {
         // non-JSON error body
       }
-      reject(new Error(message));
+      reject(
+        xhr.status === 409 ? new DuplicateError(message) : new Error(message)
+      );
     };
     xhr.onerror = () => reject(new Error("Upload failed"));
     xhr.onabort = () => reject(new Error("Canceled"));
@@ -105,7 +111,8 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
                   ? { ...it, status: "canceled" }
                   : {
                       ...it,
-                      status: "error",
+                      status:
+                        err instanceof DuplicateError ? "duplicate" : "error",
                       detail: err instanceof Error ? err.message : "failed",
                     }
                 : it

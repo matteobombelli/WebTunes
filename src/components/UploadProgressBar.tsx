@@ -15,6 +15,7 @@ export default function UploadProgressBar() {
   if (items.length === 0) return null;
 
   const done = items.filter((it) => it.status !== "uploading").length;
+  const duplicates = items.filter((it) => it.status === "duplicate").length;
   const failed = items.filter((it) => it.status === "error").length;
   const overall = items.reduce((sum, it) => sum + it.progress, 0) / items.length;
 
@@ -30,6 +31,12 @@ export default function UploadProgressBar() {
         </span>
         <span className="tabular-nums text-neutral-400">
           {done}/{items.length}
+          {duplicates > 0 && (
+            <span className="text-yellow-400">
+              {" "}
+              · {duplicates} duplicate{duplicates === 1 ? "" : "s"}
+            </span>
+          )}
           {failed > 0 && <span className="text-red-400"> · {failed} failed</span>}
         </span>
         <div className="ml-auto">
