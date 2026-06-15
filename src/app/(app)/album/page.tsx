@@ -20,10 +20,17 @@ export default async function AlbumPage({
     settings.hideFriendDuplicates
   );
 
+  const artists = [...new Set(tracks.map((t) => t.artist).filter(Boolean))];
+  const albumArtist =
+    artists.length === 1 ? artists[0] : artists.length > 1 ? "Various Artists" : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <p className="text-sm text-neutral-400">Album</p>
-      <h1 className="mb-6 text-2xl font-bold">{name}</h1>
+      <h1 className={`text-2xl font-bold ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
+      {albumArtist && (
+        <p className="mb-6 text-sm text-neutral-400">{albumArtist}</p>
+      )}
       <TrackList tracks={tracks} showOwner />
     </div>
   );

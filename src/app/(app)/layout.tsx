@@ -3,6 +3,7 @@ import { MobileNav, MobileTopBar } from "@/components/MobileNav";
 import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import Sidebar from "@/components/Sidebar";
+import UploadProgressBar from "@/components/UploadProgressBar";
 
 export default async function AppLayout({
   children,
@@ -14,6 +15,7 @@ export default async function AppLayout({
   return (
     <div className="flex h-dvh flex-col">
       <ServiceWorkerRegistrar />
+      <UploadProgressBar />
       <MobileTopBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar userName={user.name} userEmail={user.email} />

@@ -8,7 +8,7 @@ import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
-import { MusicIcon, PlayIcon } from "@/components/icons";
+import { MusicIcon, PlayIcon, ShuffleIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 
 export default function PlaylistDetail({
@@ -148,7 +148,7 @@ export default function PlaylistDetail({
           <p className="mt-1 text-sm text-neutral-400">
             {tracks.length} track{tracks.length === 1 ? "" : "s"}
           </p>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
               onClick={() => tracks.length && playQueue(tracks, 0)}
               disabled={tracks.length === 0}
@@ -156,6 +156,18 @@ export default function PlaylistDetail({
             >
               <PlayIcon size={16} />
               Play all
+            </button>
+            <button
+              onClick={() => {
+                if (!tracks.length) return;
+                usePlayerStore.setState({ shuffled: true });
+                playQueue(tracks, Math.floor(Math.random() * tracks.length));
+              }}
+              disabled={tracks.length === 0}
+              className="flex items-center gap-1.5 rounded-full bg-neutral-700 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-600 disabled:opacity-50"
+            >
+              <ShuffleIcon size={16} />
+              Shuffle all
             </button>
             <button
               onClick={() => setAdding(true)}

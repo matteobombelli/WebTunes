@@ -207,6 +207,163 @@ function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
   );
 }
 
+type TrackActionsProps = {
+  track: TrackDTO;
+  index: number;
+  viewLength: number;
+  canEdit: boolean;
+  canDelete: boolean;
+  onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
+  onRemove?: (track: TrackDTO) => Promise<void>;
+  removeLabel?: string;
+  onEdit: (track: TrackDTO) => void;
+  onDelete: (track: TrackDTO) => void;
+  onClose: () => void;
+};
+
+// The consolidated set of per-track actions, shared by the mobile kebab dialog
+// and the desktop three-dot dropdown.
+function TrackActions({
+  track,
+  index,
+  viewLength,
+  canEdit,
+  canDelete,
+  onMove,
+  onRemove,
+  removeLabel,
+  onEdit,
+  onDelete,
+  onClose,
+}: TrackActionsProps) {
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      {track.artist && (
+        <Link
+          href={`/artist?name=${encodeURIComponent(track.artist)}`}
+          onClick={onClose}
+          className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+        >
+          <span className="shrink-0">Go to artist</span>
+          <span className="truncate text-neutral-400">{track.artist}</span>
+        </Link>
+      )}
+      {track.album && (
+        <Link
+          href={`/album?name=${encodeURIComponent(track.album)}`}
+          onClick={onClose}
+          className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+        >
+          <span className="shrink-0">Go to album</span>
+          <span className="truncate text-neutral-400">{track.album}</span>
+        </Link>
+      )}
+      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+        <span>Queue</span>
+        <AddToQueueMenu tracks={[track]} />
+      </div>
+      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+        <span>Add to playlist</span>
+        <AddToPlaylistMenu trackIds={[track.id]} />
+      </div>
+      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+        <span>Download</span>
+        <DownloadButton track={track} />
+      </div>
+      {canEdit && !track.ownerName && (
+        <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+          <span>Edit details</span>
+          <button
+            onClick={() => {
+              onEdit(track);
+              onClose();
+            }}
+            aria-label="Edit track"
+            className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+          >
+            <PencilIcon size={16} />
+          </button>
+        </div>
+      )}
+      {onMove && (
+        <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+          <span>Reorder</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => {
+                onMove(track, -1);
+                onClose();
+              }}
+              disabled={index <= 0}
+              aria-label="Move up"
+              className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
+            >
+              <UpIcon size={16} />
+            </button>
+            <button
+              onClick={() => {
+                onMove(track, 1);
+                onClose();
+              }}
+              disabled={index === viewLength - 1}
+              aria-label="Move down"
+              className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
+            >
+              <DownIcon size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+      {(onRemove || (canDelete && !track.ownerName)) && (
+        <button
+          onClick={() => {
+            onDelete(track);
+            onClose();
+          }}
+          className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
+        >
+          <span>{removeLabel ?? "Delete"}</span>
+          <XIcon size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Desktop: a single three-dot button revealing the actions in an anchored
+// dropdown (replaces the old hover-revealed row of buttons).
+function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
+  const [open, setOpen] = useState(false);
+  // Keeps the menu mounted briefly after close so it can animate out.
+  const [menuClosing, setMenuClosing] = useState(false);
+
+  const close = () => {
+    setOpen(false);
+    setMenuClosing(true);
+    setTimeout(() => setMenuClosing(false), 150);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-label="Track actions"
+        title="Track actions"
+        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+      >
+        <EllipsisIcon size={18} />
+      </button>
+      {(open || menuClosing) && (
+        <div
+          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-20 mt-1 w-60 rounded-md border border-neutral-700 bg-neutral-800 p-2 shadow-lg`}
+        >
+          <TrackActions {...props} onClose={close} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TrackList({
   tracks,
   showOwner = false,
@@ -243,7 +400,6 @@ export default function TrackList({
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
   const current = useCurrentTrack();
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<TrackDTO | null>(null);
   // Mobile: the row whose action sheet (kebab dialog) is open.
   const [actionsTrack, setActionsTrack] = useState<TrackDTO | null>(null);
@@ -316,15 +472,10 @@ export default function TrackList({
     ) {
       return;
     }
-    setBusyId(track.id);
-    try {
-      if (onRemove) await onRemove(track);
-      else await api(`/tracks/${track.id}`, { method: "DELETE" });
-      router.refresh();
-      onMutated?.();
-    } finally {
-      setBusyId(null);
-    }
+    if (onRemove) await onRemove(track);
+    else await api(`/tracks/${track.id}`, { method: "DELETE" });
+    router.refresh();
+    onMutated?.();
   };
 
   // Only the viewer's own tracks can be deleted; a selection made in a
@@ -455,25 +606,25 @@ export default function TrackList({
               {sortHeader("owner", "Owner")}
             </th>
           )}
+          <th className="w-14 py-2 text-center">
+            {sortHeader(
+              "duration",
+              <span className="inline-flex items-center justify-center align-middle">
+                <ClockIcon size={16} />
+              </span>
+            )}
+          </th>
           {showPlays && (
             <th className="hidden w-14 py-2 text-center md:table-cell">
               {sortHeader(
                 "plays",
-                <HeadphonesIcon
-                  size={16}
-                  className="inline-block align-middle"
-                />
+                <span className="inline-flex items-center justify-center align-middle">
+                  <HeadphonesIcon size={16} />
+                </span>
               )}
             </th>
           )}
-          <th className="w-14 py-2 text-center">
-            {sortHeader(
-              "duration",
-              <ClockIcon size={17} className="inline-block align-middle" />
-            )}
-          </th>
-          {/* Narrow on mobile (just the kebab); roomy on desktop (action row). */}
-          <th className={`w-10 py-2 ${onMove ? "md:w-48" : "md:w-40"}`}></th>
+          <th className="w-10 py-2"></th>
         </tr>
       </thead>
       <tbody>
@@ -539,61 +690,29 @@ export default function TrackList({
                   {track.ownerName ?? "You"}
                 </td>
               )}
+              <td className="py-2 text-center tabular-nums text-neutral-400">
+                {formatDuration(track.durationSec)}
+              </td>
               {showPlays && (
                 <td className="hidden py-2 text-center tabular-nums text-neutral-400 md:table-cell">
                   {track.friendPlayCount}
                 </td>
               )}
-              <td className="py-2 text-right tabular-nums text-neutral-400">
-                {formatDuration(track.durationSec)}
-              </td>
               <td className="py-2">
-                {/* Desktop: hover-revealed action row. */}
-                <div className="hidden items-center justify-end gap-1 md:flex md:opacity-0 md:group-hover:opacity-100">
-                  {onMove && (
-                    <>
-                      <button
-                        onClick={() => onMove(track, -1)}
-                        disabled={i === 0}
-                        aria-label="Move up"
-                        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
-                      >
-                        <UpIcon size={14} />
-                      </button>
-                      <button
-                        onClick={() => onMove(track, 1)}
-                        disabled={i === view.length - 1}
-                        aria-label="Move down"
-                        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
-                      >
-                        <DownIcon size={14} />
-                      </button>
-                    </>
-                  )}
-                  {canEdit && !track.ownerName && (
-                    <button
-                      onClick={() => setEditing(track)}
-                      aria-label="Edit track"
-                      title="Edit track"
-                      className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
-                    >
-                      <PencilIcon size={15} />
-                    </button>
-                  )}
-                  <AddToQueueMenu tracks={[track]} />
-                  <DownloadButton track={track} />
-                  <AddToPlaylistMenu trackIds={[track.id]} />
-                  {(onRemove || (canDelete && !track.ownerName)) && (
-                    <button
-                      onClick={() => remove(track)}
-                      disabled={busyId === track.id}
-                      aria-label={removeLabel ?? "Delete track"}
-                      title={removeLabel ?? "Delete track"}
-                      className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-red-400 disabled:opacity-50"
-                    >
-                      <XIcon size={16} />
-                    </button>
-                  )}
+                {/* Desktop: hover-revealed three-dot dropdown. */}
+                <div className="hidden justify-end md:flex md:opacity-0 md:group-hover:opacity-100">
+                  <TrackActionsMenu
+                    track={track}
+                    index={i}
+                    viewLength={view.length}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    onMove={onMove}
+                    onRemove={onRemove}
+                    removeLabel={removeLabel}
+                    onEdit={setEditing}
+                    onDelete={remove}
+                  />
                 </div>
                 {/* Mobile: collapse the actions into a single kebab dialog. */}
                 <div className="flex justify-end md:hidden">
@@ -622,100 +741,19 @@ export default function TrackList({
       onClose={() => setActionsTrack(null)}
     >
       {actionsTrack && (
-        <div className="flex flex-col gap-2 text-sm">
-          {actionsTrack.artist && (
-            <Link
-              href={`/artist?name=${encodeURIComponent(actionsTrack.artist)}`}
-              onClick={() => setActionsTrack(null)}
-              className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
-            >
-              <span className="shrink-0">Go to artist</span>
-              <span className="truncate text-neutral-400">
-                {actionsTrack.artist}
-              </span>
-            </Link>
-          )}
-          {actionsTrack.album && (
-            <Link
-              href={`/album?name=${encodeURIComponent(actionsTrack.album)}`}
-              onClick={() => setActionsTrack(null)}
-              className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
-            >
-              <span className="shrink-0">Go to album</span>
-              <span className="truncate text-neutral-400">
-                {actionsTrack.album}
-              </span>
-            </Link>
-          )}
-          <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
-            <span>Queue</span>
-            <AddToQueueMenu tracks={[actionsTrack]} />
-          </div>
-          <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
-            <span>Add to playlist</span>
-            <AddToPlaylistMenu trackIds={[actionsTrack.id]} />
-          </div>
-          <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
-            <span>Download</span>
-            <DownloadButton track={actionsTrack} />
-          </div>
-          {canEdit && !actionsTrack.ownerName && (
-            <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
-              <span>Edit details</span>
-              <button
-                onClick={() => {
-                  setEditing(actionsTrack);
-                  setActionsTrack(null);
-                }}
-                aria-label="Edit track"
-                className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
-              >
-                <PencilIcon size={16} />
-              </button>
-            </div>
-          )}
-          {onMove && (
-            <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
-              <span>Reorder</span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => {
-                    onMove(actionsTrack, -1);
-                    setActionsTrack(null);
-                  }}
-                  disabled={actionsIndex <= 0}
-                  aria-label="Move up"
-                  className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
-                >
-                  <UpIcon size={16} />
-                </button>
-                <button
-                  onClick={() => {
-                    onMove(actionsTrack, 1);
-                    setActionsTrack(null);
-                  }}
-                  disabled={actionsIndex === view.length - 1}
-                  aria-label="Move down"
-                  className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
-                >
-                  <DownIcon size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-          {(onRemove || (canDelete && !actionsTrack.ownerName)) && (
-            <button
-              onClick={() => {
-                remove(actionsTrack);
-                setActionsTrack(null);
-              }}
-              className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
-            >
-              <span>{removeLabel ?? "Delete"}</span>
-              <XIcon size={16} />
-            </button>
-          )}
-        </div>
+        <TrackActions
+          track={actionsTrack}
+          index={actionsIndex}
+          viewLength={view.length}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onMove={onMove}
+          onRemove={onRemove}
+          removeLabel={removeLabel}
+          onEdit={setEditing}
+          onDelete={remove}
+          onClose={() => setActionsTrack(null)}
+        />
       )}
     </Dialog>
     </>
