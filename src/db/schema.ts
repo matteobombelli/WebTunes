@@ -100,6 +100,8 @@ export const tracks = pgTable(
       .notNull()
       .default("none"),
     isPrivate: boolean("is_private").notNull().default(false),
+    // Times a non-owner played this track to ≥30s (the "friend play count").
+    friendPlayCount: integer("friend_play_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     // search_vector tsvector generated column + GIN index added via raw SQL
     // in the migration (drizzle has no native tsvector type).

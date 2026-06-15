@@ -71,6 +71,72 @@ export async function listAccessibleTracks(
   );
 }
 
+/**
+ * Accessible tracks (own + friends' non-private) whose `field` matches `value`
+ * case- and whitespace-insensitively, ordered by title. Honors
+ * hideFriendDuplicates like listAccessibleTracks. Backs the album/artist pages.
+ */
+async function listAccessibleTracksByField(
+  userId: string,
+  field: typeof tracks.album | typeof tracks.artist,
+  value: string,
+  hideFriendDuplicates: boolean
+): Promise<TrackDTO[]> {
+  const friendIds = await friendIdsOf(userId);
+  const matches = sql`lower(btrim(coalesce(${field}, ''))) = lower(btrim(${value}))`;
+  const rows = await db
+    .select({ track: tracks, ownerName: users.name })
+    .from(tracks)
+    .innerJoin(users, eq(tracks.ownerId, users.id))
+    .where(
+      and(
+        matches,
+        or(
+          eq(tracks.ownerId, userId),
+          friendIds.length
+            ? and(
+                inArray(tracks.ownerId, friendIds),
+                eq(tracks.isPrivate, false),
+                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined
+              )
+            : sql`false`
+        )
+      )
+    )
+    .orderBy(tracks.title);
+  return rows.map((r) =>
+    toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName)
+  );
+}
+
+/** Accessible tracks on a given album. */
+export function listTracksByAlbum(
+  userId: string,
+  album: string,
+  hideFriendDuplicates: boolean
+): Promise<TrackDTO[]> {
+  return listAccessibleTracksByField(
+    userId,
+    tracks.album,
+    album,
+    hideFriendDuplicates
+  );
+}
+
+/** Accessible tracks by a given artist. */
+export function listTracksByArtist(
+  userId: string,
+  artist: string,
+  hideFriendDuplicates: boolean
+): Promise<TrackDTO[]> {
+  return listAccessibleTracksByField(
+    userId,
+    tracks.artist,
+    artist,
+    hideFriendDuplicates
+  );
+}
+
 /** A friend's non-private tracks, newest first. Caller checks the friendship. */
 export async function listFriendTracks(
   friendId: string,

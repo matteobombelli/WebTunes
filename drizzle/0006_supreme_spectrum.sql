@@ -1,0 +1,1 @@
+ALTER TABLE "tracks" ADD COLUMN "friend_play_count" integer DEFAULT 0 NOT NULL;

@@ -43,6 +43,13 @@
       "when": 1781365389808,
       "tag": "0005_high_katie_power",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781553363748,
+      "tag": "0006_supreme_spectrum",
+      "breakpoints": true
     }
   ]
 }

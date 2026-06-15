@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/api";
@@ -11,6 +12,7 @@ import {
   ClockIcon,
   DownIcon,
   EllipsisIcon,
+  HeadphonesIcon,
   LockIcon,
   PencilIcon,
   PlusIcon,
@@ -31,11 +33,20 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type SortKey = "title" | "artist" | "album" | "duration";
+type SortKey = "title" | "artist" | "album" | "owner" | "duration" | "plays";
 type SortState = { key: SortKey; dir: 1 | -1 } | null;
 
 // U+FFFF sentinel sorts null fields after real values (ascending).
 const NULL_SENTINEL = "￿";
+
+// "owner" maps to ownerName (own tracks show as "You"), not a direct field.
+function sortText(
+  t: TrackDTO,
+  key: "title" | "artist" | "album" | "owner"
+): string {
+  if (key === "owner") return t.ownerName ?? "You";
+  return t[key] ?? NULL_SENTINEL;
+}
 
 function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
   if (!sort) return tracks;
@@ -44,10 +55,13 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
     if (sort.key === "duration") {
       return ((a.durationSec ?? -1) - (b.durationSec ?? -1)) * sort.dir;
     }
-    const av = a[sort.key] ?? NULL_SENTINEL;
-    const bv = b[sort.key] ?? NULL_SENTINEL;
+    if (sort.key === "plays") {
+      return (a.friendPlayCount - b.friendPlayCount) * sort.dir;
+    }
     return (
-      av.localeCompare(bv, undefined, { sensitivity: "base" }) * sort.dir
+      sortText(a, sort.key).localeCompare(sortText(b, sort.key), undefined, {
+        sensitivity: "base",
+      }) * sort.dir
     );
   });
   return copy;
@@ -196,6 +210,7 @@ function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
 export default function TrackList({
   tracks,
   showOwner = false,
+  showPlays = false,
   canDelete = false,
   canEdit = false,
   selectable = false,
@@ -207,6 +222,8 @@ export default function TrackList({
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
+  /** Shows the sortable friend-play-count ("Plays") column (library view). */
+  showPlays?: boolean;
   /** Shows the delete action on the viewer's own tracks. */
   canDelete?: boolean;
   /** Shows the edit (pencil) action on the viewer's own tracks. */
@@ -434,12 +451,25 @@ export default function TrackList({
             {sortHeader("album", "Album")}
           </th>
           {showOwner && (
-            <th className="hidden w-24 py-2 md:table-cell">Owner</th>
+            <th className="hidden w-24 py-2 md:table-cell">
+              {sortHeader("owner", "Owner")}
+            </th>
           )}
-          <th className="w-14 py-2 text-right">
+          {showPlays && (
+            <th className="hidden w-14 py-2 text-center md:table-cell">
+              {sortHeader(
+                "plays",
+                <HeadphonesIcon
+                  size={16}
+                  className="inline-block align-middle"
+                />
+              )}
+            </th>
+          )}
+          <th className="w-14 py-2 text-center">
             {sortHeader(
               "duration",
-              <ClockIcon size={14} className="inline-block align-middle" />
+              <ClockIcon size={17} className="inline-block align-middle" />
             )}
           </th>
           {/* Narrow on mobile (just the kebab); roomy on desktop (action row). */}
@@ -481,14 +511,37 @@ export default function TrackList({
                 </button>
               </td>
               <td className="hidden truncate py-2 pr-2 text-neutral-400 sm:table-cell">
-                {track.artist ?? "—"}
+                {track.artist ? (
+                  <Link
+                    href={`/artist?name=${encodeURIComponent(track.artist)}`}
+                    className="hover:text-emerald-400 hover:underline"
+                  >
+                    {track.artist}
+                  </Link>
+                ) : (
+                  "—"
+                )}
               </td>
               <td className="hidden truncate py-2 pr-2 text-neutral-400 md:table-cell">
-                {track.album ?? "—"}
+                {track.album ? (
+                  <Link
+                    href={`/album?name=${encodeURIComponent(track.album)}`}
+                    className="hover:text-emerald-400 hover:underline"
+                  >
+                    {track.album}
+                  </Link>
+                ) : (
+                  "—"
+                )}
               </td>
               {showOwner && (
                 <td className="hidden truncate py-2 pr-2 text-neutral-400 md:table-cell">
                   {track.ownerName ?? "You"}
+                </td>
+              )}
+              {showPlays && (
+                <td className="hidden py-2 text-center tabular-nums text-neutral-400 md:table-cell">
+                  {track.friendPlayCount}
                 </td>
               )}
               <td className="py-2 text-right tabular-nums text-neutral-400">
@@ -570,6 +623,30 @@ export default function TrackList({
     >
       {actionsTrack && (
         <div className="flex flex-col gap-2 text-sm">
+          {actionsTrack.artist && (
+            <Link
+              href={`/artist?name=${encodeURIComponent(actionsTrack.artist)}`}
+              onClick={() => setActionsTrack(null)}
+              className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+            >
+              <span className="shrink-0">Go to artist</span>
+              <span className="truncate text-neutral-400">
+                {actionsTrack.artist}
+              </span>
+            </Link>
+          )}
+          {actionsTrack.album && (
+            <Link
+              href={`/album?name=${encodeURIComponent(actionsTrack.album)}`}
+              onClick={() => setActionsTrack(null)}
+              className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+            >
+              <span className="shrink-0">Go to album</span>
+              <span className="truncate text-neutral-400">
+                {actionsTrack.album}
+              </span>
+            </Link>
+          )}
           <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
             <span>Queue</span>
             <AddToQueueMenu tracks={[actionsTrack]} />

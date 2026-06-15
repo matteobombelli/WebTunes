@@ -173,6 +173,13 @@ export const ClockIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Headphones — used for the friend play-count column. */
+export const HeadphonesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4a8 8 0 0 0-8 8v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H6v-0a6 6 0 0 1 12 0v0h-1a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2v-5a8 8 0 0 0-8-8z" />
+  </Svg>
+);
+
 /** Vertical kebab menu (more actions). */
 export const EllipsisIcon = (p: IconProps) => (
   <Svg {...p}>

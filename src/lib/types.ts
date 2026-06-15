@@ -15,6 +15,8 @@ export type TrackDTO = {
   lyrics: string | null;
   lyricsSource: "embedded" | "lrclib" | "none";
   isPrivate: boolean;
+  /** Times a non-owner has played this track to ≥30s. */
+  friendPlayCount: number;
   createdAt: string;
   /** Present when the track belongs to someone else (friend views, search). */
   ownerName?: string | null;

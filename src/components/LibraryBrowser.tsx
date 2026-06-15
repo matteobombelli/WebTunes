@@ -149,6 +149,7 @@ export default function LibraryBrowser({
           <TrackList
             tracks={tracks}
             showOwner={!browsingOwn}
+            showPlays
             canEdit
             canDelete
             selectable

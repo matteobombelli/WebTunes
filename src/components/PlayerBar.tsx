@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { streamSrc } from "@/lib/api";
+import { api, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import QueuePanel from "@/components/QueuePanel";
@@ -25,6 +25,8 @@ function formatTime(totalSeconds: number): string {
 
 export default function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Track id we've already reported a ≥30s play for, so each load counts once.
+  const countedRef = useRef<string | null>(null);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
@@ -191,9 +193,16 @@ export default function PlayerBar() {
       {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
       <audio
         ref={audioRef}
-        onTimeUpdate={(e) =>
-          _setProgress(e.currentTarget.currentTime, e.currentTarget.duration || 0)
-        }
+        onTimeUpdate={(e) => {
+          const ct = e.currentTarget.currentTime;
+          _setProgress(ct, e.currentTarget.duration || 0);
+          // Count a "friend play" once the track passes 30s (server ignores
+          // the owner's own plays). Fire-and-forget; silent if offline.
+          if (track && ct >= 30 && countedRef.current !== track.id) {
+            countedRef.current = track.id;
+            api(`/tracks/${track.id}/play`, { method: "POST" }).catch(() => {});
+          }
+        }}
         onEnded={next}
       />
 
