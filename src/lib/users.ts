@@ -42,6 +42,16 @@ export async function createUser(
   }
 }
 
+/** A user's display name (falling back to email), or null if no such user. */
+export async function getDisplayName(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (!row) return null;
+  return row.name ?? row.email;
+}
+
 export type UserSettings = { hideFriendDuplicates: boolean };
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {

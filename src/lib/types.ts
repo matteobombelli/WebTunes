@@ -28,9 +28,12 @@ export type PlaylistDTO = {
   name: string;
   coverS3Key: string | null;
   coverUrl: string | null;
+  isPrivate: boolean;
   trackCount?: number;
   createdAt: string;
   updatedAt: string;
+  /** Present when the playlist belongs to a friend (non-own scope views). */
+  ownerName?: string | null;
 };
 
 export type FriendDTO = {

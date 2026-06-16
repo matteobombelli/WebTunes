@@ -5,11 +5,13 @@ import { db } from "@/db";
 import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import {
+  getAccessiblePlaylist,
   getOwnPlaylist,
   getPlaylistTracks,
   toPlaylistDTO,
 } from "@/lib/playlists";
 import { deleteObject } from "@/lib/s3";
+import { getDisplayName } from "@/lib/users";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,19 +20,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  const playlist = await getAccessiblePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
   const trackDTOs = await getPlaylistTracks(id, user.id);
+  const ownerName =
+    playlist.ownerId === user.id ? null : await getDisplayName(playlist.ownerId);
   return NextResponse.json({
-    ...(await toPlaylistDTO(playlist, trackDTOs.length)),
+    ...(await toPlaylistDTO(playlist, trackDTOs.length, ownerName)),
     tracks: trackDTOs,
   });
 }
 
-const patchSchema = z.object({ name: z.string().trim().min(1).max(100) });
+const patchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    isPrivate: z.boolean().optional(),
+  })
+  .refine((v) => v.name !== undefined || v.isPrivate !== undefined, {
+    message: "Nothing to update",
+  });
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const user = await requireUser();
@@ -44,12 +55,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Playlist name is required" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid playlist update" }, { status: 400 });
   }
 
+  const { name, isPrivate } = parsed.data;
   const [updated] = await db
     .update(playlists)
-    .set({ name: parsed.data.name, updatedAt: new Date() })
+    .set({
+      ...(name !== undefined && { name }),
+      ...(isPrivate !== undefined && { isPrivate }),
+      updatedAt: new Date(),
+    })
     .where(eq(playlists.id, id))
     .returning();
   return NextResponse.json(await toPlaylistDTO(updated));

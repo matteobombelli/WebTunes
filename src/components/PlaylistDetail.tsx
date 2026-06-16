@@ -8,21 +8,24 @@ import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
-import { MusicIcon, PlayIcon, ShuffleIcon } from "@/components/icons";
+import { LockIcon, MusicIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 
 export default function PlaylistDetail({
   playlist,
   tracks,
+  isOwner,
 }: {
   playlist: PlaylistDTO;
   tracks: TrackDTO[];
+  isOwner: boolean;
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(playlist.name);
+  const [isPrivate, setIsPrivate] = useState(playlist.isPrivate);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -38,6 +41,22 @@ export default function PlaylistDetail({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rename failed");
+    }
+  };
+
+  // Optimistic toggle; reverted if the save fails.
+  const togglePrivate = async () => {
+    const next = !isPrivate;
+    setIsPrivate(next);
+    try {
+      await api(`/playlists/${playlist.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPrivate: next }),
+      });
+    } catch (err) {
+      setIsPrivate(!next);
+      setError(err instanceof Error ? err.message : "Could not change sharing");
     }
   };
 
@@ -83,41 +102,49 @@ export default function PlaylistDetail({
     router.refresh();
   };
 
+  const cover = playlist.coverUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={playlist.coverUrl}
+      alt=""
+      className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
+    />
+  ) : (
+    <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-neutral-600 sm:h-36 sm:w-36">
+      <MusicIcon size={56} />
+    </div>
+  );
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-wrap items-end gap-5">
-        <button
-          onClick={() => coverInputRef.current?.click()}
-          title="Change cover"
-          className="group relative shrink-0"
-        >
-          {playlist.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={playlist.coverUrl}
-              alt=""
-              className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
+        {isOwner ? (
+          <>
+            <button
+              onClick={() => coverInputRef.current?.click()}
+              title="Change cover"
+              className="group relative shrink-0"
+            >
+              {cover}
+              <span className="absolute inset-0 hidden items-center justify-center rounded-lg bg-black/60 text-sm text-white group-hover:flex">
+                Change cover
+              </span>
+            </button>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => uploadCover(e.target.files?.[0])}
             />
-          ) : (
-            <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-neutral-600 sm:h-36 sm:w-36">
-              <MusicIcon size={56} />
-            </div>
-          )}
-          <span className="absolute inset-0 hidden items-center justify-center rounded-lg bg-black/60 text-sm text-white group-hover:flex">
-            Change cover
-          </span>
-        </button>
-        <input
-          ref={coverInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => uploadCover(e.target.files?.[0])}
-        />
+          </>
+        ) : (
+          <div className="shrink-0">{cover}</div>
+        )}
 
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase text-neutral-500">Playlist</p>
-          {renaming ? (
+          {isOwner && renaming ? (
             <form onSubmit={rename} className="flex items-center gap-2">
               <input
                 autoFocus
@@ -136,7 +163,7 @@ export default function PlaylistDetail({
                 Cancel
               </button>
             </form>
-          ) : (
+          ) : isOwner ? (
             <h1
               className="cursor-pointer truncate text-3xl font-bold hover:underline"
               title="Rename"
@@ -144,8 +171,11 @@ export default function PlaylistDetail({
             >
               {playlist.name}
             </h1>
+          ) : (
+            <h1 className="truncate text-3xl font-bold">{playlist.name}</h1>
           )}
           <p className="mt-1 text-sm text-neutral-400">
+            {!isOwner && playlist.ownerName ? `by ${playlist.ownerName} · ` : ""}
             {tracks.length} track{tracks.length === 1 ? "" : "s"}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -169,42 +199,66 @@ export default function PlaylistDetail({
               <ShuffleIcon size={16} />
               Shuffle all
             </button>
-            <button
-              onClick={() => setAdding(true)}
-              className="rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-200 hover:border-neutral-400"
-            >
-              Add songs
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => setAdding(true)}
+                className="rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-200 hover:border-neutral-400"
+              >
+                Add songs
+              </button>
+            )}
             <PlaylistDownloadButton
               playlistId={playlist.id}
               playlistName={playlist.name}
             />
-            <button
-              onClick={deletePlaylist}
-              className="text-sm text-neutral-400 hover:text-red-400"
-            >
-              Delete playlist
-            </button>
+            {isOwner && (
+              <button
+                onClick={togglePrivate}
+                title={
+                  isPrivate
+                    ? "Private — only you can see this playlist"
+                    : "Shared — friends can see this playlist"
+                }
+                className="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white"
+              >
+                {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
+                {isPrivate ? "Private" : "Shared"}
+              </button>
+            )}
+            {isOwner && (
+              <button
+                onClick={deletePlaylist}
+                className="text-sm text-neutral-400 hover:text-red-400"
+              >
+                Delete playlist
+              </button>
+            )}
           </div>
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         </div>
       </div>
 
-      <TrackList
-        tracks={tracks}
-        showOwner
-        canEdit
-        onRemove={removeTrack}
-        removeLabel="Remove from playlist"
-        onMove={moveTrack}
-      />
+      {isOwner ? (
+        <TrackList
+          tracks={tracks}
+          showOwner
+          canEdit
+          onRemove={removeTrack}
+          removeLabel="Remove from playlist"
+          onMove={moveTrack}
+        />
+      ) : (
+        <TrackList tracks={tracks} showOwner />
+      )}
 
-      <AddTracksDialog
-        playlistId={playlist.id}
-        existingTrackIds={tracks.map((t) => t.id)}
-        open={adding}
-        onClose={() => setAdding(false)}
-      />
+      {isOwner && (
+        <AddTracksDialog
+          playlistId={playlist.id}
+          existingTrackIds={tracks.map((t) => t.id)}
+          open={adding}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }

@@ -3,11 +3,20 @@ import { z } from "zod";
 import { db } from "@/db";
 import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { listPlaylistsWithCount, toPlaylistDTO } from "@/lib/playlists";
+import {
+  listAccessiblePlaylists,
+  listPlaylistsWithCount,
+  toPlaylistDTO,
+} from "@/lib/playlists";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  // scope=all additionally includes friends' non-private playlists.
+  if (req.nextUrl.searchParams.get("scope") === "all") {
+    return NextResponse.json(await listAccessiblePlaylists(user.id));
+  }
   return NextResponse.json(await listPlaylistsWithCount(user.id));
 }
 

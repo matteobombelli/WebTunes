@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PlaylistDTO } from "@/lib/types";
-import { MusicIcon } from "@/components/icons";
+import { LockIcon, MusicIcon } from "@/components/icons";
 
 export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
   return (
@@ -21,10 +21,14 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
           <MusicIcon size={48} />
         </div>
       )}
-      <p className="mt-2 truncate font-medium text-neutral-100 group-hover:text-white">
-        {playlist.name}
+      <p className="mt-2 flex items-center gap-1 truncate font-medium text-neutral-100 group-hover:text-white">
+        {!playlist.ownerName && playlist.isPrivate && (
+          <LockIcon size={13} className="shrink-0 text-neutral-500" />
+        )}
+        <span className="truncate">{playlist.name}</span>
       </p>
-      <p className="text-xs text-neutral-500">
+      <p className="truncate text-xs text-neutral-500">
+        {playlist.ownerName ? `${playlist.ownerName} · ` : ""}
         {playlist.trackCount ?? 0} track{(playlist.trackCount ?? 0) === 1 ? "" : "s"}
       </p>
     </Link>

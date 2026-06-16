@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
+import { usePersistedScope } from "@/lib/use-persisted-scope";
 import TrackList from "@/components/TrackList";
 import { SearchIcon } from "@/components/icons";
 
@@ -11,8 +12,6 @@ const SCOPES = [
   { value: "all", label: "Everything" },
   { value: "friends", label: "Friends" },
 ] as const;
-
-type Scope = (typeof SCOPES)[number]["value"];
 
 // Default view is the server-rendered own library (initialTracks, kept fresh
 // by router.refresh from TrackList). Any query or non-own scope switches to
@@ -25,7 +24,7 @@ export default function LibraryBrowser({
   initialHideDuplicates: boolean;
 }) {
   const [q, setQ] = useState("");
-  const [scope, setScope] = useState<Scope>("own");
+  const [scope, setScope] = usePersistedScope("webtunes:library-scope");
   const [results, setResults] = useState<TrackDTO[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [hideDuplicates, setHideDuplicates] = useState(initialHideDuplicates);

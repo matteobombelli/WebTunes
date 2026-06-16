@@ -151,6 +151,7 @@ export const playlists = pgTable("playlists", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   coverS3Key: text("cover_s3_key"),
+  isPrivate: boolean("is_private").notNull().default(false),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
