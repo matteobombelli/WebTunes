@@ -9,7 +9,9 @@ import { deleteObject, uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
-const MAX_FILE_BYTES = 200 * 1024 * 1024;
+// Matches proxyClientMaxBodySize in next.config.ts: the proxy truncates bodies
+// past this, so reject here for a clean error instead of a corrupt upload.
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 // An embedded picture's mime type is attacker-controlled (it comes from the
 // uploaded file's tag), so derive both the S3 key extension and the stored
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_FILE_BYTES) {
     return NextResponse.json(
-      { error: "File exceeds the 200 MB limit" },
+      { error: "File exceeds the 100 MB limit" },
       { status: 400 }
     );
   }
