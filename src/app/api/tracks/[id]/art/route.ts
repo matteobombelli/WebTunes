@@ -4,12 +4,12 @@ import { db } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
+import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
 import { toTrackDTO } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 
 // Stable per-track cover-art URL (mirrors the stream route): the client keys
 // on this URL while the presigned redirect target rotates per request.
@@ -82,12 +82,11 @@ export async function POST(
     );
   }
 
-  // Normalize the extension (allowlisted — the client filename is untrusted);
-  // replace the old object when the key differs so we don't leak it.
-  const normExt = ext === "jpeg" ? "jpg" : ext;
-  const s3Key = `art/${user.id}/${id}.${
-    IMAGE_EXTENSIONS.has(ext) ? normExt : "img"
-  }`;
+  // Resolve the key extension and stored Content-Type from a server-side
+  // allowlist — never the untrusted filename/MIME. Replace the old object when
+  // the key differs so we don't leak it.
+  const kind = imageKindFromUpload(ext, file.type);
+  const s3Key = `art/${user.id}/${id}.${kind.ext}`;
   if (track.artS3Key && track.artS3Key !== s3Key) {
     try {
       await deleteObject(track.artS3Key);
@@ -95,7 +94,7 @@ export async function POST(
       // Orphaned art object is harmless.
     }
   }
-  await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), file.type);
+  await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), kind.contentType);
 
   const [updated] = await db
     .update(tracks)

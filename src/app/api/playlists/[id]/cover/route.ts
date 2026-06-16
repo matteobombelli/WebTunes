@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
 import { getOwnPlaylist, toPlaylistDTO } from "@/lib/playlists";
 import { deleteObject, uploadObject } from "@/lib/s3";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 
 export async function POST(
   req: NextRequest,
@@ -35,11 +35,10 @@ export async function POST(
     return NextResponse.json({ error: "Image exceeds the 5 MB limit" }, { status: 400 });
   }
 
-  // Key includes the extension (allowlisted — the client filename is
-  // untrusted), so replace the old object if it differs.
-  const s3Key = `covers/${user.id}/${id}.${
-    IMAGE_EXTENSIONS.has(ext) ? ext : "img"
-  }`;
+  // Key extension and stored Content-Type come from a server-side allowlist —
+  // never the untrusted filename/MIME. Replace the old object if it differs.
+  const kind = imageKindFromUpload(ext, file.type);
+  const s3Key = `covers/${user.id}/${id}.${kind.ext}`;
   if (playlist.coverS3Key && playlist.coverS3Key !== s3Key) {
     try {
       await deleteObject(playlist.coverS3Key);
@@ -47,7 +46,7 @@ export async function POST(
       // Orphaned cover object is harmless.
     }
   }
-  await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), file.type);
+  await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), kind.contentType);
 
   const [updated] = await db
     .update(playlists)

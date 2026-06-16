@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, isUniqueViolation } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { imageKindFromMime } from "@/lib/image-upload";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
@@ -13,22 +14,6 @@ import { getUserSettings } from "@/lib/users";
 // past this, so reject here for a clean error instead of a corrupt upload.
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
-// An embedded picture's mime type is attacker-controlled (it comes from the
-// uploaded file's tag), so derive both the S3 key extension and the stored
-// Content-Type from a fixed allowlist rather than echoing the tag verbatim —
-// otherwise a crafted file could set e.g. text/html on the served object.
-function imageKind(mime: string | null): { ext: string; type: string } {
-  switch (mime) {
-    case "image/png":
-      return { ext: "png", type: "image/png" };
-    case "image/webp":
-      return { ext: "webp", type: "image/webp" };
-    case "image/gif":
-      return { ext: "gif", type: "image/gif" };
-    default:
-      return { ext: "jpg", type: "image/jpeg" }; // jpeg: the common case
-  }
-}
 const AUDIO_EXTENSIONS = new Set([
   "mp3",
   "m4a",
@@ -104,15 +89,20 @@ export async function POST(req: NextRequest) {
   const s3Key = `audio/${user.id}/${trackId}.${
     AUDIO_EXTENSIONS.has(ext) ? ext : "bin"
   }`;
-  await uploadObject(s3Key, buffer, file.type || undefined);
+  // file.type is browser-supplied and untrusted; only store it when it's an
+  // audio/* type. Anything else (e.g. a crafted text/html) gets a neutral
+  // Content-Type so it can never be served as active content — the offline
+  // service worker replays this from a same-origin cache.
+  const audioType = file.type.startsWith("audio/") ? file.type : null;
+  await uploadObject(s3Key, buffer, audioType ?? undefined);
 
   // Cover art is best-effort: a failed art upload must not fail the track.
   let artS3Key: string | null = null;
   if (meta.artBuffer) {
     try {
-      const art = imageKind(meta.artMime);
+      const art = imageKindFromMime(meta.artMime);
       artS3Key = `art/${user.id}/${trackId}.${art.ext}`;
-      await uploadObject(artS3Key, meta.artBuffer, art.type);
+      await uploadObject(artS3Key, meta.artBuffer, art.contentType);
     } catch {
       artS3Key = null; // leave the track artless rather than orphan a row
     }
@@ -130,7 +120,7 @@ export async function POST(req: NextRequest) {
         durationSec: meta.durationSec,
         s3Key,
         artS3Key,
-        mimeType: file.type || null,
+        mimeType: audioType,
         fileSize: file.size,
         contentHash,
         lyrics: meta.lyrics,

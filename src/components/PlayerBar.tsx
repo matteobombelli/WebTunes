@@ -47,6 +47,14 @@ export default function PlayerBar() {
     _clearSeek,
   } = usePlayerStore.getState();
 
+  // play() rejects with AbortError when a newer src load or a pause()
+  // supersedes it (e.g. skipping tracks faster than they start) — that's
+  // benign and the new action already owns the playing state, so only a real
+  // failure (autoplay blocked, bad source) should flip the UI to paused.
+  const onPlayError = (err: unknown) => {
+    if ((err as { name?: string })?.name !== "AbortError") _setPlaying(false);
+  };
+
   // Point the audio element at the track's stable stream URL (302s to a
   // presigned S3 URL online; served from the offline cache by the SW).
   useEffect(() => {
@@ -54,14 +62,14 @@ export default function PlayerBar() {
     if (!audio || !track) return;
     audio.src = streamSrc(track.id);
     if (usePlayerStore.getState().isPlaying) {
-      audio.play().catch(() => _setPlaying(false));
+      audio.play().catch(onPlayError);
     }
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    if (isPlaying) audio.play().catch(() => _setPlaying(false));
+    if (isPlaying) audio.play().catch(onPlayError);
     else audio.pause();
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
