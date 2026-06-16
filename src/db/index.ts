@@ -7,7 +7,7 @@ const globalForDb = globalThis as unknown as { webtunesPool?: Pool };
 
 const pool =
   globalForDb.webtunesPool ??
-  new Pool({ connectionString: process.env.DATABASE_URL });
+  new Pool({ connectionString: process.env.DATABASE_URL, max: 25 });
 
 if (process.env.NODE_ENV !== "production") globalForDb.webtunesPool = pool;
 
