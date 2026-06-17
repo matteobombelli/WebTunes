@@ -1,5 +1,5 @@
 // Regenerates the brand raster icons (favicon, apple-icon, PWA icons) from the
-// in-app MusicIcon glyph, rendered in the indigo accent on a dark rounded tile.
+// in-app MusicIcon glyph, rendered in the indigo accent on a dark circular tile.
 // Run: node scripts/generate-icons.mjs
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -13,16 +13,19 @@ const FG = "#818cf8"; // accent-bright (indigo-400)
 // The MusicIcon path from src/components/icons.tsx (24×24 viewBox).
 const GLYPH =
   "M9 5.5a1 1 0 0 1 .76-.97l8-2A1 1 0 0 1 19 3.5V15a3 3 0 1 1-2-2.83V6.78l-6 1.5V17a3 3 0 1 1-2-2.83V5.5z";
+// The glyph's bounding box is centred, but its filled mass sits right of centre
+// (centroid x ≈ 13.07 of 24), so the geometric centre reads as shifted right.
+// Nudge left to the optical centre.
+const OPTICAL_DX = 12 - 13.07;
 
 /** SVG buffer for a square icon of the given pixel size. */
 function svg(size) {
-  const scale = (size * 0.5) / 24; // note occupies ~50% of the tile
+  const scale = (size * 0.78) / 24; // note occupies ~78% of the tile
   const offset = (size - 24 * scale) / 2;
-  const radius = Math.round(size * 0.22);
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
-      `<rect width="${size}" height="${size}" rx="${radius}" fill="${BG}"/>` +
-      `<g transform="translate(${offset} ${offset}) scale(${scale})" fill="${FG}">` +
+      `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="${BG}"/>` +
+      `<g transform="translate(${offset} ${offset}) scale(${scale}) translate(${OPTICAL_DX} 0)" fill="${FG}">` +
       `<path d="${GLYPH}"/></g></svg>`,
   );
 }
