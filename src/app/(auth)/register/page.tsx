@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { registerAction, type AuthFormState } from "../actions";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 const initialState: AuthFormState = { error: null };
 
@@ -15,9 +17,9 @@ export default function RegisterPage() {
   if (state.notice) {
     return (
       <div className="flex flex-col gap-4 text-sm">
-        <h2 className="text-lg font-semibold">Check your email</h2>
-        <p className="text-neutral-400">{state.notice}</p>
-        <Link href="/login" className="text-emerald-400 hover:underline">
+        <h2 className="font-display text-lg font-semibold">Check your email</h2>
+        <p className="text-fg-muted">{state.notice}</p>
+        <Link href="/login" className="text-accent-bright hover:underline">
           Back to sign in
         </Link>
       </div>
@@ -26,43 +28,30 @@ export default function RegisterPage() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Create account</h2>
-      <input
-        name="name"
-        type="text"
-        required
-        placeholder="Name"
-        autoComplete="name"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-      />
-      <input
+      <h2 className="font-display text-lg font-semibold">Create account</h2>
+      <Input name="name" type="text" required placeholder="Name" autoComplete="name" />
+      <Input
         name="email"
         type="email"
         required
         placeholder="Email"
         autoComplete="email"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
-      <input
+      <Input
         name="password"
         type="password"
         required
         minLength={8}
         placeholder="Password (8+ characters)"
         autoComplete="new-password"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
       {state.error && <p className="text-sm text-red-400">{state.error}</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending}>
         {pending ? "Creating…" : "Create account"}
-      </button>
-      <p className="text-center text-sm text-neutral-400">
+      </Button>
+      <p className="text-center text-sm text-fg-muted">
         Have an account?{" "}
-        <Link href="/login" className="text-emerald-400 hover:underline">
+        <Link href="/login" className="text-accent-bright hover:underline">
           Sign in
         </Link>
       </p>

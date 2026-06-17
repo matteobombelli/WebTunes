@@ -10,6 +10,7 @@ import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import { LockIcon, MusicIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
+import { Button } from "@/components/ui/Button";
 
 export default function PlaylistDetail({
   playlist,
@@ -110,7 +111,7 @@ export default function PlaylistDetail({
       className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
     />
   ) : (
-    <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-neutral-800 text-neutral-600 sm:h-36 sm:w-36">
+    <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-surface-2 text-fg-subtle sm:h-36 sm:w-36">
       <MusicIcon size={56} />
     </div>
   );
@@ -143,69 +144,69 @@ export default function PlaylistDetail({
         )}
 
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase text-neutral-500">Playlist</p>
+          <p className="text-xs uppercase text-fg-subtle">Playlist</p>
           {isOwner && renaming ? (
             <form onSubmit={rename} className="flex items-center gap-2">
               <input
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xl font-bold outline-none focus:border-emerald-500"
+                className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xl font-bold outline-none focus:border-accent"
               />
-              <button type="submit" className="text-sm text-emerald-400 hover:underline">
+              <button type="submit" className="text-sm text-accent-bright hover:underline">
                 Save
               </button>
               <button
                 type="button"
                 onClick={() => setRenaming(false)}
-                className="text-sm text-neutral-400 hover:text-white"
+                className="text-sm text-fg-muted hover:text-white"
               >
                 Cancel
               </button>
             </form>
           ) : isOwner ? (
             <h1
-              className="cursor-pointer truncate text-3xl font-bold hover:underline"
+              className="cursor-pointer truncate font-display text-3xl font-bold tracking-tight hover:underline"
               title="Rename"
               onClick={() => setRenaming(true)}
             >
               {playlist.name}
             </h1>
           ) : (
-            <h1 className="truncate text-3xl font-bold">{playlist.name}</h1>
+            <h1 className="truncate font-display text-3xl font-bold tracking-tight">
+              {playlist.name}
+            </h1>
           )}
-          <p className="mt-1 text-sm text-neutral-400">
+          <p className="mt-1 text-sm text-fg-muted">
             {!isOwner && playlist.ownerName ? `by ${playlist.ownerName} · ` : ""}
             {tracks.length} track{tracks.length === 1 ? "" : "s"}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
+            <Button
+              pill
               onClick={() => tracks.length && playQueue(tracks, 0)}
               disabled={tracks.length === 0}
-              className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
             >
               <PlayIcon size={16} />
               Play all
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              pill
               onClick={() => {
                 if (!tracks.length) return;
                 usePlayerStore.setState({ shuffled: true });
                 playQueue(tracks, Math.floor(Math.random() * tracks.length));
               }}
               disabled={tracks.length === 0}
-              className="flex items-center gap-1.5 rounded-full bg-neutral-700 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-600 disabled:opacity-50"
             >
               <ShuffleIcon size={16} />
               Shuffle all
-            </button>
+            </Button>
             {isOwner && (
-              <button
-                onClick={() => setAdding(true)}
-                className="rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-200 hover:border-neutral-400"
-              >
+              <Button variant="outline" pill onClick={() => setAdding(true)}>
                 Add songs
-              </button>
+              </Button>
             )}
             <PlaylistDownloadButton
               playlistId={playlist.id}
@@ -219,7 +220,7 @@ export default function PlaylistDetail({
                     ? "Private — only you can see this playlist"
                     : "Shared — friends can see this playlist"
                 }
-                className="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white"
+                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-white"
               >
                 {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
                 {isPrivate ? "Private" : "Shared"}
@@ -228,7 +229,7 @@ export default function PlaylistDetail({
             {isOwner && (
               <button
                 onClick={deletePlaylist}
-                className="text-sm text-neutral-400 hover:text-red-400"
+                className="text-sm text-fg-muted hover:text-red-400"
               >
                 Delete playlist
               </button>

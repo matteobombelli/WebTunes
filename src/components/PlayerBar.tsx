@@ -6,6 +6,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import QueuePanel from "@/components/QueuePanel";
 import TrackArt from "@/components/TrackArt";
+import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import {
   NextIcon,
   PauseIcon,
@@ -151,7 +152,7 @@ export default function PlayerBar() {
 
   // Times + slider, shared by both layouts (the wrapper class differs).
   const seekBar = (className: string) => (
-    <div className={`${className} items-center gap-2 text-xs text-neutral-400`}>
+    <div className={`${className} items-center gap-2 text-xs text-fg-muted`}>
       <span className="w-10 shrink-0 text-right tabular-nums">
         {formatTime(currentTime)}
       </span>
@@ -162,7 +163,7 @@ export default function PlayerBar() {
         step={0.5}
         value={Math.min(currentTime, duration || Infinity)}
         onChange={(e) => seekTo(Number(e.target.value))}
-        className="h-1 min-w-0 flex-1 accent-emerald-500"
+        className="h-1 min-w-0 flex-1 accent-accent"
         aria-label="Seek"
       />
       <span className="w-10 shrink-0 tabular-nums">
@@ -171,10 +172,22 @@ export default function PlayerBar() {
     </div>
   );
 
+  // Album art with a small equaliser badge while audio is playing.
+  const art = (size: string, iconSize: number) => (
+    <div className="relative shrink-0">
+      <TrackArt track={track} size={size} iconSize={iconSize} />
+      {isPlaying && (
+        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-1 text-accent-bright ring-2 ring-surface-1">
+          <NowPlayingBars playing className="h-3 w-3" />
+        </span>
+      )}
+    </div>
+  );
+
   const trackInfo = (
     <>
-      <p className="truncate text-sm font-medium text-neutral-100">{track.title}</p>
-      <p className="truncate text-xs text-neutral-400">
+      <p className="truncate text-sm font-medium text-fg">{track.title}</p>
+      <p className="truncate text-xs text-fg-muted">
         {track.artist ?? "Unknown artist"}
         {track.ownerName ? ` · from ${track.ownerName}` : ""}
       </p>
@@ -197,7 +210,7 @@ export default function PlayerBar() {
   );
 
   return (
-    <div className="relative border-t border-neutral-800 bg-neutral-900">
+    <div className="relative border-t border-border-subtle bg-surface-1">
       {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
       <audio
         ref={audioRef}
@@ -220,41 +233,41 @@ export default function PlayerBar() {
       <div className="flex flex-col gap-1 px-4 pb-2 pt-3 md:hidden">
         {seekBar("flex")}
         <div className="flex items-center gap-2">
-          <TrackArt track={track} size="h-10 w-10" iconSize={18} />
+          {art("h-10 w-10", 18)}
           <div className="min-w-0 flex-1">{trackInfo}</div>
           <div className="flex shrink-0 items-center gap-1">
             {transportButton(
               toggleShuffle,
               shuffled ? "Disable shuffle" : "Enable shuffle",
               <ShuffleIcon size={18} />,
-              `h-10 w-10 active:bg-neutral-800 ${
-                shuffled ? "text-emerald-400" : "text-neutral-400"
+              `h-10 w-10 active:bg-surface-2 ${
+                shuffled ? "text-accent-bright" : "text-fg-muted"
               }`
             )}
             {transportButton(
               prev,
               "Previous",
               <PrevIcon size={20} />,
-              "h-11 w-11 text-neutral-300 active:bg-neutral-800"
+              "h-11 w-11 text-fg-muted active:bg-surface-2"
             )}
             {transportButton(
               toggle,
               isPlaying ? "Pause" : "Play",
               isPlaying ? <PauseIcon size={22} /> : <PlayIcon size={22} />,
-              "h-12 w-12 bg-emerald-600 text-white active:bg-emerald-500"
+              "h-12 w-12 bg-accent text-white shadow-lg shadow-accent/40 active:bg-accent-hover"
             )}
             {transportButton(
               next,
               "Next",
               <NextIcon size={20} />,
-              "h-11 w-11 text-neutral-300 active:bg-neutral-800"
+              "h-11 w-11 text-fg-muted active:bg-surface-2"
             )}
             {transportButton(
               () => setQueueOpen((o) => !o),
               queueOpen ? "Hide queue" : "Show queue",
               <QueueIcon size={18} />,
-              `h-10 w-10 active:bg-neutral-800 ${
-                queueOpen ? "text-emerald-400" : "text-neutral-400"
+              `h-10 w-10 active:bg-surface-2 ${
+                queueOpen ? "text-accent-bright" : "text-fg-muted"
               }`
             )}
           </div>
@@ -264,7 +277,7 @@ export default function PlayerBar() {
       {/* Desktop (md and up): the original single row, unchanged. */}
       <div className="hidden items-center gap-3 py-3 pl-4 pr-6 md:flex">
         <div className="flex w-56 shrink-0 items-center gap-2">
-          <TrackArt track={track} size="h-11 w-11" iconSize={20} />
+          {art("h-11 w-11", 20)}
           <div className="min-w-0 flex-1">{trackInfo}</div>
         </div>
 
@@ -273,29 +286,29 @@ export default function PlayerBar() {
             toggleShuffle,
             shuffled ? "Disable shuffle" : "Enable shuffle",
             <ShuffleIcon size={16} />,
-            `h-10 w-10 hover:bg-neutral-800 ${
+            `h-10 w-10 hover:bg-surface-2 ${
               shuffled
-                ? "text-emerald-400 hover:text-emerald-300"
-                : "text-neutral-400 hover:text-white"
+                ? "text-accent-bright hover:text-accent-bright"
+                : "text-fg-muted hover:text-white"
             }`
           )}
           {transportButton(
             prev,
             "Previous",
             <PrevIcon size={18} />,
-            "h-10 w-10 text-neutral-300 hover:bg-neutral-800 hover:text-white"
+            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-white"
           )}
           {transportButton(
             toggle,
             isPlaying ? "Pause" : "Play",
             isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />,
-            "h-10 w-10 bg-emerald-600 text-white hover:bg-emerald-500"
+            "h-10 w-10 bg-accent text-white shadow-md shadow-accent/40 hover:bg-accent-hover"
           )}
           {transportButton(
             next,
             "Next",
             <NextIcon size={18} />,
-            "h-10 w-10 text-neutral-300 hover:bg-neutral-800 hover:text-white"
+            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-white"
           )}
         </div>
 
@@ -305,15 +318,15 @@ export default function PlayerBar() {
           () => setQueueOpen((o) => !o),
           queueOpen ? "Hide queue" : "Show queue",
           <QueueIcon size={16} />,
-          `h-10 w-10 shrink-0 hover:bg-neutral-800 ${
+          `h-10 w-10 shrink-0 hover:bg-surface-2 ${
             queueOpen
-              ? "text-emerald-400 hover:text-emerald-300"
-              : "text-neutral-400 hover:text-white"
+              ? "text-accent-bright hover:text-accent-bright"
+              : "text-fg-muted hover:text-white"
           }`
         )}
 
         <div className="flex w-32 shrink-0 items-center gap-2">
-          <VolumeIcon size={16} className="shrink-0 text-neutral-400" />
+          <VolumeIcon size={16} className="shrink-0 text-fg-muted" />
           <input
             type="range"
             min={0}
@@ -321,7 +334,7 @@ export default function PlayerBar() {
             step={0.05}
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
-            className="h-1 min-w-0 flex-1 accent-emerald-500"
+            className="h-1 min-w-0 flex-1 accent-accent"
             aria-label="Volume"
           />
         </div>

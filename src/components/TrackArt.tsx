@@ -24,7 +24,7 @@ export default function TrackArt({
 }) {
   const [failed, setFailed] = useState(false);
   const showArt = track.artS3Key && !failed;
-  const base = `${size} shrink-0 rounded bg-neutral-800 ${className}`;
+  const base = `${size} shrink-0 rounded bg-surface-2 ${className}`;
 
   if (showArt) {
     return (
@@ -39,7 +39,7 @@ export default function TrackArt({
     );
   }
   return (
-    <div className={`${base} flex items-center justify-center text-neutral-600`}>
+    <div className={`${base} flex items-center justify-center text-fg-subtle`}>
       <MusicIcon size={iconSize} />
     </div>
   );

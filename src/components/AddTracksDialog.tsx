@@ -111,21 +111,21 @@ function AddTracksBody({
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter by title, artist, or album"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+        className="rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent"
       />
-      <div className="max-h-80 overflow-y-auto rounded-md border border-neutral-800">
+      <div className="max-h-80 overflow-y-auto rounded-md border border-border-subtle">
         {candidates === null && (
-          <p className="p-4 text-sm text-neutral-500">Loading…</p>
+          <p className="p-4 text-sm text-fg-subtle">Loading…</p>
         )}
         {candidates?.length === 0 && (
-          <p className="p-4 text-sm text-neutral-500">
+          <p className="p-4 text-sm text-fg-subtle">
             No more songs available to add.
           </p>
         )}
         {candidates?.map((t) => (
           <label
             key={t.id}
-            className="flex cursor-pointer items-center gap-3 border-b border-neutral-800/60 px-3 py-2 text-sm last:border-b-0 hover:bg-neutral-800/40"
+            className="flex cursor-pointer items-center gap-3 border-b border-border-subtle/60 px-3 py-2 text-sm last:border-b-0 hover:bg-surface-2/40"
           >
             <input
               type="checkbox"
@@ -134,10 +134,10 @@ function AddTracksBody({
               className="checkbox shrink-0"
             />
             <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
-            <span className="hidden max-w-32 truncate text-neutral-400 sm:block">
+            <span className="hidden max-w-32 truncate text-fg-muted sm:block">
               {t.artist ?? "—"}
             </span>
-            <span className="shrink-0 text-xs text-neutral-500">
+            <span className="shrink-0 text-xs text-fg-subtle">
               {t.ownerName ?? "You"}
             </span>
           </label>
@@ -147,14 +147,14 @@ function AddTracksBody({
       <div className="flex justify-end gap-2">
         <button
           onClick={onClose}
-          className="rounded-md px-4 py-2 text-sm text-neutral-400 hover:text-white"
+          className="rounded-md px-4 py-2 text-sm text-fg-muted hover:text-white"
         >
           Cancel
         </button>
         <button
           onClick={addSelected}
           disabled={busy || selected.size === 0}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {busy
             ? "Adding…"

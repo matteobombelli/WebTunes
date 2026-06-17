@@ -31,17 +31,17 @@ function VerifyEmail() {
   }, [token]);
 
   if (status === "verifying") {
-    return <p className="text-sm text-neutral-400">Verifying your email…</p>;
+    return <p className="text-sm text-fg-muted">Verifying your email…</p>;
   }
 
   if (status === "done") {
     return (
       <div className="flex flex-col gap-4 text-sm">
-        <h2 className="text-lg font-semibold">Email verified</h2>
-        <p className="text-neutral-400">
+        <h2 className="font-display text-lg font-semibold">Email verified</h2>
+        <p className="text-fg-muted">
           Your account is now active. You can sign in.
         </p>
-        <Link href="/login" className="text-emerald-400 hover:underline">
+        <Link href="/login" className="text-accent-bright hover:underline">
           Sign in
         </Link>
       </div>
@@ -50,11 +50,11 @@ function VerifyEmail() {
 
   return (
     <div className="flex flex-col gap-4 text-sm">
-      <h2 className="text-lg font-semibold">Verification failed</h2>
-      <p className="text-neutral-400">
+      <h2 className="font-display text-lg font-semibold">Verification failed</h2>
+      <p className="text-fg-muted">
         {error ?? "This verification link is missing its token."}
       </p>
-      <Link href="/login" className="text-emerald-400 hover:underline">
+      <Link href="/login" className="text-accent-bright hover:underline">
         Back to sign in
       </Link>
     </div>

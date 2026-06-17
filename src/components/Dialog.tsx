@@ -58,14 +58,14 @@ export default function Dialog({
         role="dialog"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className={`${open ? "animate-pop-in" : "animate-pop-out"} max-h-[85vh] w-full ${wide ? "max-w-2xl" : "max-w-sm"} overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl`}
+        className={`${open ? "animate-pop-in" : "animate-pop-out"} max-h-[85vh] w-full ${wide ? "max-w-2xl" : "max-w-sm"} overflow-y-auto rounded-xl border border-border bg-surface-1 p-6 shadow-2xl`}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="font-display text-lg font-semibold">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+            className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-white"
           >
             <XIcon size={18} />
           </button>

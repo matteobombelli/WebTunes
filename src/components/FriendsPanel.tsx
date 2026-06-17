@@ -6,6 +6,9 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
 import { XIcon } from "@/components/icons";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { cardClass } from "@/components/ui/Card";
 
 export default function FriendsPanel({
   friends,
@@ -59,7 +62,7 @@ export default function FriendsPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex gap-1 border-b border-neutral-800">
+      <div className="flex gap-1 border-b border-border-subtle">
         {(
           [
             ["friends", `Friends (${friends.length})`],
@@ -71,8 +74,8 @@ export default function FriendsPanel({
             onClick={() => setTab(value)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
               tab === value
-                ? "border-emerald-500 text-white"
-                : "border-transparent text-neutral-400 hover:text-neutral-200"
+                ? "border-accent text-white"
+                : "border-transparent text-fg-muted hover:text-fg"
             }`}
           >
             {label}
@@ -83,54 +86,47 @@ export default function FriendsPanel({
       {tab === "friends" && (
       <>
       <form onSubmit={send} className="flex items-center gap-2">
-        <input
+        <Input
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Add a friend by email"
-          className="w-72 rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+          className="w-72"
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={busy}>
           Send request
-        </button>
-        {message && <span className="text-sm text-neutral-400">{message}</span>}
+        </Button>
+        {message && <span className="text-sm text-fg-muted">{message}</span>}
       </form>
       </>
       )}
 
       {tab === "requests" && incoming.length === 0 && outgoing.length === 0 && (
-        <p className="text-sm text-neutral-500">No pending requests.</p>
+        <p className="text-sm text-fg-subtle">No pending requests.</p>
       )}
 
       {tab === "requests" && incoming.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase text-fg-subtle">
             Incoming requests
           </h2>
           <ul className="flex flex-col gap-2">
             {incoming.map((r) => (
               <li
                 key={r.id}
-                className="flex items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900 px-4 py-2"
+                className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
               >
                 <span className="flex-1 text-sm">
                   {r.user.name ?? r.user.email}
-                  <span className="ml-2 text-xs text-neutral-500">{r.user.email}</span>
+                  <span className="ml-2 text-xs text-fg-subtle">{r.user.email}</span>
                 </span>
-                <button
-                  onClick={() => accept(r.id)}
-                  className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
-                >
+                <Button size="sm" onClick={() => accept(r.id)}>
                   Accept
-                </button>
+                </Button>
                 <button
                   onClick={() => dismiss(r.id)}
-                  className="rounded-md px-3 py-1 text-xs text-neutral-400 hover:text-red-400"
+                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400"
                 >
                   Decline
                 </button>
@@ -142,22 +138,22 @@ export default function FriendsPanel({
 
       {tab === "requests" && outgoing.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase text-fg-subtle">
             Sent requests
           </h2>
           <ul className="flex flex-col gap-2">
             {outgoing.map((r) => (
               <li
                 key={r.id}
-                className="flex items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900 px-4 py-2"
+                className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
               >
                 <span className="flex-1 text-sm">
                   {r.user.name ?? r.user.email}
-                  <span className="ml-2 text-xs text-neutral-500">pending</span>
+                  <span className="ml-2 text-xs text-fg-subtle">pending</span>
                 </span>
                 <button
                   onClick={() => dismiss(r.id)}
-                  className="rounded-md px-3 py-1 text-xs text-neutral-400 hover:text-red-400"
+                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400"
                 >
                   Cancel
                 </button>
@@ -170,17 +166,18 @@ export default function FriendsPanel({
       {tab === "friends" && (
       <section>
         {friends.length === 0 ? (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-fg-subtle">
             No friends yet. Friends automatically share their libraries with each other.
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {friends.map((f) => (
+            {friends.map((f, i) => (
               <li
                 key={f.id}
-                className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+                style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
+                className={`flex animate-fade-in-up items-center gap-3 p-4 ${cardClass}`}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 text-lg">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 font-display text-lg font-semibold text-accent-bright">
                   {(f.name ?? f.email).charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -190,12 +187,12 @@ export default function FriendsPanel({
                   >
                     {f.name ?? f.email}
                   </Link>
-                  <p className="truncate text-xs text-neutral-500">{f.email}</p>
+                  <p className="truncate text-xs text-fg-subtle">{f.email}</p>
                 </div>
                 <button
                   onClick={() => unfriend(f)}
                   title="Unfriend"
-                  className="text-neutral-500 hover:text-red-400"
+                  className="text-fg-subtle hover:text-red-400"
                 >
                   <XIcon size={14} />
                 </button>

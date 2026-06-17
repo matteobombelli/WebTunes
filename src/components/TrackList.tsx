@@ -24,6 +24,7 @@ import Dialog from "@/components/Dialog";
 import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
 import TrackArt from "@/components/TrackArt";
+import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import { useDownloadsStore } from "@/stores/downloads";
 
 function formatDuration(seconds: number | null): string {
@@ -122,7 +123,7 @@ function AddToPlaylistMenu({
       {bulk ? (
         <button
           onClick={load}
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
         >
           Add to playlist
         </button>
@@ -130,7 +131,7 @@ function AddToPlaylistMenu({
         <button
           onClick={load}
           aria-label="Add to playlist"
-          className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+          className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
           title="Add to playlist"
         >
           <PlusIcon size={16} />
@@ -138,20 +139,20 @@ function AddToPlaylistMenu({
       )}
       {(open || menuClosing) && (
         <div
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-44 rounded-md border border-neutral-700 bg-neutral-800 py-1 text-sm shadow-lg`}
+          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
         >
-          {message && <p className="px-3 py-1 text-emerald-400">{message}</p>}
+          {message && <p className="px-3 py-1 text-accent-bright">{message}</p>}
           {playlists === null && (
-            <p className="px-3 py-1 text-neutral-400">Loading…</p>
+            <p className="px-3 py-1 text-fg-muted">Loading…</p>
           )}
           {playlists?.length === 0 && (
-            <p className="px-3 py-1 text-neutral-400">No playlists yet</p>
+            <p className="px-3 py-1 text-fg-muted">No playlists yet</p>
           )}
           {playlists?.map((p) => (
             <button
               key={p.id}
               onClick={() => add(p.id)}
-              className="block w-full px-3 py-1 text-left text-neutral-200 hover:bg-neutral-700"
+              className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
             >
               {p.name}
             </button>
@@ -179,7 +180,7 @@ function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
         action(tracks);
         close();
       }}
-      className="block w-full px-3 py-1 text-left text-neutral-200 hover:bg-neutral-700"
+      className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
     >
       {label}
     </button>
@@ -191,13 +192,13 @@ function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
         onClick={() => (open ? close() : setOpen(true))}
         aria-label="Add to queue"
         title="Add to queue"
-        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+        className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
       >
         <QueueIcon size={16} />
       </button>
       {(open || menuClosing) && (
         <div
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-10 mt-1 w-36 rounded-md border border-neutral-700 bg-neutral-800 py-1 text-sm shadow-lg`}
+          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-10 mt-1 w-36 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
         >
           {option("Play next", usePlayerStore.getState().playNext)}
           {option("Add to queue", usePlayerStore.getState().addToQueue)}
@@ -242,36 +243,36 @@ function TrackActions({
         <Link
           href={`/artist?name=${encodeURIComponent(track.artist)}`}
           onClick={onClose}
-          className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+          className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
         >
           <span className="shrink-0">Go to artist</span>
-          <span className="truncate text-neutral-400">{track.artist}</span>
+          <span className="truncate text-fg-muted">{track.artist}</span>
         </Link>
       )}
       {track.album && (
         <Link
           href={`/album?name=${encodeURIComponent(track.album)}`}
           onClick={onClose}
-          className="flex items-center justify-between gap-3 rounded-md bg-neutral-800/40 px-3 py-2.5 hover:bg-neutral-700/60"
+          className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
         >
           <span className="shrink-0">Go to album</span>
-          <span className="truncate text-neutral-400">{track.album}</span>
+          <span className="truncate text-fg-muted">{track.album}</span>
         </Link>
       )}
-      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
         <span>Queue</span>
         <AddToQueueMenu tracks={[track]} />
       </div>
-      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
         <span>Add to playlist</span>
         <AddToPlaylistMenu trackIds={[track.id]} />
       </div>
-      <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
         <span>Download</span>
         <DownloadButton track={track} />
       </div>
       {canEdit && !track.ownerName && (
-        <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+        <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
           <span>Edit details</span>
           <button
             onClick={() => {
@@ -279,14 +280,14 @@ function TrackActions({
               onClose();
             }}
             aria-label="Edit track"
-            className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+            className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
           >
             <PencilIcon size={16} />
           </button>
         </div>
       )}
       {onMove && (
-        <div className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5">
+        <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
           <span>Reorder</span>
           <div className="flex gap-1">
             <button
@@ -296,7 +297,7 @@ function TrackActions({
               }}
               disabled={index <= 0}
               aria-label="Move up"
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
+              className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white disabled:opacity-30"
             >
               <UpIcon size={16} />
             </button>
@@ -307,7 +308,7 @@ function TrackActions({
               }}
               disabled={index === viewLength - 1}
               aria-label="Move down"
-              className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-30"
+              className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white disabled:opacity-30"
             >
               <DownIcon size={16} />
             </button>
@@ -320,7 +321,7 @@ function TrackActions({
             onDelete(track);
             onClose();
           }}
-          className="flex items-center justify-between rounded-md bg-neutral-800/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
+          className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
         >
           <span>{removeLabel ?? "Delete"}</span>
           <XIcon size={16} />
@@ -349,13 +350,13 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
         onClick={() => (open ? close() : setOpen(true))}
         aria-label="Track actions"
         title="Track actions"
-        className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+        className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
       >
         <EllipsisIcon size={18} />
       </button>
       {(open || menuClosing) && (
         <div
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-20 mt-1 w-60 rounded-md border border-neutral-700 bg-neutral-800 p-2 shadow-lg`}
+          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-20 mt-1 w-60 rounded-md border border-border bg-surface-2 p-2 shadow-lg`}
         >
           <TrackActions {...props} onClose={close} />
         </div>
@@ -399,6 +400,7 @@ export default function TrackList({
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = useCurrentTrack();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
   // Mobile: the row whose action sheet (kebab dialog) is open.
@@ -426,7 +428,7 @@ export default function TrackList({
     sortable ? (
       <button
         onClick={() => cycleSort(key)}
-        className="inline-flex items-center uppercase hover:text-neutral-300"
+        className="inline-flex items-center uppercase hover:text-fg-muted"
       >
         {label}
         {/* Fixed-width slot so the chevron never shifts the label. */}
@@ -506,7 +508,7 @@ export default function TrackList({
   };
 
   if (tracks.length === 0) {
-    return <p className="py-8 text-center text-sm text-neutral-500">No tracks here yet.</p>;
+    return <p className="py-8 text-center text-sm text-fg-subtle">No tracks here yet.</p>;
   }
 
   const actionsIndex = actionsTrack
@@ -520,11 +522,11 @@ export default function TrackList({
       <div
         className={`mb-3 flex h-11 items-center gap-3 overflow-x-auto rounded-md border px-4 transition-all duration-100 ${
           validSelected.size > 0
-            ? "border-neutral-700 bg-neutral-800/60 opacity-100"
+            ? "border-border bg-surface-2/60 opacity-100"
             : "pointer-events-none border-transparent opacity-0"
         }`}
       >
-        <span className="shrink-0 whitespace-nowrap text-sm text-neutral-300">
+        <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
           {lastSelectedCount} selected
         </span>
         <div className="shrink-0">
@@ -542,7 +544,7 @@ export default function TrackList({
               .addToQueue(view.filter((t) => validSelected.has(t.id)));
             setSelected(new Set());
           }}
-          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-neutral-700"
+          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
         >
           Add to queue
         </button>
@@ -553,7 +555,7 @@ export default function TrackList({
               .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
             setSelected(new Set());
           }}
-          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-neutral-700"
+          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
         >
           Download
         </button>
@@ -568,7 +570,7 @@ export default function TrackList({
         )}
         <button
           onClick={() => setSelected(new Set())}
-          className="shrink-0 whitespace-nowrap text-xs text-neutral-400 hover:text-white"
+          className="shrink-0 whitespace-nowrap text-xs text-fg-muted hover:text-white"
         >
           Clear
         </button>
@@ -577,8 +579,8 @@ export default function TrackList({
     {/* Fixed layout: column widths come from the <th>s, so long values
         truncate instead of resizing columns. */}
     <table className="w-full table-fixed text-left text-sm">
-      <thead className="text-xs uppercase text-neutral-500">
-        <tr className="border-b border-neutral-800">
+      <thead className="text-xs uppercase text-fg-subtle">
+        <tr className="border-b border-border-subtle">
           {selectable && (
             <th className="w-8 py-2">
               <input
@@ -633,8 +635,9 @@ export default function TrackList({
           return (
             <tr
               key={track.id}
-              className={`group border-b border-neutral-800/60 transition-colors hover:bg-neutral-800/40 ${
-                isCurrent ? "text-emerald-400" : "text-neutral-200"
+              style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
+              className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
+                isCurrent ? "text-accent-bright" : "text-fg"
               }`}
             >
               {selectable && (
@@ -652,20 +655,27 @@ export default function TrackList({
                 <button
                   onClick={() => playQueue(view, i)}
                   title={`Play ${track.title}`}
-                  className="flex w-full items-center gap-2 text-left font-medium hover:text-emerald-400"
+                  className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
                 >
-                  <TrackArt track={track} size="h-9 w-9" iconSize={18} />
+                  <span className="relative shrink-0">
+                    <TrackArt track={track} size="h-9 w-9" iconSize={18} />
+                    {isCurrent && (
+                      <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
+                        <NowPlayingBars playing={isPlaying} />
+                      </span>
+                    )}
+                  </span>
                   <span className="truncate hover:underline">{track.title}</span>
                   {track.isPrivate && !track.ownerName && (
-                    <LockIcon size={12} className="shrink-0 text-neutral-500" />
+                    <LockIcon size={12} className="shrink-0 text-fg-subtle" />
                   )}
                 </button>
               </td>
-              <td className="hidden truncate py-2 pr-2 text-neutral-400 sm:table-cell">
+              <td className="hidden truncate py-2 pr-2 text-fg-muted sm:table-cell">
                 {track.artist ? (
                   <Link
                     href={`/artist?name=${encodeURIComponent(track.artist)}`}
-                    className="hover:text-emerald-400 hover:underline"
+                    className="hover:text-accent-bright hover:underline"
                   >
                     {track.artist}
                   </Link>
@@ -673,11 +683,11 @@ export default function TrackList({
                   "—"
                 )}
               </td>
-              <td className="hidden truncate py-2 pr-2 text-neutral-400 md:table-cell">
+              <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
                 {track.album ? (
                   <Link
                     href={`/album?name=${encodeURIComponent(track.album)}`}
-                    className="hover:text-emerald-400 hover:underline"
+                    className="hover:text-accent-bright hover:underline"
                   >
                     {track.album}
                   </Link>
@@ -686,15 +696,15 @@ export default function TrackList({
                 )}
               </td>
               {showOwner && (
-                <td className="hidden truncate py-2 pr-2 text-neutral-400 md:table-cell">
+                <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
                   {track.ownerName ?? "You"}
                 </td>
               )}
-              <td className="py-2 text-center tabular-nums text-neutral-400">
+              <td className="py-2 text-center tabular-nums text-fg-muted">
                 {formatDuration(track.durationSec)}
               </td>
               {showPlays && (
-                <td className="hidden py-2 text-center tabular-nums text-neutral-400 md:table-cell">
+                <td className="hidden py-2 text-center tabular-nums text-fg-muted md:table-cell">
                   {track.friendPlayCount}
                 </td>
               )}
@@ -719,7 +729,7 @@ export default function TrackList({
                   <button
                     onClick={() => setActionsTrack(track)}
                     aria-label="Track actions"
-                    className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white"
+                    className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
                   >
                     <EllipsisIcon size={18} />
                   </button>

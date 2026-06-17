@@ -5,6 +5,8 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import type { PlaylistDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export default function CreatePlaylistButton() {
   const router = useRouter();
@@ -40,37 +42,23 @@ export default function CreatePlaylistButton() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
-      >
-        New playlist
-      </button>
+      <Button onClick={() => setOpen(true)}>New playlist</Button>
       <Dialog title="New playlist" open={open} onClose={close}>
         <form onSubmit={create} className="flex flex-col gap-4">
-          <input
+          <Input
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Playlist name"
-            className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={close}
-              className="rounded-md px-4 py-2 text-sm text-neutral-400 hover:text-white"
-            >
+            <Button type="button" variant="ghost" onClick={close}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy || !name.trim()}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
               {busy ? "Creating…" : "Create"}
-            </button>
+            </Button>
           </div>
         </form>
       </Dialog>

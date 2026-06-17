@@ -112,7 +112,7 @@ function EditTrackForm({
   };
 
   const inputClass =
-    "rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500";
+    "rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
   return (
     <form onSubmit={save} className="flex flex-col gap-3">
@@ -143,7 +143,7 @@ function EditTrackForm({
             type="button"
             onClick={() => artInputRef.current?.click()}
             disabled={artBusy}
-            className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:border-neutral-400 disabled:opacity-50"
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-fg hover:border-fg-muted disabled:opacity-50"
           >
             {artBusy ? "Uploading…" : "Upload album art"}
           </button>
@@ -157,7 +157,7 @@ function EditTrackForm({
         hidden
         onChange={(e) => uploadArt(e.target.files?.[0])}
       />
-      <label className="flex flex-col gap-1 text-xs text-neutral-400">
+      <label className="flex flex-col gap-1 text-xs text-fg-muted">
         Title
         <input
           required
@@ -166,7 +166,7 @@ function EditTrackForm({
           className={inputClass}
         />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-400">
+      <label className="flex flex-col gap-1 text-xs text-fg-muted">
         Artist
         <input
           value={artist}
@@ -174,7 +174,7 @@ function EditTrackForm({
           className={inputClass}
         />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-400">
+      <label className="flex flex-col gap-1 text-xs text-fg-muted">
         Album
         <input
           value={album}
@@ -182,7 +182,7 @@ function EditTrackForm({
           className={inputClass}
         />
       </label>
-      <label className="mt-1 flex items-center gap-2 text-sm text-neutral-300">
+      <label className="mt-1 flex items-center gap-2 text-sm text-fg-muted">
         <input
           type="checkbox"
           checked={isPrivate}
@@ -196,14 +196,14 @@ function EditTrackForm({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md px-4 py-2 text-sm text-neutral-400 hover:text-white"
+          className="rounded-md px-4 py-2 text-sm text-fg-muted hover:text-white"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={busy || !title.trim()}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {busy ? "Saving…" : "Save"}
         </button>

@@ -18,7 +18,7 @@ export default function DownloadButton({ track }: { track: TrackDTO }) {
     return (
       <span
         title={status === "queued" ? "Waiting to download" : "Downloading"}
-        className="flex h-[26px] min-w-[26px] items-center justify-center px-1 text-[10px] tabular-nums text-emerald-400"
+        className="flex h-[26px] min-w-[26px] items-center justify-center px-1 text-[10px] tabular-nums text-accent-bright"
       >
         {progress !== null ? `${progress}%` : (
           <DownloadIcon size={16} className="animate-pulse" />
@@ -34,10 +34,10 @@ export default function DownloadButton({ track }: { track: TrackDTO }) {
       }
       aria-label={downloaded ? "Remove download" : "Download"}
       title={downloaded ? "Downloaded — click to remove" : "Download"}
-      className={`rounded p-1 hover:bg-neutral-700 ${
+      className={`rounded p-1 hover:bg-surface-3 ${
         downloaded
-          ? "text-emerald-400 hover:text-red-400"
-          : "text-neutral-400 hover:text-white"
+          ? "text-accent-bright hover:text-red-400"
+          : "text-fg-muted hover:text-white"
       }`}
     >
       <DownloadIcon size={16} />
@@ -72,7 +72,7 @@ export function PlaylistDownloadButton({
 
   if (record && active) {
     return (
-      <span className="flex items-center gap-1.5 rounded-full border border-neutral-700 px-5 py-2 text-sm font-semibold text-neutral-400">
+      <span className="flex items-center gap-1.5 rounded-full border border-border px-5 py-2 text-sm font-semibold text-fg-muted">
         <DownloadIcon size={15} className="animate-pulse" />
         {downloadedCount}/{total}
       </span>
@@ -87,7 +87,7 @@ export function PlaylistDownloadButton({
           }
         }}
         title="Downloaded — click to remove"
-        className="flex items-center gap-1.5 rounded-full border border-emerald-700 px-5 py-2 text-sm font-semibold text-emerald-400 hover:border-red-500 hover:text-red-400"
+        className="flex items-center gap-1.5 rounded-full border border-accent px-5 py-2 text-sm font-semibold text-accent-bright hover:border-red-500 hover:text-red-400"
       >
         <DownloadIcon size={15} />
         Downloaded
@@ -97,7 +97,7 @@ export function PlaylistDownloadButton({
   return (
     <button
       onClick={() => downloadPlaylist(playlistId)}
-      className="flex items-center gap-1.5 rounded-full border border-neutral-600 px-5 py-2 text-sm font-semibold text-neutral-200 hover:border-neutral-400"
+      className="flex items-center gap-1.5 rounded-full border border-border px-5 py-2 text-sm font-semibold text-fg hover:border-fg-muted"
     >
       <DownloadIcon size={15} />
       {record ? "Resume download" : "Download"}

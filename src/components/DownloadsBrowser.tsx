@@ -27,27 +27,27 @@ function TrackRows({
   const playQueue = usePlayerStore((s) => s.playQueue);
   const current = useCurrentTrack();
   return (
-    <ul className="divide-y divide-neutral-800/60">
+    <ul className="divide-y divide-border-subtle/60">
       {tracks.map((track, i) => (
         <li
           key={track.id}
           className={`group flex items-center gap-3 py-2 ${
-            current?.id === track.id ? "text-emerald-400" : "text-neutral-200"
+            current?.id === track.id ? "text-accent-bright" : "text-fg"
           }`}
         >
           <button
             onClick={() => playQueue(tracks, i)}
             title={`Play ${track.title}`}
-            className="min-w-0 flex-1 text-left hover:text-emerald-400"
+            className="min-w-0 flex-1 text-left hover:text-accent-bright"
           >
             <p className="truncate text-sm font-medium">{track.title}</p>
-            <p className="truncate text-xs text-neutral-400">
+            <p className="truncate text-xs text-fg-muted">
               {track.artist ?? "Unknown artist"}
               {track.ownerName ? ` · from ${track.ownerName}` : ""}
             </p>
           </button>
           {track.fileSize !== null && (
-            <span className="shrink-0 text-xs tabular-nums text-neutral-500">
+            <span className="shrink-0 text-xs tabular-nums text-fg-subtle">
               {formatBytes(track.fileSize)}
             </span>
           )}
@@ -56,7 +56,7 @@ function TrackRows({
               onClick={() => onRemove(track)}
               aria-label="Remove download"
               title="Remove download"
-              className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-700 hover:text-red-400"
+              className="shrink-0 rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-red-400"
             >
               <XIcon size={16} />
             </button>
@@ -78,8 +78,8 @@ function PlaylistSection({ playlist }: { playlist: DownloadedPlaylist }) {
   return (
     <section className="mb-8">
       <div className="mb-1 flex items-center gap-3">
-        <h2 className="truncate text-lg font-semibold">{playlist.name}</h2>
-        <span className="text-xs text-neutral-500">
+        <h2 className="truncate font-display text-lg font-semibold">{playlist.name}</h2>
+        <span className="text-xs text-fg-subtle">
           {tracks.length}/{playlist.trackIds.length} downloaded
         </span>
         <button
@@ -88,7 +88,7 @@ function PlaylistSection({ playlist }: { playlist: DownloadedPlaylist }) {
               void removePlaylist(playlist.id);
             }
           }}
-          className="ml-auto shrink-0 text-xs text-neutral-400 hover:text-red-400"
+          className="ml-auto shrink-0 text-xs text-fg-muted hover:text-red-400"
         >
           Remove
         </button>
@@ -128,9 +128,9 @@ export default function DownloadsBrowser() {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl font-bold">Downloads</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight">Downloads</h1>
         {storage && storage.usage > 0 && (
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-fg-subtle">
             {formatBytes(storage.usage)} used
             {storage.quota > 0 ? ` of ${formatBytes(storage.quota)}` : ""}
           </span>
@@ -138,15 +138,15 @@ export default function DownloadsBrowser() {
       </div>
 
       {(current || queueLength > 0) && (
-        <p className="mb-6 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-4 py-2 text-sm text-neutral-300">
-          <DownloadIcon size={15} className="animate-pulse text-emerald-400" />
+        <p className="mb-6 flex items-center gap-2 rounded-md border border-border-subtle bg-surface-1 px-4 py-2 text-sm text-fg-muted">
+          <DownloadIcon size={15} className="animate-pulse text-accent-bright" />
           Downloading {currentTrackTitle}
           {queueLength > 0 ? ` (${queueLength} more queued)` : ""}…
         </p>
       )}
 
       {playlists.length === 0 && pinned.length === 0 ? (
-        <p className="py-8 text-center text-sm text-neutral-500">
+        <p className="py-8 text-center text-sm text-fg-subtle">
           Nothing downloaded yet. Use the <DownloadIcon size={13} className="inline" />{" "}
           button on songs or the Download button on a playlist — everything here
           stays playable offline.
@@ -158,7 +158,7 @@ export default function DownloadsBrowser() {
           ))}
           {pinned.length > 0 && (
             <section className="mb-8">
-              <h2 className="mb-1 text-lg font-semibold">Songs</h2>
+              <h2 className="mb-1 font-display text-lg font-semibold">Songs</h2>
               <TrackRows
                 tracks={pinned}
                 onRemove={(t) => void removeTrack(t.id)}

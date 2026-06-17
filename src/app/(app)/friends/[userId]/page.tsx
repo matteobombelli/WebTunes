@@ -30,10 +30,10 @@ export default async function FriendLibraryPage({
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">
+        <h1 className="font-display text-2xl font-bold tracking-tight">
           {friend.name ?? friend.email}&apos;s Library
         </h1>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-fg-muted">
           {trackDTOs.length} track{trackDTOs.length === 1 ? "" : "s"} shared with you
         </p>
       </div>

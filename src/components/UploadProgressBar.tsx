@@ -20,16 +20,16 @@ export default function UploadProgressBar() {
   const overall = items.reduce((sum, it) => sum + it.progress, 0) / items.length;
 
   return (
-    <div className="relative h-9 shrink-0 overflow-hidden border-b border-neutral-800 bg-neutral-900">
+    <div className="relative h-9 shrink-0 overflow-hidden border-b border-border-subtle bg-surface-1">
       <div
-        className="absolute inset-y-0 left-0 bg-emerald-600/30 transition-[width] duration-150"
+        className="absolute inset-y-0 left-0 bg-accent/30 transition-[width] duration-150"
         style={{ width: `${overall}%` }}
       />
       <div className="relative flex h-full items-center gap-3 px-4 text-sm">
-        <span className="font-medium text-neutral-200">
+        <span className="font-medium text-fg">
           {busy ? "Uploading…" : "Uploaded"}
         </span>
-        <span className="tabular-nums text-neutral-400">
+        <span className="tabular-nums text-fg-muted">
           {done}/{items.length}
           {duplicates > 0 && (
             <span className="text-yellow-400">
@@ -43,7 +43,7 @@ export default function UploadProgressBar() {
           {busy ? (
             <button
               onClick={cancel}
-              className="text-xs font-medium text-neutral-400 hover:text-red-400"
+              className="text-xs font-medium text-fg-muted hover:text-red-400"
             >
               Cancel
             </button>
@@ -51,7 +51,7 @@ export default function UploadProgressBar() {
             <button
               onClick={clear}
               aria-label="Dismiss"
-              className="text-neutral-500 hover:text-white"
+              className="text-fg-subtle hover:text-white"
             >
               <XIcon size={15} />
             </button>

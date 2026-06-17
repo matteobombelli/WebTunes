@@ -27,9 +27,12 @@ export default function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900 md:flex">
-      <Link href="/library" className="px-5 py-5 text-xl font-bold tracking-tight">
-        <span className="text-emerald-500">Web</span>Tunes
+    <aside className="hidden w-56 shrink-0 flex-col border-r border-border-subtle bg-surface-1 md:flex">
+      <Link
+        href="/library"
+        className="px-5 py-5 font-display text-xl font-bold tracking-tight"
+      >
+        <span className="text-accent-bright">Web</span>Tunes
       </Link>
       <nav className="flex flex-col gap-1 px-3">
         {NAV.map((item) => {
@@ -38,10 +41,10 @@ export default function Sidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+              className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
+                  ? "bg-accent/10 text-accent-bright"
+                  : "text-fg-muted hover:bg-surface-2/60 hover:text-fg"
               }`}
             >
               <item.Icon size={16} />
@@ -50,15 +53,15 @@ export default function Sidebar({
           );
         })}
       </nav>
-      <div className="mt-auto border-t border-neutral-800 p-4">
-        <p className="truncate text-sm font-medium text-neutral-200">
+      <div className="mt-auto border-t border-border-subtle p-4">
+        <p className="truncate text-sm font-medium text-fg">
           {userName ?? "Account"}
         </p>
-        <p className="truncate text-xs text-neutral-500">{userEmail}</p>
+        <p className="truncate text-xs text-fg-subtle">{userEmail}</p>
         <form action={signOutAction}>
           <button
             type="submit"
-            className="mt-2 text-xs text-neutral-400 underline-offset-2 hover:text-white hover:underline"
+            className="mt-2 text-xs text-fg-muted underline-offset-2 hover:text-white hover:underline"
           >
             Sign out
           </button>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 function ResetForm() {
   const token = useSearchParams().get("token") ?? "";
@@ -32,9 +34,9 @@ function ResetForm() {
 
   if (!token) {
     return (
-      <p className="text-sm text-neutral-400">
+      <p className="text-sm text-fg-muted">
         This reset link is missing its token. Request a new one{" "}
-        <Link href="/forgot-password" className="text-emerald-400 hover:underline">
+        <Link href="/forgot-password" className="text-accent-bright hover:underline">
           here
         </Link>
         .
@@ -45,11 +47,11 @@ function ResetForm() {
   if (done) {
     return (
       <div className="flex flex-col gap-4 text-sm">
-        <h2 className="text-lg font-semibold">Password updated</h2>
-        <p className="text-neutral-400">
+        <h2 className="font-display text-lg font-semibold">Password updated</h2>
+        <p className="text-fg-muted">
           Your password has been changed and all existing sessions were signed out.
         </p>
-        <Link href="/login" className="text-emerald-400 hover:underline">
+        <Link href="/login" className="text-accent-bright hover:underline">
           Sign in
         </Link>
       </div>
@@ -58,8 +60,8 @@ function ResetForm() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Choose a new password</h2>
-      <input
+      <h2 className="font-display text-lg font-semibold">Choose a new password</h2>
+      <Input
         type="password"
         required
         minLength={8}
@@ -68,16 +70,11 @@ function ResetForm() {
         autoComplete="new-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button
-        type="submit"
-        disabled={busy}
-        className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={busy}>
         {busy ? "Saving…" : "Set new password"}
-      </button>
+      </Button>
     </form>
   );
 }

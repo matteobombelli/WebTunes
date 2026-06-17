@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { loginAction, type AuthFormState } from "../actions";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 const initialState: AuthFormState = { error: null };
 
@@ -52,44 +54,38 @@ export default function LoginPage() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Sign in</h2>
-      <input
+      <h2 className="font-display text-lg font-semibold">Sign in</h2>
+      <Input
         name="email"
         type="email"
         required
         placeholder="Email"
         autoComplete="email"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
-      <input
+      <Input
         name="password"
         type="password"
         required
         placeholder="Password"
         autoComplete="current-password"
-        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
       {state.error && <p className="text-sm text-red-400">{state.error}</p>}
       {state.unverifiedEmail && (
         <ResendVerification email={state.unverifiedEmail} />
       )}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
-      </button>
-      <p className="text-center text-sm text-neutral-400">
+      </Button>
+      <p className="text-center text-sm text-fg-muted">
         No account?{" "}
-        <Link href="/register" className="text-emerald-400 hover:underline">
+        <Link href="/register" className="text-accent-bright hover:underline">
           Register
         </Link>
       </p>
       <p className="-mt-2 text-center text-sm">
         <Link
           href="/forgot-password"
-          className="text-neutral-400 underline-offset-2 hover:text-emerald-400 hover:underline"
+          className="text-fg-muted underline-offset-2 hover:text-accent-bright hover:underline"
         >
           Forgot password?
         </Link>

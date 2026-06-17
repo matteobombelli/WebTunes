@@ -26,10 +26,10 @@ export default async function AlbumPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <p className="text-sm text-neutral-400">Album</p>
-      <h1 className={`text-2xl font-bold ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
+      <p className="text-sm text-fg-muted">Album</p>
+      <h1 className={`font-display text-2xl font-bold tracking-tight ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
       {albumArtist && (
-        <p className="mb-6 text-sm text-neutral-400">{albumArtist}</p>
+        <p className="mb-6 text-sm text-fg-muted">{albumArtist}</p>
       )}
       <TrackList tracks={tracks} showOwner />
     </div>

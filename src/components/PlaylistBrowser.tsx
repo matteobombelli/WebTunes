@@ -55,15 +55,15 @@ export default function PlaylistBrowser({
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex rounded-md border border-neutral-700 text-sm">
+        <div className="flex rounded-md border border-border text-sm">
           {SCOPES.map((s) => (
             <button
               key={s.value}
               onClick={() => setScope(s.value)}
               className={`px-3 py-2 first:rounded-l-md last:rounded-r-md ${
                 scope === s.value
-                  ? "bg-emerald-600 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800"
+                  ? "bg-accent text-white"
+                  : "text-fg-muted hover:bg-surface-2"
               }`}
             >
               {s.label}
@@ -73,9 +73,9 @@ export default function PlaylistBrowser({
       </div>
 
       {playlists === null ? (
-        <p className="py-8 text-center text-sm text-neutral-500">Loading…</p>
+        <p className="py-8 text-center text-sm text-fg-subtle">Loading…</p>
       ) : playlists.length === 0 ? (
-        <p className="py-8 text-center text-sm text-neutral-500">
+        <p className="py-8 text-center text-sm text-fg-subtle">
           {browsingOwn
             ? "No playlists yet. Create one to organize your music."
             : "No playlists to show."}
@@ -87,8 +87,14 @@ export default function PlaylistBrowser({
             loading ? "opacity-50" : ""
           }`}
         >
-          {playlists.map((p) => (
-            <PlaylistCard key={p.id} playlist={p} />
+          {playlists.map((p, i) => (
+            <div
+              key={p.id}
+              className="animate-fade-in-up"
+              style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
+            >
+              <PlaylistCard playlist={p} />
+            </div>
           ))}
         </div>
       )}

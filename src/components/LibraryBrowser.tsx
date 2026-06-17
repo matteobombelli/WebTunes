@@ -6,6 +6,7 @@ import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import TrackList from "@/components/TrackList";
 import { SearchIcon } from "@/components/icons";
+import { Input } from "@/components/ui/Input";
 
 const SCOPES = [
   { value: "own", label: "My library" },
@@ -99,49 +100,49 @@ export default function LibraryBrowser({
         <div className="relative w-full max-w-md">
           <SearchIcon
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
           />
-          <input
+          <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search title, artist, album, or lyrics…"
-            className="w-full rounded-md border border-neutral-700 bg-neutral-800 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500"
+            className="w-full pl-9"
           />
         </div>
-        <div className="flex rounded-md border border-neutral-700 text-sm">
+        <div className="flex rounded-md border border-border text-sm">
           {SCOPES.map((s) => (
             <button
               key={s.value}
               onClick={() => setScope(s.value)}
               className={`px-3 py-2 first:rounded-l-md last:rounded-r-md ${
                 scope === s.value
-                  ? "bg-emerald-600 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800"
+                  ? "bg-accent text-white"
+                  : "text-fg-muted hover:bg-surface-2"
               }`}
             >
               {s.label}
             </button>
           ))}
         </div>
-        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-neutral-400">
+        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-fg-muted">
           <input
             type="checkbox"
             checked={hideDuplicates}
             onChange={(e) => toggleHideDuplicates(e.target.checked)}
-            className="h-4 w-4 accent-emerald-600"
+            className="h-4 w-4 accent-accent"
           />
           Hide duplicates from friends&apos; libraries
         </label>
       </div>
 
       {tracks === null ? (
-        <p className="py-8 text-center text-sm text-neutral-500">Loading…</p>
+        <p className="py-8 text-center text-sm text-fg-subtle">Loading…</p>
       ) : (
         // Keep stale results visible (dimmed) while a new fetch runs.
         <div
           className={`transition-opacity duration-100 ${dimmed ? "opacity-50" : ""}`}
         >
-          <p className="mb-2 text-sm text-neutral-400">
+          <p className="mb-2 text-sm text-fg-muted">
             {tracks.length} {countNoun}
             {tracks.length === 1 ? "" : "s"}
           </p>

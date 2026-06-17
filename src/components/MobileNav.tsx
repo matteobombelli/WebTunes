@@ -22,7 +22,7 @@ const NAV = [
 export function MobileNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex border-t border-neutral-800 bg-neutral-900 pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="flex border-t border-border-subtle bg-surface-1 pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.map(({ href, label, Icon }) => {
         const active = pathname.startsWith(href);
         return (
@@ -30,7 +30,7 @@ export function MobileNav() {
             key={href}
             href={href}
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ${
-              active ? "text-emerald-400" : "text-neutral-400"
+              active ? "text-accent-bright" : "text-fg-muted"
             }`}
           >
             <Icon size={20} />
@@ -45,15 +45,18 @@ export function MobileNav() {
 /** Compact top bar with logo and sign-out, shown below md. */
 export function MobileTopBar() {
   return (
-    <header className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4 py-3 md:hidden">
-      <Link href="/library" className="text-lg font-bold tracking-tight">
-        <span className="text-emerald-500">Web</span>Tunes
+    <header className="flex items-center justify-between border-b border-border-subtle bg-surface-1 px-4 py-3 md:hidden">
+      <Link
+        href="/library"
+        className="font-display text-lg font-bold tracking-tight"
+      >
+        <span className="text-accent-bright">Web</span>Tunes
       </Link>
       <form action={signOutAction}>
         <button
           type="submit"
           aria-label="Sign out"
-          className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
+          className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
         >
           <LogoutIcon size={16} />
           Sign out

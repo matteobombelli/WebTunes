@@ -1,44 +1,63 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0a0a0a;
-  --foreground: #e5e5e5;
-}
+/*
+ * Design tokens. Surfaces step from near-black page bg up through panels and
+ * raised controls; the indigo accent is the single pop colour. Consumed as
+ * Tailwind utilities: bg-surface-1, text-fg-muted, border-border, bg-accent, …
+ */
+@theme {
+  --color-surface-0: #09090b; /* page background */
+  --color-surface-1: #141417; /* panels: sidebar, player, cards */
+  --color-surface-2: #1d1d21; /* inputs, hovers, dropdowns */
+  --color-surface-3: #2a2a30; /* raised controls, secondary buttons */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-border: #34343c; /* visible dividers / borders */
+  --color-border-subtle: #232328; /* faint dividers */
+
+  --color-fg: #fafafa; /* primary text */
+  --color-fg-muted: #a1a1aa; /* secondary text */
+  --color-fg-subtle: #71717a; /* tertiary / captions */
+
+  --color-accent: #4f46e5; /* indigo-600 — fills, focus */
+  --color-accent-hover: #6366f1; /* indigo-500 — fill hover */
+  --color-accent-bright: #818cf8; /* indigo-400 — text, indicators */
+  --color-accent-fg: #ffffff; /* text/icons on accent fills */
+
+  --font-display: var(--font-space-grotesk);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-surface-0);
+  color: var(--color-fg);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 /* Thin dark scrollbars to match the theme */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #404040 transparent;
+  scrollbar-color: var(--color-surface-3) transparent;
 }
 
-/* Subtle motion: smooth color changes and press feedback on anything clickable */
+/* Subtle motion: smooth colour changes and press feedback on anything clickable */
 button,
 a,
 input,
 select {
   transition:
-    color 0.1s ease,
-    background-color 0.1s ease,
-    border-color 0.1s ease,
-    opacity 0.1s ease,
-    transform 0.1s ease;
+    color 0.12s ease,
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 button:not(:disabled):active {
   transform: scale(0.97);
 }
+
+/* --- Keyframes -------------------------------------------------------- */
 
 @keyframes pop-in {
   from {
@@ -76,6 +95,28 @@ button:not(:disabled):active {
     opacity: 0;
   }
 }
+/* Gentle entrance for list rows / grid items / page content. */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Now-playing equaliser bars. */
+@keyframes eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .animate-pop-in {
   animation: pop-in 0.1s ease-out;
 }
@@ -88,9 +129,24 @@ button:not(:disabled):active {
 .animate-fade-out {
   animation: fade-out 0.1s ease-in forwards;
 }
+.animate-fade-in-up {
+  animation: fade-in-up 0.22s ease-out both;
+}
 /* Tailwind's default pulse is 2s; tighten it so spinners feel responsive. */
 .animate-pulse {
   animation-duration: 1.2s;
+}
+
+/* Respect users who ask for less motion: collapse animations + transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Themed checkboxes (replaces the default native look) */
@@ -100,9 +156,9 @@ input[type="checkbox"].checkbox {
   place-content: center;
   width: 1rem;
   height: 1rem;
-  border: 1px solid #525252; /* neutral-600 */
+  border: 1px solid var(--color-fg-subtle);
   border-radius: 0.25rem;
-  background: #262626; /* neutral-800 */
+  background: var(--color-surface-2);
   cursor: pointer;
 }
 input[type="checkbox"].checkbox::before {
@@ -111,20 +167,25 @@ input[type="checkbox"].checkbox::before {
   height: 0.6rem;
   transform: scale(0);
   transition: transform 0.07s ease-in-out;
-  background: #fff;
+  background: var(--color-accent-fg);
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
 input[type="checkbox"].checkbox:hover {
-  border-color: #737373; /* neutral-500 */
+  border-color: var(--color-fg-muted);
 }
 input[type="checkbox"].checkbox:checked {
-  background: #10b981; /* emerald-500 */
-  border-color: #10b981;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 input[type="checkbox"].checkbox:checked::before {
   transform: scale(1);
 }
 input[type="checkbox"].checkbox:focus-visible {
-  outline: 2px solid #10b981;
+  outline: 2px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+/* Range inputs (seek bar, volume) use the accent colour for the filled track. */
+input[type="range"] {
+  accent-color: var(--color-accent-hover);
 }

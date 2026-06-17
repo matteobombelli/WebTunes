@@ -10,7 +10,7 @@ export default async function PlaylistsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Playlists</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight">Playlists</h1>
         <CreatePlaylistButton />
       </div>
       <PlaylistBrowser initialPlaylists={dtos} />

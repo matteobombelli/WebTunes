@@ -35,7 +35,7 @@ export default function UploadDialog() {
       <button
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+        className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
       >
         {busy ? "Uploading…" : "Upload music"}
       </button>

@@ -22,8 +22,8 @@ export default async function ArtistPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <p className="text-sm text-neutral-400">Artist</p>
-      <h1 className="mb-6 text-2xl font-bold">{name}</h1>
+      <p className="text-sm text-fg-muted">Artist</p>
+      <h1 className="mb-6 font-display text-2xl font-bold tracking-tight">{name}</h1>
       <TrackList tracks={tracks} showOwner />
     </div>
   );
