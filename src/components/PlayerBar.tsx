@@ -48,6 +48,23 @@ export default function PlayerBar() {
     _clearSeek,
   } = usePlayerStore.getState();
 
+  // Some mobile browsers misreport <audio>.duration for Ogg/Opus files (seen
+  // ~3x too long: the 48 kHz granule divided by a wrong rate). The server
+  // extracts the true length on upload, so when the browser's value disagrees
+  // materially, trust track.durationSec and rescale currentTime (it shares the
+  // same wrong timebase) so the seek bar, labels, and seeking stay consistent.
+  // When the browser is correct (desktop, well-formed reads) this is a no-op.
+  const serverDuration = track?.durationSec ?? 0;
+  const durationUnreliable =
+    serverDuration > 0 &&
+    duration > 0 &&
+    Math.abs(duration - serverDuration) / serverDuration > 0.1;
+  const totalDuration = durationUnreliable
+    ? serverDuration
+    : duration || serverDuration || 0;
+  const timeScale = durationUnreliable ? serverDuration / duration : 1;
+  const playedSeconds = currentTime * timeScale;
+
   // play() rejects with AbortError when a newer src load or a pause()
   // supersedes it (e.g. skipping tracks faster than they start) — that's
   // benign and the new action already owns the playing state, so only a real
@@ -136,17 +153,17 @@ export default function PlayerBar() {
 
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
-    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (!Number.isFinite(totalDuration) || totalDuration <= 0) return;
     try {
       navigator.mediaSession.setPositionState({
-        duration,
-        position: Math.min(currentTime, duration),
+        duration: totalDuration,
+        position: Math.min(playedSeconds, totalDuration),
         playbackRate: 1,
       });
     } catch {
       // Invalid state mid-track-change; the next tick fixes it.
     }
-  }, [currentTime, duration]);
+  }, [playedSeconds, totalDuration]);
 
   if (!track) return null;
 
@@ -154,20 +171,20 @@ export default function PlayerBar() {
   const seekBar = (className: string) => (
     <div className={`${className} items-center gap-2 text-xs text-fg-muted`}>
       <span className="w-10 shrink-0 text-right tabular-nums">
-        {formatTime(currentTime)}
+        {formatTime(playedSeconds)}
       </span>
       <input
         type="range"
         min={0}
-        max={duration || track.durationSec || 0}
+        max={totalDuration}
         step={0.5}
-        value={Math.min(currentTime, duration || Infinity)}
-        onChange={(e) => seekTo(Number(e.target.value))}
+        value={Math.min(playedSeconds, totalDuration || Infinity)}
+        onChange={(e) => seekTo(Number(e.target.value) / timeScale)}
         className="h-1 min-w-0 flex-1 accent-accent"
         aria-label="Seek"
       />
       <span className="w-10 shrink-0 tabular-nums">
-        {formatTime(duration || track.durationSec || 0)}
+        {formatTime(totalDuration)}
       </span>
     </div>
   );
