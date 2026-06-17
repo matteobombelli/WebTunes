@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -85,14 +86,45 @@ function AddToPlaylistMenu({
   const [menuClosing, setMenuClosing] = useState(false);
   const [playlists, setPlaylists] = useState<PlaylistDTO[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // The bulk menu is portalled to <body> so the selection bar's overflow-x
+  // can't clip it; triggerRef anchors its fixed position, menuRef scopes
+  // outside-click dismissal.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setMenuClosing(true);
+    setTimeout(() => setMenuClosing(false), 100);
+  }, []);
+
+  // A portalled menu is detached from the trigger, so dismiss it on outside
+  // clicks and on scroll/resize instead of letting it drift.
+  useEffect(() => {
+    if (!open || !bulk) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, bulk, close]);
 
   const load = async () => {
     if (open) {
-      setOpen(false);
-      setMenuClosing(true);
-      setTimeout(() => setMenuClosing(false), 100);
+      close();
       return;
     }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPos({ top: rect.bottom + 4, left: rect.left });
     setOpen(true);
     setMessage(null);
     if (!playlists) {
@@ -113,15 +145,39 @@ function AddToPlaylistMenu({
       });
       setMessage(bulk ? `Added ${res.added}` : "Added");
       if (onAdded) setTimeout(onAdded, 600);
+      // Bulk: dismiss the portalled menu once the count feedback has shown.
+      if (bulk) setTimeout(close, 600);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Failed");
     }
   };
 
+  const items = (
+    <>
+      {message && <p className="px-3 py-1 text-accent-bright">{message}</p>}
+      {playlists === null && (
+        <p className="px-3 py-1 text-fg-muted">Loading…</p>
+      )}
+      {playlists?.length === 0 && (
+        <p className="px-3 py-1 text-fg-muted">No playlists yet</p>
+      )}
+      {playlists?.map((p) => (
+        <button
+          key={p.id}
+          onClick={() => add(p.id)}
+          className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
+        >
+          {p.name}
+        </button>
+      ))}
+    </>
+  );
+
   return (
     <div className="relative">
       {bulk ? (
         <button
+          ref={triggerRef}
           onClick={load}
           className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
         >
@@ -137,28 +193,26 @@ function AddToPlaylistMenu({
           <PlusIcon size={16} />
         </button>
       )}
-      {(open || menuClosing) && (
-        <div
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
-        >
-          {message && <p className="px-3 py-1 text-accent-bright">{message}</p>}
-          {playlists === null && (
-            <p className="px-3 py-1 text-fg-muted">Loading…</p>
-          )}
-          {playlists?.length === 0 && (
-            <p className="px-3 py-1 text-fg-muted">No playlists yet</p>
-          )}
-          {playlists?.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => add(p.id)}
-              className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
+      {bulk
+        ? (open || menuClosing) &&
+          pos &&
+          createPortal(
+            <div
+              ref={menuRef}
+              style={{ position: "fixed", top: pos.top, left: pos.left }}
+              className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
             >
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
+              {items}
+            </div>,
+            document.body,
+          )
+        : (open || menuClosing) && (
+            <div
+              className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
+            >
+              {items}
+            </div>
+          )}
     </div>
   );
 }
