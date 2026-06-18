@@ -25,7 +25,7 @@ export function NowPlayingBars({
       {BARS.map((b, i) => (
         <span
           key={i}
-          className="w-[2px] flex-1 rounded-full bg-current"
+          className="h-full w-[2px] flex-1 rounded-full bg-current"
           style={{
             transformOrigin: "bottom",
             transform: playing ? undefined : "scaleY(0.35)",
