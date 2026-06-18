@@ -6,7 +6,6 @@ import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import QueuePanel from "@/components/QueuePanel";
 import TrackArt from "@/components/TrackArt";
-import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import {
   NextIcon,
   PauseIcon,
@@ -189,15 +188,9 @@ export default function PlayerBar() {
     </div>
   );
 
-  // Album art with a small equaliser badge while audio is playing.
   const art = (size: string, iconSize: number) => (
-    <div className="relative shrink-0">
+    <div className="shrink-0">
       <TrackArt track={track} size={size} iconSize={iconSize} />
-      {isPlaying && (
-        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-surface-1 text-accent-bright ring-2 ring-surface-1">
-          <NowPlayingBars playing className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 
