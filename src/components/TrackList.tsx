@@ -35,6 +35,10 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// How many rows to render initially and to add each time the scroll sentinel
+// comes into view.
+const PAGE_SIZE = 100;
+
 type SortKey = "title" | "artist" | "album" | "owner" | "duration" | "plays";
 type SortState = { key: SortKey; dir: 1 | -1 } | null;
 
@@ -521,6 +525,35 @@ export default function TrackList({
     [tracks, sortable, sort]
   );
 
+  // Render rows incrementally so a 1000+ track library doesn't mount every
+  // row at once. Sort/search/selection still run over the full `view`; only
+  // the rendered slice grows, extended as a sentinel near the end scrolls in.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Reset the window when the list changes (new search results, re-sort).
+  // Render-phase reset per react.dev "storing information from previous renders".
+  const [prevView, setPrevView] = useState(view);
+  if (view !== prevView) {
+    setPrevView(view);
+    setVisibleCount(PAGE_SIZE);
+  }
+  const visible = useMemo(() => view.slice(0, visibleCount), [view, visibleCount]);
+  const sentinelRef = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (visibleCount >= view.length) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => Math.min(c + PAGE_SIZE, view.length));
+        }
+      },
+      { rootMargin: "800px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [visibleCount, view.length]);
+
   // Click cycles: ascending → descending → default (server order).
   const cycleSort = (key: SortKey) =>
     setSort((prev) =>
@@ -737,7 +770,7 @@ export default function TrackList({
         </tr>
       </thead>
       <tbody>
-        {view.map((track, i) => {
+        {visible.map((track, i) => {
           const isCurrent = current?.id === track.id;
           return (
             <tr
@@ -845,6 +878,13 @@ export default function TrackList({
             </tr>
           );
         })}
+        {visibleCount < view.length && (
+          <tr ref={sentinelRef} aria-hidden>
+            <td colSpan={12} className="py-4 text-center text-xs text-fg-subtle">
+              Loading more…
+            </td>
+          </tr>
+        )}
       </tbody>
     </table>
     <EditTrackDialog
