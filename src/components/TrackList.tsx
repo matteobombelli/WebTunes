@@ -537,7 +537,7 @@ export default function TrackList({
     setVisibleCount(PAGE_SIZE);
   }
   const visible = useMemo(() => view.slice(0, visibleCount), [view, visibleCount]);
-  const sentinelRef = useRef<HTMLTableRowElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (visibleCount >= view.length) return;
     const el = sentinelRef.current;
@@ -878,15 +878,15 @@ export default function TrackList({
             </tr>
           );
         })}
-        {visibleCount < view.length && (
-          <tr ref={sentinelRef} aria-hidden>
-            <td colSpan={12} className="py-4 text-center text-xs text-fg-subtle">
-              Loading more…
-            </td>
-          </tr>
-        )}
       </tbody>
     </table>
+    {/* Sentinel lives outside the table so its width has no effect on the
+        fixed table column layout; it extends the rendered window on scroll. */}
+    {visibleCount < view.length && (
+      <div ref={sentinelRef} aria-hidden className="py-4 text-center text-xs text-fg-subtle">
+        Loading more…
+      </div>
+    )}
     <EditTrackDialog
       track={editing}
       onClose={() => setEditing(null)}
