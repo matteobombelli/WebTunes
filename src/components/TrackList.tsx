@@ -69,16 +69,24 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
   return copy;
 }
 
+// Shared style for a full-width action row inside the three-dot menu: label on
+// the left, icon on the right, clickable across its whole width.
+const MENU_ROW =
+  "flex w-full items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 text-left hover:bg-surface-3/60";
+
 function AddToPlaylistMenu({
   trackIds,
   align = "right",
   bulk = false,
+  label,
   onAdded,
 }: {
   trackIds: string[];
   align?: "left" | "right";
   /** Bulk style: labeled button and per-count feedback. */
   bulk?: boolean;
+  /** Non-bulk: when set, the trigger is a full-width labelled menu row. */
+  label?: string;
   onAdded?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -187,10 +195,11 @@ function AddToPlaylistMenu({
         <button
           onClick={load}
           aria-label="Add to playlist"
-          className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+          className={label ? MENU_ROW : "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"}
           title="Add to playlist"
         >
-          <PlusIcon size={16} />
+          {label && <span>{label}</span>}
+          <PlusIcon size={16} className={label ? "shrink-0 text-fg-muted" : undefined} />
         </button>
       )}
       {bulk
@@ -217,7 +226,14 @@ function AddToPlaylistMenu({
   );
 }
 
-function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
+function AddToQueueMenu({
+  tracks,
+  label,
+}: {
+  tracks: TrackDTO[];
+  /** When set, the trigger is a full-width labelled menu row. */
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
@@ -246,9 +262,10 @@ function AddToQueueMenu({ tracks }: { tracks: TrackDTO[] }) {
         onClick={() => (open ? close() : setOpen(true))}
         aria-label="Add to queue"
         title="Add to queue"
-        className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+        className={label ? MENU_ROW : "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"}
       >
-        <QueueIcon size={16} />
+        {label && <span>{label}</span>}
+        <QueueIcon size={16} className={label ? "shrink-0 text-fg-muted" : undefined} />
       </button>
       {(open || menuClosing) && (
         <div
@@ -313,32 +330,21 @@ function TrackActions({
           <span className="truncate text-fg-muted">{track.album}</span>
         </Link>
       )}
-      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
-        <span>Queue</span>
-        <AddToQueueMenu tracks={[track]} />
-      </div>
-      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
-        <span>Add to playlist</span>
-        <AddToPlaylistMenu trackIds={[track.id]} />
-      </div>
-      <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
-        <span>Download</span>
-        <DownloadButton track={track} />
-      </div>
+      <AddToQueueMenu tracks={[track]} label="Queue" />
+      <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
+      <DownloadButton track={track} label="Download" />
       {canEdit && !track.ownerName && (
-        <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
+        <button
+          onClick={() => {
+            onEdit(track);
+            onClose();
+          }}
+          aria-label="Edit track"
+          className={MENU_ROW}
+        >
           <span>Edit details</span>
-          <button
-            onClick={() => {
-              onEdit(track);
-              onClose();
-            }}
-            aria-label="Edit track"
-            className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
-          >
-            <PencilIcon size={16} />
-          </button>
-        </div>
+          <PencilIcon size={16} className="shrink-0 text-fg-muted" />
+        </button>
       )}
       {onMove && (
         <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
