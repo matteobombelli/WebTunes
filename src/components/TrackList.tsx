@@ -391,8 +391,12 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
+  // Portalled to <body>: inside the table the dropdown rendered behind later
+  // rows (looked transparent and let clicks fall through to them). triggerRef
+  // anchors the fixed position; menuRef scopes outside-click dismissal.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -400,7 +404,22 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
     setTimeout(() => setMenuClosing(false), 150);
   }, []);
 
-  // Dismiss on outside click; selecting an option closes via onClose.
+  const toggle = () => {
+    if (open) {
+      close();
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      // Right-align the menu under the button.
+      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpen(true);
+  };
+
+  // Detached from the trigger, so dismiss on outside click and on
+  // scroll/resize instead of letting it drift. Selecting an option closes
+  // via onClose.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -409,14 +428,20 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
       close();
     };
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [open, close]);
 
   return (
     <div className="relative">
       <button
         ref={triggerRef}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={toggle}
         aria-label="Track actions"
         title="Track actions"
         className={`rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white ${
@@ -425,14 +450,18 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
       >
         <EllipsisIcon size={18} />
       </button>
-      {(open || menuClosing) && (
-        <div
-          ref={menuRef}
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-20 mt-1 w-60 rounded-md border border-border bg-surface-2 p-2 shadow-lg`}
-        >
-          <TrackActions {...props} onClose={close} />
-        </div>
-      )}
+      {(open || menuClosing) &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: "fixed", top: pos.top, right: pos.right }}
+            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-60 rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
+          >
+            <TrackActions {...props} onClose={close} />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
