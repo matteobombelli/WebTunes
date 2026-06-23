@@ -27,6 +27,11 @@ export default function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
   const countedRef = useRef<string | null>(null);
+  // True from a fresh track load until playback actually begins. A cold first
+  // request (slow first byte after a refresh) can let the media clock drift
+  // ahead while the element stalls, so the track audibly starts a second or
+  // two in. When it really starts playing we snap a drifted playhead back to 0.
+  const freshLoadRef = useRef(false);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
@@ -78,6 +83,7 @@ export default function PlayerBar() {
     const audio = audioRef.current;
     if (!audio || !track) return;
     audio.src = streamSrc(track.id);
+    freshLoadRef.current = true;
     if (usePlayerStore.getState().isPlaying) {
       audio.play().catch(onPlayError);
     }
@@ -224,6 +230,19 @@ export default function PlayerBar() {
       {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
       <audio
         ref={audioRef}
+        onPlaying={(e) => {
+          // First real playback after a load: if the clock drifted ahead while
+          // the cold stream stalled (and the user didn't ask to resume/seek),
+          // restart from the top so the intro isn't skipped.
+          if (!freshLoadRef.current) return;
+          freshLoadRef.current = false;
+          if (
+            usePlayerStore.getState().seekRequest === null &&
+            e.currentTarget.currentTime > 0.8
+          ) {
+            e.currentTarget.currentTime = 0;
+          }
+        }}
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
           _setProgress(ct, e.currentTarget.duration || 0);
