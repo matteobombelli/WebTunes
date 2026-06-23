@@ -31,7 +31,7 @@ export default async function AlbumPage({
       {albumArtist && (
         <p className="mb-6 text-sm text-fg-muted">{albumArtist}</p>
       )}
-      <TrackList tracks={tracks} showOwner />
+      <TrackList tracks={tracks} showOwner canDelete />
     </div>
   );
 }

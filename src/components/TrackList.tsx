@@ -391,25 +391,43 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const close = () => {
+  const close = useCallback(() => {
     setOpen(false);
     setMenuClosing(true);
     setTimeout(() => setMenuClosing(false), 150);
-  };
+  }, []);
+
+  // Dismiss on outside click; selecting an option closes via onClose.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open, close]);
 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         onClick={() => (open ? close() : setOpen(true))}
         aria-label="Track actions"
         title="Track actions"
-        className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+        className={`rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white ${
+          open ? "" : "md:opacity-0 md:group-hover:opacity-100"
+        }`}
       >
         <EllipsisIcon size={18} />
       </button>
       {(open || menuClosing) && (
         <div
+          ref={menuRef}
           className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-20 mt-1 w-60 rounded-md border border-border bg-surface-2 p-2 shadow-lg`}
         >
           <TrackActions {...props} onClose={close} />
@@ -764,7 +782,7 @@ export default function TrackList({
               )}
               <td className="py-2">
                 {/* Desktop: hover-revealed three-dot dropdown. */}
-                <div className="hidden justify-end md:flex md:opacity-0 md:group-hover:opacity-100">
+                <div className="hidden justify-end md:flex">
                   <TrackActionsMenu
                     track={track}
                     index={i}
