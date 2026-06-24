@@ -68,24 +68,13 @@ export default function PlayerBar({
     }
     if (store.index < 0) return;
     const seed = store.queue[store.index];
-    // Enable optimistically so the button turns active immediately; the first
-    // batch loads asynchronously and populates the queue when it lands.
-    store.enableSimilar(seed.id);
     try {
       const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
-      const s2 = usePlayerStore.getState();
-      // Toggled off (or re-seeded) while loading — drop this stale result.
-      if (!s2.playSimilar || s2.similarSeedId !== seed.id) return;
-      // No embedding for the seed yet (or nothing similar) — turn back off.
-      if (similar.length === 0) {
-        s2.stopSimilar();
-        return;
-      }
-      s2.startSimilar(seed.id, similar);
+      // No embedding for the seed yet (or nothing similar) — stay off.
+      if (similar.length === 0) return;
+      usePlayerStore.getState().startSimilar(seed.id, similar);
     } catch {
-      // Revert the optimistic enable on failure (unless re-toggled meanwhile).
-      const s2 = usePlayerStore.getState();
-      if (s2.playSimilar && s2.similarSeedId === seed.id) s2.stopSimilar();
+      // Leave the mode off on failure.
     }
   };
   const {

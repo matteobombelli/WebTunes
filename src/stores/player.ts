@@ -58,9 +58,6 @@ type PlayerState = {
   /** Drop everything after the current track. */
   clearUpcoming: () => void;
   toggleShuffle: () => void;
-  /** Optimistically enable "play similar" (the toggle reflects it immediately)
-   *  before the first batch loads; startSimilar then populates the queue. */
-  enableSimilar: (seedId: string) => void;
   /** Enable "play similar": keep the current track playing, replace the rest of
    *  the queue with the first batch of similar tracks, freeze the seed. */
   startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
@@ -249,22 +246,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: null,
       });
     }
-  },
-
-  enableSimilar: (seedId) => {
-    const s = get();
-    if (s.index < 0) return;
-    // Flag-only, so the toggle turns active instantly; the queue is left as-is
-    // (current track keeps playing) until startSimilar lands the first batch.
-    // similarSeen = [seed] signals "initial batch not loaded yet" to the refill
-    // hook so it doesn't race the toggle handler's fetch.
-    set({
-      playSimilar: true,
-      similarSeedId: seedId,
-      similarSeen: [seedId],
-      shuffled: false,
-      unshuffledQueue: null,
-    });
   },
 
   startSimilar: (seedId, tracks) => {

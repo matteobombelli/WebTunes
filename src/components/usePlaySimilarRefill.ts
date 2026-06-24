@@ -29,10 +29,6 @@ export function usePlaySimilarRefill() {
     if (upcoming > REFILL_THRESHOLD) return;
 
     const st = usePlayerStore.getState();
-    // Initial batch not loaded yet (optimistic enable): the toggle handler owns
-    // the first fetch, so don't race it. It bumps similarSeen past 1 on landing.
-    if (st.similarSeen.length <= 1) return;
-
     fetchingRef.current = true;
     // Drift: rank each refill against the track playing now so the radio
     // evolves; otherwise stay anchored to the original frozen seed.
