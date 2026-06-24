@@ -137,10 +137,18 @@ export const ShuffleIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Twin sparkles — "play similar" (auto-generated radio from a seed track). */
+/** Graph network (hub + nodes) — "play similar" (related tracks from a seed). */
 export const SimilarIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M10 3 11.3 7.7 16 9 11.3 10.3 10 15 8.7 10.3 4 9 8.7 7.7Z M17.5 13.5 18.2 15.8 20.5 16.5 18.2 17.2 17.5 19.5 16.8 17.2 14.5 16.5 16.8 15.8Z" />
+    <g stroke="currentColor" strokeWidth={1.7} strokeLinecap="round">
+      <line x1="12" y1="12" x2="12" y2="4.5" />
+      <line x1="12" y1="12" x2="5.5" y2="18" />
+      <line x1="12" y1="12" x2="18.5" y2="18" />
+    </g>
+    <circle cx="12" cy="12" r="2.7" />
+    <circle cx="12" cy="4.5" r="2.2" />
+    <circle cx="5.5" cy="18" r="2.2" />
+    <circle cx="18.5" cy="18" r="2.2" />
   </Svg>
 );
 

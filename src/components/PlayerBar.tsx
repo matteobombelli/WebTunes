@@ -270,6 +270,7 @@ export default function PlayerBar({
     <button
       onClick={action}
       aria-label={label}
+      title={label}
       className={`flex items-center justify-center rounded-full ${className}`}
     >
       {icon}
@@ -424,7 +425,9 @@ export default function PlayerBar({
         )}
 
         <div className="flex w-32 shrink-0 items-center gap-2">
-          <VolumeIcon size={16} className="shrink-0 text-fg-muted" />
+          <span title="Volume" className="flex shrink-0">
+            <VolumeIcon size={16} className="text-fg-muted" />
+          </span>
           <input
             type="range"
             min={0}
@@ -434,6 +437,7 @@ export default function PlayerBar({
             onChange={(e) => setVolume(Number(e.target.value))}
             className="h-1 min-w-0 flex-1 accent-accent"
             aria-label="Volume"
+            title="Volume"
           />
         </div>
       </div>
