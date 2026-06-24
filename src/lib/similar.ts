@@ -11,7 +11,7 @@ import {
 import { db } from "@/db";
 import { trackEmbeddings, tracks, users } from "@/db/schema";
 import { canAccessTrack, friendIdsOf } from "@/lib/friends";
-import { notDuplicateOfOwn, toTrackDTO } from "@/lib/tracks";
+import { notDuplicateOfOwn, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 import type { TrackDTO } from "@/lib/types";
 
@@ -61,15 +61,15 @@ export async function findSimilarTracks(
   if (!(await canAccessTrack(userId, seed))) return [];
   const seedVec = seed.embedding;
 
-  const { hideFriendDuplicates, similarVariation } =
-    await getUserSettings(userId);
+  // Independent reads — run them together.
+  const [{ hideFriendDuplicates, similarVariation }, friendIds] =
+    await Promise.all([getUserSettings(userId), friendIdsOf(userId)]);
   const sigma = SIGMA_BY_VARIATION[similarVariation] ?? 0;
-  const friendIds = await friendIdsOf(userId);
 
   // Cosine distance computed in-DB; ascending = most similar first.
   const distance = cosineDistance(trackEmbeddings.embedding, seedVec);
   const rows = await db
-    .select({ track: tracks, ownerName: users.name, distance })
+    .select({ track: trackDtoColumns, ownerName: users.name, distance })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .innerJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))

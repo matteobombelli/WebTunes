@@ -9,7 +9,7 @@ import {
 } from "@/db/schema";
 import { areFriends, friendIdsOf } from "@/lib/friends";
 import { getPresignedGetUrl } from "@/lib/s3";
-import { toTrackDTO } from "@/lib/tracks";
+import { toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
 
@@ -135,7 +135,7 @@ export async function getPlaylistTracks(
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(userId);
   const rows = await db
-    .select({ track: tracks, ownerName: users.name })
+    .select({ track: trackDtoColumns, ownerName: users.name })
     .from(playlistTracks)
     .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
     .innerJoin(users, eq(tracks.ownerId, users.id))

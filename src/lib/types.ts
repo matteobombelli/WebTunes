@@ -14,8 +14,6 @@ export type TrackDTO = {
   artS3Key: string | null;
   mimeType: string | null;
   fileSize: number | null;
-  lyrics: string | null;
-  lyricsSource: "embedded" | "lrclib" | "none";
   isPrivate: boolean;
   /** Times a non-owner has played this track to ≥30s. */
   friendPlayCount: number;

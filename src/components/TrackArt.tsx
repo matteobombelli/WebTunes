@@ -33,6 +33,7 @@ export default function TrackArt({
       <img
         src={artSrc(track.id)}
         alt=""
+        loading="lazy"
         onError={() => setFailed(true)}
         className={`${base} object-cover`}
       />

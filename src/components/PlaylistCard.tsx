@@ -15,6 +15,7 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
         <img
           src={playlist.coverUrl}
           alt=""
+          loading="lazy"
           className="aspect-square w-full rounded-md object-cover"
         />
       ) : (

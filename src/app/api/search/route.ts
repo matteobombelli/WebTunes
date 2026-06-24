@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { friendIdsOf } from "@/lib/friends";
-import { notDuplicateOfOwn, toTrackDTO } from "@/lib/tracks";
+import { notDuplicateOfOwn, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
 export async function GET(req: NextRequest) {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   const rows = await db
     .select({
-      track: tracks,
+      track: trackDtoColumns,
       ownerName: users.name,
       rank: sql<number>`ts_rank(${tracks}."search_vector", websearch_to_tsquery('simple', ${q}))`,
     })

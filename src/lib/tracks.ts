@@ -4,15 +4,57 @@ import { tracks, users, type Track } from "@/db/schema";
 import { friendIdsOf } from "@/lib/friends";
 import type { TrackDTO } from "@/lib/types";
 
-/** ownerName should be null for the viewer's own tracks. */
+/**
+ * Columns the TrackDTO needs from `tracks`. Deliberately excludes `lyrics` /
+ * `lyricsSource` (never read by the client — they only feed `search_vector`) and
+ * `contentHash` (a server-side dedupe detail). List queries select this
+ * projection so they don't ship KBs of lyrics text per row.
+ */
+export const trackDtoColumns = {
+  id: tracks.id,
+  ownerId: tracks.ownerId,
+  title: tracks.title,
+  artist: tracks.artist,
+  album: tracks.album,
+  durationSec: tracks.durationSec,
+  loudnessLufs: tracks.loudnessLufs,
+  s3Key: tracks.s3Key,
+  artS3Key: tracks.artS3Key,
+  mimeType: tracks.mimeType,
+  fileSize: tracks.fileSize,
+  isPrivate: tracks.isPrivate,
+  friendPlayCount: tracks.friendPlayCount,
+  createdAt: tracks.createdAt,
+};
+
+type TrackRow = Pick<Track, keyof typeof trackDtoColumns>;
+
+/**
+ * ownerName should be null for the viewer's own tracks. Built field-by-field so
+ * it can't leak excluded columns (lyrics/contentHash) even when handed a full
+ * row from a `select()` (e.g. the upload/detail paths).
+ */
 export function toTrackDTO(
-  track: Track,
+  track: TrackRow,
   ownerName: string | null = null
 ): TrackDTO {
-  // contentHash is a server-side dedupe detail; keep it off the wire.
-  const { contentHash, ...rest } = track;
-  void contentHash;
-  return { ...rest, createdAt: track.createdAt.toISOString(), ownerName };
+  return {
+    id: track.id,
+    ownerId: track.ownerId,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    durationSec: track.durationSec,
+    loudnessLufs: track.loudnessLufs,
+    s3Key: track.s3Key,
+    artS3Key: track.artS3Key,
+    mimeType: track.mimeType,
+    fileSize: track.fileSize,
+    isPrivate: track.isPrivate,
+    friendPlayCount: track.friendPlayCount,
+    createdAt: track.createdAt.toISOString(),
+    ownerName,
+  };
 }
 
 /**
@@ -32,7 +74,7 @@ export function notDuplicateOfOwn(userId: string) {
 /** The user's own tracks, newest first. */
 export async function listOwnTracks(userId: string): Promise<TrackDTO[]> {
   const rows = await db
-    .select()
+    .select(trackDtoColumns)
     .from(tracks)
     .where(eq(tracks.ownerId, userId))
     .orderBy(desc(tracks.createdAt));
@@ -50,7 +92,7 @@ export async function listAccessibleTracks(
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(userId);
   const rows = await db
-    .select({ track: tracks, ownerName: users.name })
+    .select({ track: trackDtoColumns, ownerName: users.name })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
@@ -85,7 +127,7 @@ async function listAccessibleTracksByField(
   const friendIds = await friendIdsOf(userId);
   const matches = sql`lower(btrim(coalesce(${field}, ''))) = lower(btrim(${value}))`;
   const rows = await db
-    .select({ track: tracks, ownerName: users.name })
+    .select({ track: trackDtoColumns, ownerName: users.name })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
@@ -143,7 +185,7 @@ export async function listFriendTracks(
   ownerName: string | null
 ): Promise<TrackDTO[]> {
   const rows = await db
-    .select()
+    .select(trackDtoColumns)
     .from(tracks)
     .where(and(eq(tracks.ownerId, friendId), eq(tracks.isPrivate, false)))
     .orderBy(desc(tracks.createdAt));
