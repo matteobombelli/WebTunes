@@ -25,8 +25,8 @@ type UploadsState = {
   clear: () => void;
 };
 
-// Module-level so cancel() can reach the in-flight request from anywhere.
-let activeXhr: XMLHttpRequest | null = null;
+// Module-level so cancel() can abort every in-flight request from anywhere.
+const activeXhrs = new Set<XMLHttpRequest>();
 let canceled = false;
 
 // XMLHttpRequest (not fetch) is the only browser API that reports upload
@@ -39,7 +39,7 @@ function uploadFile(
     const form = new FormData();
     form.append("file", file);
     const xhr = new XMLHttpRequest();
-    activeXhr = xhr;
+    activeXhrs.add(xhr);
     xhr.open("POST", `${BASE_PATH}/api/tracks`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
@@ -63,7 +63,7 @@ function uploadFile(
     xhr.onerror = () => reject(new Error("Upload failed"));
     xhr.onabort = () => reject(new Error("Canceled"));
     xhr.onloadend = () => {
-      if (activeXhr === xhr) activeXhr = null;
+      activeXhrs.delete(xhr);
     };
     xhr.send(form);
   });
@@ -87,40 +87,54 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
       })),
     });
 
+    // A small pool of workers each pulls the next file off a shared cursor as
+    // soon as it finishes one, so up to CONCURRENCY uploads run at a time.
+    const CONCURRENCY = 3;
+
     void (async () => {
-      for (const [i, file] of files.entries()) {
-        if (canceled) break;
-        try {
-          await uploadFile(file, (percent) =>
+      let next = 0;
+      const worker = async () => {
+        while (true) {
+          const i = next++;
+          if (i >= files.length || canceled) break;
+          const file = files[i];
+          try {
+            await uploadFile(file, (percent) =>
+              set((s) => ({
+                items: s.items.map((it, j) =>
+                  j === i ? { ...it, progress: percent } : it
+                ),
+              }))
+            );
             set((s) => ({
               items: s.items.map((it, j) =>
-                j === i ? { ...it, progress: percent } : it
+                j === i ? { ...it, status: "done", progress: 100 } : it
               ),
-            }))
-          );
-          set((s) => ({
-            items: s.items.map((it, j) =>
-              j === i ? { ...it, status: "done", progress: 100 } : it
-            ),
-          }));
-        } catch (err) {
-          set((s) => ({
-            items: s.items.map((it, j) =>
-              j === i
-                ? canceled
-                  ? { ...it, status: "canceled" }
-                  : {
-                      ...it,
-                      status:
-                        err instanceof DuplicateError ? "duplicate" : "error",
-                      detail: err instanceof Error ? err.message : "failed",
-                    }
-                : it
-            ),
-          }));
+            }));
+          } catch (err) {
+            set((s) => ({
+              items: s.items.map((it, j) =>
+                j === i
+                  ? canceled
+                    ? { ...it, status: "canceled" }
+                    : {
+                        ...it,
+                        status:
+                          err instanceof DuplicateError ? "duplicate" : "error",
+                        detail: err instanceof Error ? err.message : "failed",
+                      }
+                  : it
+              ),
+            }));
+          }
         }
-      }
-      // Mark any files we never got to (and the aborted one) as canceled.
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker)
+      );
+
+      // Mark any files we never got to (and aborted ones) as canceled.
       if (canceled) {
         set((s) => ({
           items: s.items.map((it) =>
@@ -135,7 +149,7 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
   cancel: () => {
     if (!get().busy) return;
     canceled = true;
-    activeXhr?.abort();
+    for (const xhr of activeXhrs) xhr.abort();
   },
 
   clear: () => {
