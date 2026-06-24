@@ -29,6 +29,9 @@ function formatTime(totalSeconds: number): string {
 /** Target loudness (LUFS) tracks are attenuated toward; ReplayGain reference. */
 const TARGET_LUFS = -18;
 
+/** localStorage key for the persisted master volume (client-only preference). */
+const VOLUME_KEY = "wt-volume";
+
 export default function PlayerBar({
   initialNormalizeVolume,
   initialSimilarDrift,
@@ -44,6 +47,9 @@ export default function PlayerBar({
   // ahead while the element stalls, so the track audibly starts a second or
   // two in. When it really starts playing we snap a drifted playhead back to 0.
   const freshLoadRef = useRef(false);
+  // Gates the volume-persist effect until the saved value has been read on
+  // mount, so the default (1) isn't written over the saved value first.
+  const volumeHydratedRef = useRef(false);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
@@ -144,6 +150,22 @@ export default function PlayerBar({
   useEffect(() => {
     usePlayerStore.getState().setSimilarDrift(initialSimilarDrift);
   }, [initialSimilarDrift]);
+
+  // Restore the master volume from localStorage on mount (client-only setting),
+  // then allow the persist effect below to write subsequent changes.
+  useEffect(() => {
+    const saved = parseFloat(localStorage.getItem(VOLUME_KEY) ?? "");
+    if (Number.isFinite(saved) && saved >= 0 && saved <= 1) {
+      usePlayerStore.getState().setVolume(saved);
+    }
+    volumeHydratedRef.current = true;
+  }, []);
+
+  // Persist volume changes once hydrated.
+  useEffect(() => {
+    if (!volumeHydratedRef.current) return;
+    localStorage.setItem(VOLUME_KEY, String(volume));
+  }, [volume]);
 
   // Effective volume = master slider × per-track normalization factor. The
   // factor only ever attenuates (≤ 1): loud tracks are pulled down toward

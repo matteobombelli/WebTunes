@@ -68,10 +68,10 @@ export default function Sidebar({
             <SettingsIcon size={14} />
             Settings
           </button>
-          <form action={signOutAction}>
+          <form action={signOutAction} className="flex">
             <button
               type="submit"
-              className="text-xs text-fg-muted underline-offset-2 hover:text-white hover:underline"
+              className="flex items-center text-xs text-fg-muted hover:text-white"
             >
               Sign out
             </button>

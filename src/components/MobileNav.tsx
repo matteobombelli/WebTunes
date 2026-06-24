@@ -58,7 +58,7 @@ export function MobileTopBar() {
         <button
           onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
           aria-label="Settings"
-          className="text-fg-muted hover:text-white"
+          className="flex items-center text-fg-muted hover:text-white"
         >
           <SettingsIcon size={18} />
         </button>
