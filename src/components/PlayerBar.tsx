@@ -324,14 +324,16 @@ export default function PlayerBar({
         {seekBar("flex")}
         <div className="flex items-center gap-2">
           {art("h-10 w-10", 18)}
-          <div className="min-w-0 flex-1">{trackInfo}</div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <div className="min-w-0">{trackInfo}</div>
             <AddToPlaylistMenu
               trackIds={[track.id]}
               floating
               dropUp
               triggerClassName="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted active:bg-surface-2"
             />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             {transportButton(
               toggleShuffle,
               shuffled ? "Disable shuffle" : "Enable shuffle",
@@ -380,17 +382,18 @@ export default function PlayerBar({
 
       {/* Desktop (md and up): the original single row, unchanged. */}
       <div className="hidden items-center gap-3 py-3 pl-4 pr-6 md:flex">
-        <div className="flex w-56 shrink-0 items-center gap-2">
-          {art("h-11 w-11", 20)}
-          <div className="min-w-0 flex-1">{trackInfo}</div>
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="flex w-56 shrink-0 items-center gap-2">
+            {art("h-11 w-11", 20)}
+            <div className="min-w-0 flex-1">{trackInfo}</div>
+          </div>
+          <AddToPlaylistMenu
+            trackIds={[track.id]}
+            floating
+            dropUp
+            triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
+          />
         </div>
-
-        <AddToPlaylistMenu
-          trackIds={[track.id]}
-          floating
-          dropUp
-          triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
-        />
 
         <div className="flex shrink-0 items-center gap-1">
           {transportButton(

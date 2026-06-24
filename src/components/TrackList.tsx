@@ -115,7 +115,11 @@ export function AddToPlaylistMenu({
   // outside-click dismissal.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+  } | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -149,9 +153,12 @@ export function AddToPlaylistMenu({
     }
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
+      // dropUp anchors by the bottom edge (just above the trigger) so the menu's
+      // resting position is already correct — using a translateY shift instead
+      // would be overridden by the pop-in animation's transform and cause a jump.
       setPos(
         dropUp
-          ? { top: rect.top - 4, left: rect.left }
+          ? { bottom: window.innerHeight - rect.top + 4, left: rect.left }
           : { top: rect.bottom + 4, left: rect.left }
       );
     }
@@ -239,8 +246,8 @@ export function AddToPlaylistMenu({
               style={{
                 position: "fixed",
                 top: pos.top,
+                bottom: pos.bottom,
                 left: pos.left,
-                transform: dropUp ? "translateY(-100%)" : undefined,
               }}
               className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
             >
