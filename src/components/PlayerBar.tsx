@@ -6,6 +6,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import QueuePanel from "@/components/QueuePanel";
+import { AddToPlaylistMenu } from "@/components/TrackList";
 import TrackArt from "@/components/TrackArt";
 import {
   NextIcon,
@@ -336,6 +337,12 @@ export default function PlayerBar({
           {art("h-10 w-10", 18)}
           <div className="min-w-0 flex-1">{trackInfo}</div>
           <div className="flex shrink-0 items-center gap-1">
+            <AddToPlaylistMenu
+              trackIds={[track.id]}
+              floating
+              dropUp
+              triggerClassName="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted active:bg-surface-2"
+            />
             {transportButton(
               toggleShuffle,
               shuffled ? "Disable shuffle" : "Enable shuffle",
@@ -388,6 +395,13 @@ export default function PlayerBar({
           {art("h-11 w-11", 20)}
           <div className="min-w-0 flex-1">{trackInfo}</div>
         </div>
+
+        <AddToPlaylistMenu
+          trackIds={[track.id]}
+          floating
+          dropUp
+          triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
+        />
 
         <div className="flex shrink-0 items-center gap-1">
           {transportButton(

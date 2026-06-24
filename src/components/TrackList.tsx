@@ -78,12 +78,15 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
 const MENU_ROW =
   "flex w-full items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 text-left hover:bg-surface-3/60";
 
-function AddToPlaylistMenu({
+export function AddToPlaylistMenu({
   trackIds,
   align = "right",
   bulk = false,
   label,
   onAdded,
+  floating = false,
+  dropUp = false,
+  triggerClassName,
 }: {
   trackIds: string[];
   align?: "left" | "right";
@@ -92,7 +95,16 @@ function AddToPlaylistMenu({
   /** Non-bulk: when set, the trigger is a full-width labelled menu row. */
   label?: string;
   onAdded?: () => void;
+  /** Anchor the dropdown to <body> with outside-click dismissal (like bulk),
+   *  but keep the plain "+" icon trigger — for use outside the track table. */
+  floating?: boolean;
+  /** Open the floating menu upward (e.g. anchored to the bottom player bar). */
+  dropUp?: boolean;
+  /** Overrides the default icon-trigger classes (no label, non-bulk). */
+  triggerClassName?: string;
 }) {
+  // Floating shares the portal + outside-click machinery the bulk menu uses.
+  const portalled = bulk || floating;
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
@@ -114,7 +126,7 @@ function AddToPlaylistMenu({
   // A portalled menu is detached from the trigger, so dismiss it on outside
   // clicks and on scroll/resize instead of letting it drift.
   useEffect(() => {
-    if (!open || !bulk) return;
+    if (!open || !portalled) return;
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
@@ -128,7 +140,7 @@ function AddToPlaylistMenu({
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [open, bulk, close]);
+  }, [open, portalled, close]);
 
   const load = async () => {
     if (open) {
@@ -136,7 +148,13 @@ function AddToPlaylistMenu({
       return;
     }
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setPos({ top: rect.bottom + 4, left: rect.left });
+    if (rect) {
+      setPos(
+        dropUp
+          ? { top: rect.top - 4, left: rect.left }
+          : { top: rect.bottom + 4, left: rect.left }
+      );
+    }
     setOpen(true);
     setMessage(null);
     if (!playlists) {
@@ -157,8 +175,8 @@ function AddToPlaylistMenu({
       });
       setMessage(bulk ? `Added ${res.added}` : "Added");
       if (onAdded) setTimeout(onAdded, 600);
-      // Bulk: dismiss the portalled menu once the count feedback has shown.
-      if (bulk) setTimeout(close, 600);
+      // Portalled menus dismiss once the feedback has shown.
+      if (portalled) setTimeout(close, 600);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Failed");
     }
@@ -197,22 +215,33 @@ function AddToPlaylistMenu({
         </button>
       ) : (
         <button
+          ref={triggerRef}
           onClick={load}
           aria-label="Add to playlist"
-          className={label ? MENU_ROW : "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"}
+          className={
+            label
+              ? MENU_ROW
+              : triggerClassName ??
+                "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+          }
           title="Add to playlist"
         >
           {label && <span>{label}</span>}
           <PlusIcon size={16} className={label ? "shrink-0 text-fg-muted" : undefined} />
         </button>
       )}
-      {bulk
+      {portalled
         ? (open || menuClosing) &&
           pos &&
           createPortal(
             <div
               ref={menuRef}
-              style={{ position: "fixed", top: pos.top, left: pos.left }}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                transform: dropUp ? "translateY(-100%)" : undefined,
+              }}
               className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
             >
               {items}
