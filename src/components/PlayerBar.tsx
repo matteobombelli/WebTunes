@@ -347,7 +347,6 @@ export default function PlayerBar({
         <div className="flex items-center gap-2">
           {art("h-10 w-10", 18)}
           <div className="flex min-w-0 flex-1 items-center gap-1">
-            <div className="min-w-0">{trackInfo}</div>
             <AddToPlaylistMenu
               trackIds={[track.id]}
               floating
