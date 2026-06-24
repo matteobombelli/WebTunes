@@ -23,7 +23,14 @@ function formatTime(totalSeconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function PlayerBar() {
+/** Target loudness (LUFS) tracks are attenuated toward; ReplayGain reference. */
+const TARGET_LUFS = -18;
+
+export default function PlayerBar({
+  initialNormalizeVolume,
+}: {
+  initialNormalizeVolume: boolean;
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
   const countedRef = useRef<string | null>(null);
@@ -35,6 +42,7 @@ export default function PlayerBar() {
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
+  const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
   const seekRequest = usePlayerStore((s) => s.seekRequest);
@@ -96,9 +104,26 @@ export default function PlayerBar() {
     else audio.pause();
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Hydrate the persisted "Normalize volume" setting from the server once, so
+  // the player and the library toggle share one source of truth without a flash.
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+    usePlayerStore.getState().setNormalizeVolume(initialNormalizeVolume);
+  }, [initialNormalizeVolume]);
+
+  // Effective volume = master slider × per-track normalization factor. The
+  // factor only ever attenuates (≤ 1): loud tracks are pulled down toward
+  // TARGET_LUFS, tracks already quieter than the target are left untouched.
+  // Recomputed on track change because the factor is per-track.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const lufs = track?.loudnessLufs;
+    const norm =
+      normalizeVolume && lufs != null
+        ? Math.min(1, 10 ** ((TARGET_LUFS - lufs) / 20))
+        : 1;
+    audio.volume = Math.max(0, Math.min(1, volume * norm));
+  }, [volume, track?.id, track?.loudnessLufs, normalizeVolume]);
 
   useEffect(() => {
     const audio = audioRef.current;

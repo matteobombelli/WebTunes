@@ -52,14 +52,20 @@ export async function getDisplayName(userId: string): Promise<string | null> {
   return row.name ?? row.email;
 }
 
-export type UserSettings = { hideFriendDuplicates: boolean };
+export type UserSettings = {
+  hideFriendDuplicates: boolean;
+  normalizeVolume: boolean;
+};
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {
   const [row] = await db
-    .select({ hideFriendDuplicates: users.hideFriendDuplicates })
+    .select({
+      hideFriendDuplicates: users.hideFriendDuplicates,
+      normalizeVolume: users.normalizeVolume,
+    })
     .from(users)
     .where(eq(users.id, userId));
-  return row ?? { hideFriendDuplicates: true };
+  return row ?? { hideFriendDuplicates: true, normalizeVolume: true };
 }
 
 export async function updateUserSettings(
@@ -70,6 +76,9 @@ export async function updateUserSettings(
     .update(users)
     .set(settings)
     .where(eq(users.id, userId))
-    .returning({ hideFriendDuplicates: users.hideFriendDuplicates });
+    .returning({
+      hideFriendDuplicates: users.hideFriendDuplicates,
+      normalizeVolume: users.normalizeVolume,
+    });
   return row;
 }

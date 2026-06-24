@@ -20,6 +20,7 @@ export default async function LibraryPage() {
       <LibraryBrowser
         initialTracks={trackDTOs}
         initialHideDuplicates={settings.hideFriendDuplicates}
+        initialNormalizeVolume={settings.normalizeVolume}
       />
     </div>
   );

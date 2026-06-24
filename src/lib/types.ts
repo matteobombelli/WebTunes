@@ -7,6 +7,8 @@ export type TrackDTO = {
   artist: string | null;
   album: string | null;
   durationSec: number | null;
+  /** Integrated loudness (LUFS) for volume normalization; null if unmeasured. */
+  loudnessLufs: number | null;
   s3Key: string;
   /** S3 key of embedded cover art; null when the file had none. */
   artS3Key: string | null;

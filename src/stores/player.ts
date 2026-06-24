@@ -26,6 +26,8 @@ type PlayerState = {
   unshuffledQueue: TrackDTO[] | null;
   isPlaying: boolean;
   volume: number; // 0..1
+  /** When true, attenuate each track toward a common loudness target. */
+  normalizeVolume: boolean;
   currentTime: number;
   duration: number;
   /** One-shot seek target consumed by PlayerBar's audio element. */
@@ -48,6 +50,7 @@ type PlayerState = {
   prev: () => void;
   seekTo: (seconds: number) => void;
   setVolume: (volume: number) => void;
+  setNormalizeVolume: (normalizeVolume: boolean) => void;
 
   // Setters owned by PlayerBar (the single <audio> element).
   _setProgress: (currentTime: number, duration: number) => void;
@@ -62,6 +65,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   unshuffledQueue: null,
   isPlaying: false,
   volume: 1,
+  normalizeVolume: true,
   currentTime: 0,
   duration: 0,
   seekRequest: null,
@@ -227,6 +231,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seekTo: (seconds) => set({ seekRequest: seconds }),
   setVolume: (volume) => set({ volume }),
+  setNormalizeVolume: (normalizeVolume) => set({ normalizeVolume }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),

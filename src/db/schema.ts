@@ -9,6 +9,7 @@ import {
   index,
   check,
   boolean,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -23,6 +24,7 @@ export const users = pgTable("users", {
   hideFriendDuplicates: boolean("hide_friend_duplicates")
     .notNull()
     .default(true),
+  normalizeVolume: boolean("normalize_volume").notNull().default(true),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -95,6 +97,10 @@ export const tracks = pgTable(
     artist: text("artist"),
     album: text("album"),
     durationSec: integer("duration_sec"),
+    // Integrated loudness (EBU R128, LUFS), measured by ffmpeg on upload;
+    // null when not yet analyzed or analysis failed. Used for playback volume
+    // normalization. See lib/loudness.ts.
+    loudnessLufs: doublePrecision("loudness_lufs"),
     s3Key: text("s3_key").notNull().unique(),
     // S3 key of embedded cover art extracted on upload; null when none.
     artS3Key: text("art_s3_key"),

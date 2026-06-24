@@ -1,4 +1,5 @@
 import { requirePageUser } from "@/lib/auth-helpers";
+import { getUserSettings } from "@/lib/users";
 import { MobileNav, MobileTopBar } from "@/components/MobileNav";
 import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
@@ -11,6 +12,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requirePageUser();
+  const { normalizeVolume } = await getUserSettings(user.id);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -23,7 +25,7 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
-      <PlayerBar />
+      <PlayerBar initialNormalizeVolume={normalizeVolume} />
       <MobileNav />
     </div>
   );

@@ -5,6 +5,7 @@ import { getUserSettings, updateUserSettings } from "@/lib/users";
 
 const patchSchema = z.object({
   hideFriendDuplicates: z.boolean().optional(),
+  normalizeVolume: z.boolean().optional(),
 });
 
 export async function GET() {

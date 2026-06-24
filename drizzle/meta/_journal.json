@@ -64,6 +64,13 @@
       "when": 1781631655034,
       "tag": "0008_unusual_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782261363644,
+      "tag": "0009_giant_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
+import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
 import { SearchIcon } from "@/components/icons";
 import { Input } from "@/components/ui/Input";
@@ -20,15 +21,20 @@ const SCOPES = [
 export default function LibraryBrowser({
   initialTracks,
   initialHideDuplicates,
+  initialNormalizeVolume,
 }: {
   initialTracks: TrackDTO[];
   initialHideDuplicates: boolean;
+  initialNormalizeVolume: boolean;
 }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
   const [results, setResults] = useState<TrackDTO[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [hideDuplicates, setHideDuplicates] = useState(initialHideDuplicates);
+  const [normalizeVolume, setNormalizeVolume] = useState(
+    initialNormalizeVolume
+  );
   // Bumped after an edit/delete so client-fetched views re-query.
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -45,6 +51,23 @@ export default function LibraryBrowser({
       setRefreshKey((k) => k + 1);
     } catch {
       setHideDuplicates(!value);
+    }
+  };
+
+  // Optimistic; persist, then push to the player store so PlayerBar reacts
+  // immediately (it owns the <audio> element). Reverted if the save fails.
+  const toggleNormalizeVolume = async (value: boolean) => {
+    setNormalizeVolume(value);
+    usePlayerStore.getState().setNormalizeVolume(value);
+    try {
+      await api("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ normalizeVolume: value }),
+      });
+    } catch {
+      setNormalizeVolume(!value);
+      usePlayerStore.getState().setNormalizeVolume(!value);
     }
   };
 
@@ -132,6 +155,15 @@ export default function LibraryBrowser({
             className="h-4 w-4 accent-accent"
           />
           Hide duplicates from friends&apos; libraries
+        </label>
+        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-fg-muted">
+          <input
+            type="checkbox"
+            checked={normalizeVolume}
+            onChange={(e) => toggleNormalizeVolume(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Normalize volume across tracks
         </label>
       </div>
 

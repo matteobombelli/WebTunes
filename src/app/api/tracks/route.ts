@@ -5,6 +5,7 @@ import { db, isUniqueViolation } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { imageKindFromMime } from "@/lib/image-upload";
+import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
@@ -82,6 +83,9 @@ export async function POST(req: NextRequest) {
   }
 
   const meta = await extractTrackMetadata(buffer, file.type, file.name);
+  // Best-effort loudness measurement for playback normalization; null on any
+  // failure, exactly like art/lyrics — it must never fail an upload.
+  const loudnessLufs = await analyzeLoudnessLufs(buffer, ext);
 
   const trackId = randomUUID();
   // The client-supplied filename is untrusted; only allowlisted extensions
@@ -118,6 +122,7 @@ export async function POST(req: NextRequest) {
         artist: meta.artist,
         album: meta.album,
         durationSec: meta.durationSec,
+        loudnessLufs,
         s3Key,
         artS3Key,
         mimeType: audioType,
