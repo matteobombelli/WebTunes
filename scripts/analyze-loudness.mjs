@@ -95,6 +95,32 @@ async function analyze(buffer, ext) {
   }
 }
 
+// A hard wall-clock cap that settles even if the inner promise never does
+// (a dead socket mid-stream-read leaves transformToByteArray hung forever,
+// which otherwise exits Node with code 13, "unsettled top-level await").
+// Attaches handlers to `promise` so its late rejection can't go unhandled.
+function withTimeout(promise, ms, onTimeout) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (v) => (clearTimeout(t), resolve(v)),
+      (e) => (clearTimeout(t), reject(e))
+    );
+  });
+}
+
+async function fetchAndAnalyze(s3_key, signal) {
+  const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: s3_key }), {
+    abortSignal: signal,
+  });
+  const buffer = Buffer.from(await obj.Body.transformToByteArray());
+  const ext = s3_key.split(".").pop() ?? "bin";
+  return analyze(buffer, ext);
+}
+
 const { rows } = await pool.query(
   `select id, s3_key from tracks where loudness_lufs is null order by created_at`
 );
@@ -104,13 +130,14 @@ let done = 0;
 let failed = 0;
 for (const { id, s3_key } of rows) {
   try {
-    // Abort a stalled download instead of hanging the whole backfill forever.
-    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: s3_key }), {
-      abortSignal: AbortSignal.timeout(60_000),
-    });
-    const buffer = Buffer.from(await obj.Body.transformToByteArray());
-    const ext = s3_key.split(".").pop() ?? "bin";
-    const lufs = await analyze(buffer, ext);
+    // Abort the request and force-settle if a download/stream-read stalls,
+    // so one bad object can never wedge the whole backfill.
+    const controller = new AbortController();
+    const lufs = await withTimeout(
+      fetchAndAnalyze(s3_key, controller.signal),
+      90_000,
+      () => controller.abort()
+    );
     if (lufs === null) {
       failed++;
       console.warn(`  ${id} — unmeasurable (silence/decode error), leaving NULL`);
