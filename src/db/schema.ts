@@ -26,6 +26,9 @@ export const users = pgTable("users", {
     .notNull()
     .default(true),
   normalizeVolume: boolean("normalize_volume").notNull().default(true),
+  // "Play similar" variation level 0..4 (0 = very random … 4 = pure
+  // deterministic cosine). Maps to a Gumbel-sampling sigma in lib/similar.ts.
+  similarVariation: integer("similar_variation").notNull().default(2),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 

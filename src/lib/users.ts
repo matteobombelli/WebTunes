@@ -55,6 +55,7 @@ export async function getDisplayName(userId: string): Promise<string | null> {
 export type UserSettings = {
   hideFriendDuplicates: boolean;
   normalizeVolume: boolean;
+  similarVariation: number;
 };
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {
@@ -62,10 +63,17 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
     .select({
       hideFriendDuplicates: users.hideFriendDuplicates,
       normalizeVolume: users.normalizeVolume,
+      similarVariation: users.similarVariation,
     })
     .from(users)
     .where(eq(users.id, userId));
-  return row ?? { hideFriendDuplicates: true, normalizeVolume: true };
+  return (
+    row ?? {
+      hideFriendDuplicates: true,
+      normalizeVolume: true,
+      similarVariation: 2,
+    }
+  );
 }
 
 export async function updateUserSettings(
@@ -79,6 +87,7 @@ export async function updateUserSettings(
     .returning({
       hideFriendDuplicates: users.hideFriendDuplicates,
       normalizeVolume: users.normalizeVolume,
+      similarVariation: users.similarVariation,
     });
   return row;
 }

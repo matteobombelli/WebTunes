@@ -29,8 +29,8 @@ export function usePlaySimilarRefill() {
     if (upcoming > REFILL_THRESHOLD) return;
 
     fetchingRef.current = true;
-    const offset = usePlayerStore.getState().similarOffset;
-    fetchSimilarTracks(similarSeedId, offset, REFILL_COUNT)
+    const seen = usePlayerStore.getState().similarSeen;
+    fetchSimilarTracks(similarSeedId, seen, REFILL_COUNT)
       .then((tracks) => {
         // The user may have switched modes/seed while the fetch was in flight.
         const s = usePlayerStore.getState();

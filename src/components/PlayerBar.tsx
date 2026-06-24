@@ -66,7 +66,7 @@ export default function PlayerBar({
     if (s.index < 0) return;
     const seed = s.queue[s.index];
     try {
-      const similar = await fetchSimilarTracks(seed.id, 0, 10);
+      const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
       // No embedding for the seed yet (or nothing similar) — stay off.
       if (similar.length === 0) return;
       usePlayerStore.getState().startSimilar(seed.id, similar);

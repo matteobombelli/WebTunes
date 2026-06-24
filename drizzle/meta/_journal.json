@@ -78,6 +78,13 @@
       "when": 1782324533373,
       "tag": "0010_ordinary_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782333319042,
+      "tag": "0011_steep_catseye",
+      "breakpoints": true
     }
   ]
 }

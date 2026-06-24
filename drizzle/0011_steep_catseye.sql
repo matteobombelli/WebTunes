@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "similar_variation" integer DEFAULT 2 NOT NULL;

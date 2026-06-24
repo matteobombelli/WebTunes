@@ -3,6 +3,7 @@ import { getUserSettings } from "@/lib/users";
 import { MobileNav, MobileTopBar } from "@/components/MobileNav";
 import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
+import SettingsModal from "@/components/SettingsModal";
 import Sidebar from "@/components/Sidebar";
 import UploadProgressBar from "@/components/UploadProgressBar";
 
@@ -12,7 +13,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requirePageUser();
-  const { normalizeVolume } = await getUserSettings(user.id);
+  const { normalizeVolume, similarVariation } = await getUserSettings(user.id);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -27,6 +28,7 @@ export default async function AppLayout({
       </div>
       <PlayerBar initialNormalizeVolume={normalizeVolume} />
       <MobileNav />
+      <SettingsModal initialSimilarVariation={similarVariation} />
     </div>
   );
 }

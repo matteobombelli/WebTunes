@@ -96,11 +96,17 @@ setup, and architecture rationale.
   `.transformers-cache/`) into a 512-d L2-normalized vector stored in the
   `track_embeddings` 1:1 side table (kept off the `tracks` row so it never loads
   in hot list/search paths). Best-effort like loudness — failure stores no row.
-  `GET /api/tracks/[id]/similar?offset&limit` ranks accessible tracks by cosine
-  (brute-force JS, fine at personal scale); the PlayerBar toggle seeds a
-  fixed-seed, auto-refilling queue. `scripts/analyze-clap-embeddings.mjs`
-  backfills. Both the lib and the script must share the same model id + dtype
-  (fp32) or embeddings stop being comparable.
+  `POST /api/tracks/[id]/similar` (body `{ limit, excludeIds }`) ranks accessible
+  tracks by cosine (brute-force JS, fine at personal scale) with Gumbel-top-k
+  sampling whose noise scale comes from the viewer's `users.similar_variation`
+  (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`; 4 = deterministic cosine).
+  The PlayerBar toggle seeds a fixed-seed, auto-refilling queue; the client
+  sends already-served ids in `excludeIds` (POST body, not a query string) to
+  avoid repeats, since sampling isn't deterministic. The variation slider +
+  volume-normalization toggle live in the global `SettingsModal` (gear in the
+  Sidebar / mobile top bar). `scripts/analyze-clap-embeddings.mjs` backfills.
+  Both the lib and the script must share the same model id + dtype (fp32) or
+  embeddings stop being comparable.
 - Image uploads (track cover art, playlist covers) are resolved through the
   `lib/image-upload.ts` allowlist — never echo the browser-supplied MIME type
   or filename extension back into the stored S3 Content-Type/key, since the

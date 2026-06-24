@@ -23,16 +23,22 @@ export async function api<T = unknown>(
   return res.json() as Promise<T>;
 }
 
-// Tracks similar to a seed track, for the "play similar" radio. Paginate with a
-// growing offset to pull fresh, non-repeating batches; fewer than `limit`
-// results means the similar pool is exhausted.
+// Tracks similar to a seed track, for the "play similar" radio. Pass the
+// already-served ids in `excludeIds` to avoid repeats (sampling isn't
+// deterministic); fewer than `limit` results means the similar pool is
+// exhausted.
 export async function fetchSimilarTracks(
   seedId: string,
-  offset: number,
+  excludeIds: string[],
   limit: number
 ): Promise<TrackDTO[]> {
   const { tracks } = await api<{ tracks: TrackDTO[] }>(
-    `/tracks/${seedId}/similar?offset=${offset}&limit=${limit}`
+    `/tracks/${seedId}/similar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ excludeIds, limit }),
+    }
   );
   return tracks;
 }

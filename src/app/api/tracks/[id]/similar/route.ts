@@ -4,16 +4,17 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { findSimilarTracks } from "@/lib/similar";
 import { isUuid } from "@/lib/validate";
 
-// Tracks similar to the seed track (by CLAP-embedding cosine), for "play
-// similar". The client seeds with offset=0 and paginates (offset += batch) to
-// pull fresh, non-repeating batches; fewer than `limit` results means the pool
-// is exhausted. Also serves the future mobile client.
-const querySchema = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(50).default(10),
+// Tracks similar to the seed track (by CLAP-embedding cosine, with the viewer's
+// variation level mixed in), for "play similar". POST so the client can send
+// the already-served ids (`excludeIds`) — which grow over a session — in the
+// body rather than a length-capped query string. Also serves the future mobile
+// client. Fewer than `limit` results means the similar pool is exhausted.
+const bodySchema = z.object({
+  limit: z.number().int().min(1).max(50).default(10),
+  excludeIds: z.array(z.string()).max(10_000).default([]),
 });
 
-export async function GET(
+export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -25,12 +26,9 @@ export async function GET(
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
 
-  const parsed = querySchema.safeParse({
-    offset: req.nextUrl.searchParams.get("offset") ?? undefined,
-    limit: req.nextUrl.searchParams.get("limit") ?? undefined,
-  });
+  const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid query" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
   const tracks = await findSimilarTracks(user.id, id, parsed.data);

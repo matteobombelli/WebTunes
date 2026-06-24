@@ -29,8 +29,11 @@ type PlayerState = {
   playSimilar: boolean;
   /** The seed track id similarity is ranked against; frozen when enabled. */
   similarSeedId: string | null;
-  /** How many similar tracks have been pulled (the next fetch's offset). */
-  similarOffset: number;
+  /** Ids already served this radio session (seed + every queued track), sent
+   *  as the exclude list so refills don't repeat. */
+  similarSeen: string[];
+  /** Whether the settings modal is open (triggered from PlayerBar/MobileTopBar). */
+  settingsOpen: boolean;
   isPlaying: boolean;
   volume: number; // 0..1
   /** When true, attenuate each track toward a common loudness target. */
@@ -59,6 +62,7 @@ type PlayerState = {
   advanceSimilar: (tracks: TrackDTO[]) => void;
   /** Disable "play similar" (leaves the current queue intact). */
   stopSimilar: () => void;
+  setSettingsOpen: (open: boolean) => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
@@ -79,7 +83,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   unshuffledQueue: null,
   playSimilar: false,
   similarSeedId: null,
-  similarOffset: 0,
+  similarSeen: [],
+  settingsOpen: false,
   isPlaying: false,
   volume: 1,
   normalizeVolume: true,
@@ -93,7 +98,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const stopSim = {
       playSimilar: false,
       similarSeedId: null,
-      similarOffset: 0,
+      similarSeen: [],
     };
     if (get().shuffled && tracks.length > 0) {
       // Clicked track first, rest shuffled behind it.
@@ -208,7 +213,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const stopSim = {
       playSimilar: false,
       similarSeedId: null,
-      similarOffset: 0,
+      similarSeen: [],
     };
     if (!s.shuffled) {
       if (s.index < 0) {
@@ -250,7 +255,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       unshuffledQueue: null,
       playSimilar: true,
       similarSeedId: seedId,
-      similarOffset: tracks.length,
+      similarSeen: [seedId, ...tracks.map((t) => t.id)],
     });
   },
 
@@ -259,12 +264,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!s.playSimilar) return;
     set({
       queue: [...s.queue, ...tracks],
-      similarOffset: s.similarOffset + tracks.length,
+      similarSeen: [...s.similarSeen, ...tracks.map((t) => t.id)],
     });
   },
 
   stopSimilar: () =>
-    set({ playSimilar: false, similarSeedId: null, similarOffset: 0 }),
+    set({ playSimilar: false, similarSeedId: null, similarSeen: [] }),
+
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 
   toggle: () => {
     if (get().index >= 0) set((s) => ({ isPlaying: !s.isPlaying }));

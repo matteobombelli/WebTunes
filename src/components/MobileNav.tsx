@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
+import { usePlayerStore } from "@/stores/player";
 import {
   DownloadIcon,
   ListIcon,
   LogoutIcon,
   MusicIcon,
+  SettingsIcon,
   UsersIcon,
 } from "@/components/icons";
 
@@ -52,16 +54,25 @@ export function MobileTopBar() {
       >
         <span className="text-accent-bright">Web</span>Tunes
       </Link>
-      <form action={signOutAction}>
+      <div className="flex items-center gap-4">
         <button
-          type="submit"
-          aria-label="Sign out"
-          className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
+          onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
+          aria-label="Settings"
+          className="text-fg-muted hover:text-white"
         >
-          <LogoutIcon size={16} />
-          Sign out
+          <SettingsIcon size={18} />
         </button>
-      </form>
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            aria-label="Sign out"
+            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
+          >
+            <LogoutIcon size={16} />
+            Sign out
+          </button>
+        </form>
+      </div>
     </header>
   );
 }

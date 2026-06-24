@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
+import { usePlayerStore } from "@/stores/player";
 import {
   DownloadIcon,
   FolderIcon,
   MusicIcon,
+  SettingsIcon,
   UsersIcon,
 } from "@/components/icons";
 
@@ -58,14 +60,23 @@ export default function Sidebar({
           {userName ?? "Account"}
         </p>
         <p className="truncate text-xs text-fg-subtle">{userEmail}</p>
-        <form action={signOutAction}>
+        <div className="mt-2 flex items-center gap-4">
           <button
-            type="submit"
-            className="mt-2 text-xs text-fg-muted underline-offset-2 hover:text-white hover:underline"
+            onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
           >
-            Sign out
+            <SettingsIcon size={14} />
+            Settings
           </button>
-        </form>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="text-xs text-fg-muted underline-offset-2 hover:text-white hover:underline"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </aside>
   );
