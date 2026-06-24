@@ -104,7 +104,10 @@ let done = 0;
 let failed = 0;
 for (const { id, s3_key } of rows) {
   try {
-    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: s3_key }));
+    // Abort a stalled download instead of hanging the whole backfill forever.
+    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: s3_key }), {
+      abortSignal: AbortSignal.timeout(60_000),
+    });
     const buffer = Buffer.from(await obj.Body.transformToByteArray());
     const ext = s3_key.split(".").pop() ?? "bin";
     const lufs = await analyze(buffer, ext);
