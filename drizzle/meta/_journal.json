@@ -85,6 +85,13 @@
       "when": 1782333319042,
       "tag": "0011_steep_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782334521644,
+      "tag": "0012_brief_mauler",
+      "breakpoints": true
     }
   ]
 }

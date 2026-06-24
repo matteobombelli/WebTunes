@@ -30,8 +30,10 @@ const TARGET_LUFS = -18;
 
 export default function PlayerBar({
   initialNormalizeVolume,
+  initialSimilarDrift,
 }: {
   initialNormalizeVolume: boolean;
+  initialSimilarDrift: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
@@ -58,20 +60,31 @@ export default function PlayerBar({
   // Toggle "play similar": off → seed from the current track and fetch the
   // first batch; on → stop refilling (leaving the queue as-is).
   const handlePlaySimilar = async () => {
-    const s = usePlayerStore.getState();
-    if (s.playSimilar) {
-      s.stopSimilar();
+    const store = usePlayerStore.getState();
+    if (store.playSimilar) {
+      store.stopSimilar();
       return;
     }
-    if (s.index < 0) return;
-    const seed = s.queue[s.index];
+    if (store.index < 0) return;
+    const seed = store.queue[store.index];
+    // Enable optimistically so the button turns active immediately; the first
+    // batch loads asynchronously and populates the queue when it lands.
+    store.enableSimilar(seed.id);
     try {
       const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
-      // No embedding for the seed yet (or nothing similar) — stay off.
-      if (similar.length === 0) return;
-      usePlayerStore.getState().startSimilar(seed.id, similar);
+      const s2 = usePlayerStore.getState();
+      // Toggled off (or re-seeded) while loading — drop this stale result.
+      if (!s2.playSimilar || s2.similarSeedId !== seed.id) return;
+      // No embedding for the seed yet (or nothing similar) — turn back off.
+      if (similar.length === 0) {
+        s2.stopSimilar();
+        return;
+      }
+      s2.startSimilar(seed.id, similar);
     } catch {
-      // Leave the mode off on failure.
+      // Revert the optimistic enable on failure (unless re-toggled meanwhile).
+      const s2 = usePlayerStore.getState();
+      if (s2.playSimilar && s2.similarSeedId === seed.id) s2.stopSimilar();
     }
   };
   const {
@@ -135,6 +148,12 @@ export default function PlayerBar({
   useEffect(() => {
     usePlayerStore.getState().setNormalizeVolume(initialNormalizeVolume);
   }, [initialNormalizeVolume]);
+
+  // Hydrate the persisted "play similar drift" setting once, so the refill hook
+  // and the settings toggle share one source of truth.
+  useEffect(() => {
+    usePlayerStore.getState().setSimilarDrift(initialSimilarDrift);
+  }, [initialSimilarDrift]);
 
   // Effective volume = master slider × per-track normalization factor. The
   // factor only ever attenuates (≤ 1): loud tracks are pulled down toward

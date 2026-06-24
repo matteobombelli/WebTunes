@@ -100,10 +100,12 @@ setup, and architecture rationale.
   tracks by cosine (brute-force JS, fine at personal scale) with Gumbel-top-k
   sampling whose noise scale comes from the viewer's `users.similar_variation`
   (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`; 4 = deterministic cosine).
-  The PlayerBar toggle seeds a fixed-seed, auto-refilling queue; the client
-  sends already-served ids in `excludeIds` (POST body, not a query string) to
-  avoid repeats, since sampling isn't deterministic. The variation slider +
-  volume-normalization toggle live in the global `SettingsModal` (gear in the
+  The PlayerBar toggle seeds an auto-refilling queue; the client sends
+  already-served ids in `excludeIds` (POST body, not a query string) to avoid
+  repeats, since sampling isn't deterministic. With `users.similar_drift` (the
+  default) each refill re-seeds from the currently-playing track so the radio
+  drifts; off, it stays anchored to the original seed. The drift + variation +
+  volume-normalization controls live in the global `SettingsModal` (gear in the
   Sidebar / mobile top bar). `scripts/analyze-clap-embeddings.mjs` backfills.
   Both the lib and the script must share the same model id + dtype (fp32) or
   embeddings stop being comparable.

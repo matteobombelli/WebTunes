@@ -27,6 +27,7 @@ export default function SettingsModal({
 }) {
   const open = usePlayerStore((s) => s.settingsOpen);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
+  const similarDrift = usePlayerStore((s) => s.similarDrift);
   const [variation, setVariation] = useState(initialSimilarVariation);
 
   if (!open) return null;
@@ -42,6 +43,19 @@ export default function SettingsModal({
       });
     } catch {
       usePlayerStore.getState().setNormalizeVolume(!value); // revert on failure
+    }
+  };
+
+  const toggleDrift = async (value: boolean) => {
+    usePlayerStore.getState().setSimilarDrift(value);
+    try {
+      await api("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ similarDrift: value }),
+      });
+    } catch {
+      usePlayerStore.getState().setSimilarDrift(!value); // revert on failure
     }
   };
 
@@ -88,6 +102,20 @@ export default function SettingsModal({
           />
           Normalize volume across tracks
         </label>
+
+        <label className="mt-4 flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
+          <input
+            type="checkbox"
+            checked={similarDrift}
+            onChange={(e) => toggleDrift(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Play similar follows the current track
+        </label>
+        <p className="mt-1 text-xs text-fg-muted">
+          On, the radio drifts as it plays; off, it stays anchored to the track
+          you started from.
+        </p>
 
         <div className="mt-5">
           <div className="mb-1 flex items-center justify-between">

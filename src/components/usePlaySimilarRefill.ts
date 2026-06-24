@@ -28,9 +28,18 @@ export function usePlaySimilarRefill() {
     const upcoming = queueLength - index - 1;
     if (upcoming > REFILL_THRESHOLD) return;
 
+    const st = usePlayerStore.getState();
+    // Initial batch not loaded yet (optimistic enable): the toggle handler owns
+    // the first fetch, so don't race it. It bumps similarSeen past 1 on landing.
+    if (st.similarSeen.length <= 1) return;
+
     fetchingRef.current = true;
-    const seen = usePlayerStore.getState().similarSeen;
-    fetchSimilarTracks(similarSeedId, seen, REFILL_COUNT)
+    // Drift: rank each refill against the track playing now so the radio
+    // evolves; otherwise stay anchored to the original frozen seed.
+    const seedId = st.similarDrift
+      ? st.queue[st.index]?.id ?? similarSeedId
+      : similarSeedId;
+    fetchSimilarTracks(seedId, st.similarSeen, REFILL_COUNT)
       .then((tracks) => {
         // The user may have switched modes/seed while the fetch was in flight.
         const s = usePlayerStore.getState();

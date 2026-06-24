@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "similar_drift" boolean DEFAULT true NOT NULL;

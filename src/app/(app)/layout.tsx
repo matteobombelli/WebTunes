@@ -13,7 +13,8 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requirePageUser();
-  const { normalizeVolume, similarVariation } = await getUserSettings(user.id);
+  const { normalizeVolume, similarVariation, similarDrift } =
+    await getUserSettings(user.id);
 
   return (
     <div className="flex h-dvh flex-col">
@@ -26,7 +27,10 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
-      <PlayerBar initialNormalizeVolume={normalizeVolume} />
+      <PlayerBar
+        initialNormalizeVolume={normalizeVolume}
+        initialSimilarDrift={similarDrift}
+      />
       <MobileNav />
       <SettingsModal initialSimilarVariation={similarVariation} />
     </div>

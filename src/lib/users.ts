@@ -56,6 +56,7 @@ export type UserSettings = {
   hideFriendDuplicates: boolean;
   normalizeVolume: boolean;
   similarVariation: number;
+  similarDrift: boolean;
 };
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {
@@ -64,6 +65,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
       hideFriendDuplicates: users.hideFriendDuplicates,
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
+      similarDrift: users.similarDrift,
     })
     .from(users)
     .where(eq(users.id, userId));
@@ -72,6 +74,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
       hideFriendDuplicates: true,
       normalizeVolume: true,
       similarVariation: 2,
+      similarDrift: true,
     }
   );
 }
@@ -88,6 +91,7 @@ export async function updateUserSettings(
       hideFriendDuplicates: users.hideFriendDuplicates,
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
+      similarDrift: users.similarDrift,
     });
   return row;
 }

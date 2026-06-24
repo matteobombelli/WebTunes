@@ -38,6 +38,9 @@ type PlayerState = {
   volume: number; // 0..1
   /** When true, attenuate each track toward a common loudness target. */
   normalizeVolume: boolean;
+  /** When true, "play similar" refills seed from the currently-playing track
+   *  (the radio drifts); when false they stay anchored to similarSeedId. */
+  similarDrift: boolean;
   currentTime: number;
   duration: number;
   /** One-shot seek target consumed by PlayerBar's audio element. */
@@ -55,6 +58,9 @@ type PlayerState = {
   /** Drop everything after the current track. */
   clearUpcoming: () => void;
   toggleShuffle: () => void;
+  /** Optimistically enable "play similar" (the toggle reflects it immediately)
+   *  before the first batch loads; startSimilar then populates the queue. */
+  enableSimilar: (seedId: string) => void;
   /** Enable "play similar": keep the current track playing, replace the rest of
    *  the queue with the first batch of similar tracks, freeze the seed. */
   startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
@@ -69,6 +75,7 @@ type PlayerState = {
   seekTo: (seconds: number) => void;
   setVolume: (volume: number) => void;
   setNormalizeVolume: (normalizeVolume: boolean) => void;
+  setSimilarDrift: (similarDrift: boolean) => void;
 
   // Setters owned by PlayerBar (the single <audio> element).
   _setProgress: (currentTime: number, duration: number) => void;
@@ -88,6 +95,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   volume: 1,
   normalizeVolume: true,
+  similarDrift: true,
   currentTime: 0,
   duration: 0,
   seekRequest: null,
@@ -243,6 +251,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
+  enableSimilar: (seedId) => {
+    const s = get();
+    if (s.index < 0) return;
+    // Flag-only, so the toggle turns active instantly; the queue is left as-is
+    // (current track keeps playing) until startSimilar lands the first batch.
+    // similarSeen = [seed] signals "initial batch not loaded yet" to the refill
+    // hook so it doesn't race the toggle handler's fetch.
+    set({
+      playSimilar: true,
+      similarSeedId: seedId,
+      similarSeen: [seedId],
+      shuffled: false,
+      unshuffledQueue: null,
+    });
+  },
+
   startSimilar: (seedId, tracks) => {
     const s = get();
     if (s.index < 0) return;
@@ -301,6 +325,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekTo: (seconds) => set({ seekRequest: seconds }),
   setVolume: (volume) => set({ volume }),
   setNormalizeVolume: (normalizeVolume) => set({ normalizeVolume }),
+  setSimilarDrift: (similarDrift) => set({ similarDrift }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),

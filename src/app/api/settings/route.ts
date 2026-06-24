@@ -7,6 +7,7 @@ const patchSchema = z.object({
   hideFriendDuplicates: z.boolean().optional(),
   normalizeVolume: z.boolean().optional(),
   similarVariation: z.number().int().min(0).max(4).optional(),
+  similarDrift: z.boolean().optional(),
 });
 
 export async function GET() {
