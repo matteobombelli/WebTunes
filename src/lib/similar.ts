@@ -1,4 +1,13 @@
-import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  cosineDistance,
+  eq,
+  inArray,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db } from "@/db";
 import { trackEmbeddings, tracks, users } from "@/db/schema";
 import { canAccessTrack, friendIdsOf } from "@/lib/friends";
@@ -10,10 +19,14 @@ import type { TrackDTO } from "@/lib/types";
 // scale (sigma). 0 = very random, 4 = pure deterministic cosine. Sampling keys
 // each candidate by `cosine + sigma * Gumbel`, then takes the top-k; with
 // sigma 0 the noise vanishes and it degrades to deterministic top-k by cosine.
-// Sigma is on the scale of cosine similarities (CLAP cosines span ~0.3–0.9), so
-// at "default" the noise meaningfully reshuffles among similar tracks while the
-// far-less-similar ones still rarely win.
 const SIGMA_BY_VARIATION = [1.2, 0.45, 0.2, 0.07, 0];
+
+// Nearest-neighbour candidates pulled from pgvector before sampling. Sampling
+// (for variation > 0) happens within this pool, so it bounds how far "very
+// random" can roam — the top POOL_SIZE most-similar tracks, which keeps even
+// random picks related. Far larger than any `limit`, and cheap (no vectors are
+// transferred — pgvector ranks in-DB and returns only these rows).
+const POOL_SIZE = 200;
 
 /**
  * Tracks acoustically similar to a seed track, ranked by CLAP-embedding cosine
@@ -21,11 +34,12 @@ const SIGMA_BY_VARIATION = [1.2, 0.45, 0.2, 0.07, 0];
  * library (own tracks + friends' non-private tracks, minus hidden duplicates),
  * so a result can never leak a track the viewer couldn't otherwise play.
  *
- * The viewer's `similar_variation` setting controls how much randomness is
- * mixed in (so the same seed doesn't always produce the same run). Repeats are
- * avoided by passing the already-served ids in `excludeIds`. Returns [] when the
- * seed is inaccessible or has no embedding. Brute-force in JS is fine at
- * personal-library scale (hundreds–low thousands of tracks).
+ * pgvector ranks the candidate pool in the database (`embedding <=> seed`), so
+ * only POOL_SIZE rows come back — no embeddings cross the wire. The viewer's
+ * `similar_variation` then controls how much randomness is mixed in (so the same
+ * seed doesn't always produce the same run); repeats are avoided by excluding
+ * the already-served ids. Returns [] when the seed is inaccessible or has no
+ * embedding.
  */
 export async function findSimilarTracks(
   userId: string,
@@ -52,19 +66,17 @@ export async function findSimilarTracks(
   const sigma = SIGMA_BY_VARIATION[similarVariation] ?? 0;
   const friendIds = await friendIdsOf(userId);
 
-  // Inner-join the embedding table so only embedded tracks are candidates.
+  // Cosine distance computed in-DB; ascending = most similar first.
+  const distance = cosineDistance(trackEmbeddings.embedding, seedVec);
   const rows = await db
-    .select({
-      track: tracks,
-      ownerName: users.name,
-      embedding: trackEmbeddings.embedding,
-    })
+    .select({ track: tracks, ownerName: users.name, distance })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .innerJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))
     .where(
       and(
         ne(tracks.id, seedTrackId),
+        excludeIds.length ? notInArray(tracks.id, excludeIds) : undefined,
         or(
           eq(tracks.ownerId, userId),
           friendIds.length
@@ -76,13 +88,12 @@ export async function findSimilarTracks(
             : sql`false`
         )
       )
-    );
+    )
+    .orderBy(distance)
+    .limit(POOL_SIZE);
 
-  const exclude = new Set(excludeIds);
-  const scored = rows
-    .filter((r) => !exclude.has(r.track.id))
-    .map((r) => ({ r, score: dot(seedVec, r.embedding) }));
-
+  // cosine distance (0..2) → similarity score, so larger = more similar.
+  const scored = rows.map((r) => ({ r, score: 1 - Number(r.distance) }));
   const chosen = sampleTopK(scored, limit, sigma);
   return chosen.map(({ r }) =>
     toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName)
@@ -115,12 +126,4 @@ function sampleTopK<T extends { r: { track: { id: string } } }>(
     .sort((a, b) => b.key - a.key)
     .slice(0, k)
     .map((x) => x.s);
-}
-
-/** Dot product; equals cosine because CLAP embeddings are stored L2-normalized. */
-function dot(a: number[], b: number[]): number {
-  let s = 0;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) s += a[i] * b[i];
-  return s;
 }

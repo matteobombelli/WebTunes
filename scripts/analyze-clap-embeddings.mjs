@@ -184,7 +184,10 @@ for (const { id, s3_key } of rows) {
     await pool.query(
       `insert into track_embeddings (track_id, embedding) values ($1, $2)
        on conflict (track_id) do nothing`,
-      [id, vec]
+      // pgvector text literal: '[a,b,c]'. node-pg doesn't know the vector type,
+      // so format it ourselves (the drizzle insert path in the app uses the
+      // vector column type and passes a number[] directly).
+      [id, `[${vec.join(",")}]`]
     );
     done++;
     console.log(`  ${id} — embedded (${vec.length}-d)`);

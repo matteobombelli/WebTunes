@@ -10,7 +10,7 @@ import {
   check,
   boolean,
   doublePrecision,
-  real,
+  vector,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -145,7 +145,7 @@ export const trackEmbeddings = pgTable("track_embeddings", {
   trackId: uuid("track_id")
     .primaryKey()
     .references(() => tracks.id, { onDelete: "cascade" }),
-  embedding: real("embedding").array().notNull(),
+  embedding: vector("embedding", { dimensions: 512 }).notNull(),
 });
 
 export const friendships = pgTable(
