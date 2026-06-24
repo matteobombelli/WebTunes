@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# CLAP model weights cache (downloaded on first embed; see lib/clap-embedding.ts)
+/.transformers-cache

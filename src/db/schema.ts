@@ -10,6 +10,7 @@ import {
   check,
   boolean,
   doublePrecision,
+  real,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -127,6 +128,19 @@ export const tracks = pgTable(
     uniqueIndex("tracks_owner_content_hash_idx").on(t.ownerId, t.contentHash),
   ]
 );
+
+// CLAP audio embeddings, kept in a 1:1 side table (not a tracks column) so the
+// 512-float vector never loads in the hot track-list/detail/search paths and
+// gets cleaned up by the cascade when its track is deleted. Populated
+// best-effort on upload (lib/clap-embedding.ts) and by scripts/analyze-clap-
+// embeddings.mjs; absence of a row means "not yet analyzed". L2-normalized, so
+// cosine similarity is a plain dot product. See lib/similar.ts.
+export const trackEmbeddings = pgTable("track_embeddings", {
+  trackId: uuid("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  embedding: real("embedding").array().notNull(),
+});
 
 export const friendships = pgTable(
   "friendships",

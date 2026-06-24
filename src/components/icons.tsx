@@ -137,6 +137,13 @@ export const ShuffleIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Twin sparkles — "play similar" (auto-generated radio from a seed track). */
+export const SimilarIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 3 11.3 7.7 16 9 11.3 10.3 10 15 8.7 10.3 4 9 8.7 7.7Z M17.5 13.5 18.2 15.8 20.5 16.5 18.2 17.2 17.5 19.5 16.8 17.2 14.5 16.5 16.8 15.8Z" />
+  </Svg>
+);
+
 export const QueueIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />

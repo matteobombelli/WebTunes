@@ -1,4 +1,5 @@
 import { BASE_PATH } from "./base-path";
+import type { TrackDTO } from "./types";
 
 // Client-side fetch wrapper. next/link and the router add the basePath
 // automatically, but plain fetch() does not — this is the one place that
@@ -20,6 +21,20 @@ export async function api<T = unknown>(
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+// Tracks similar to a seed track, for the "play similar" radio. Paginate with a
+// growing offset to pull fresh, non-repeating batches; fewer than `limit`
+// results means the similar pool is exhausted.
+export async function fetchSimilarTracks(
+  seedId: string,
+  offset: number,
+  limit: number
+): Promise<TrackDTO[]> {
+  const { tracks } = await api<{ tracks: TrackDTO[] }>(
+    `/tracks/${seedId}/similar?offset=${offset}&limit=${limit}`
+  );
+  return tracks;
 }
 
 // Stable stream URL for a track (302s to a presigned S3 URL). The service

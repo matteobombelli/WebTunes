@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, streamSrc } from "@/lib/api";
+import { api, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
+import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import QueuePanel from "@/components/QueuePanel";
 import TrackArt from "@/components/TrackArt";
 import {
@@ -13,6 +14,7 @@ import {
   PrevIcon,
   QueueIcon,
   ShuffleIcon,
+  SimilarIcon,
   VolumeIcon,
 } from "@/components/icons";
 
@@ -47,7 +49,31 @@ export default function PlayerBar({
   const duration = usePlayerStore((s) => s.duration);
   const seekRequest = usePlayerStore((s) => s.seekRequest);
   const shuffled = usePlayerStore((s) => s.shuffled);
+  const playSimilar = usePlayerStore((s) => s.playSimilar);
   const [queueOpen, setQueueOpen] = useState(false);
+
+  // Keep the "play similar" radio's queue topped up while it's active.
+  usePlaySimilarRefill();
+
+  // Toggle "play similar": off → seed from the current track and fetch the
+  // first batch; on → stop refilling (leaving the queue as-is).
+  const handlePlaySimilar = async () => {
+    const s = usePlayerStore.getState();
+    if (s.playSimilar) {
+      s.stopSimilar();
+      return;
+    }
+    if (s.index < 0) return;
+    const seed = s.queue[s.index];
+    try {
+      const similar = await fetchSimilarTracks(seed.id, 0, 10);
+      // No embedding for the seed yet (or nothing similar) — stay off.
+      if (similar.length === 0) return;
+      usePlayerStore.getState().startSimilar(seed.id, similar);
+    } catch {
+      // Leave the mode off on failure.
+    }
+  };
   const {
     toggle,
     next,
@@ -299,6 +325,14 @@ export default function PlayerBar({
               }`
             )}
             {transportButton(
+              handlePlaySimilar,
+              playSimilar ? "Stop play similar" : "Play similar",
+              <SimilarIcon size={18} />,
+              `h-10 w-10 active:bg-surface-2 ${
+                playSimilar ? "text-accent-bright" : "text-fg-muted"
+              }`
+            )}
+            {transportButton(
               prev,
               "Previous",
               <PrevIcon size={20} />,
@@ -342,6 +376,16 @@ export default function PlayerBar({
             <ShuffleIcon size={16} />,
             `h-10 w-10 hover:bg-surface-2 ${
               shuffled
+                ? "text-accent-bright hover:text-accent-bright"
+                : "text-fg-muted hover:text-white"
+            }`
+          )}
+          {transportButton(
+            handlePlaySimilar,
+            playSimilar ? "Stop play similar" : "Play similar",
+            <SimilarIcon size={16} />,
+            `h-10 w-10 hover:bg-surface-2 ${
+              playSimilar
                 ? "text-accent-bright hover:text-accent-bright"
                 : "text-fg-muted hover:text-white"
             }`

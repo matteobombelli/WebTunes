@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db, isUniqueViolation } from "@/db";
-import { tracks } from "@/db/schema";
+import { trackEmbeddings, tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { embedTrack } from "@/lib/clap-embedding";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
@@ -86,6 +87,8 @@ export async function POST(req: NextRequest) {
   // Best-effort loudness measurement for playback normalization; null on any
   // failure, exactly like art/lyrics — it must never fail an upload.
   const loudnessLufs = await analyzeLoudnessLufs(buffer, ext);
+  // Best-effort CLAP audio embedding for "play similar"; null on any failure.
+  const embedding = await embedTrack(buffer, ext);
 
   const trackId = randomUUID();
   // The client-supplied filename is untrusted; only allowlisted extensions
@@ -132,6 +135,16 @@ export async function POST(req: NextRequest) {
         lyricsSource: meta.lyricsSource,
       })
       .returning();
+    // Store the embedding in its 1:1 side table, best-effort: a missing row
+    // just means this track won't seed/appear in "play similar" until the
+    // backfill script runs — it must never fail the upload.
+    if (embedding) {
+      try {
+        await db.insert(trackEmbeddings).values({ trackId, embedding });
+      } catch {
+        // harmless; leave the track without an embedding
+      }
+    }
     return NextResponse.json(toTrackDTO(track), { status: 201 });
   } catch (err) {
     // Concurrent upload of the same file slipped past the dedupe check.

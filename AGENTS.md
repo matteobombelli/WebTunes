@@ -39,6 +39,14 @@ setup, and architecture rationale.
   - `api.ts` — client fetch wrapper that prepends basePath; `s3.ts`, `email.ts`,
     `metadata.ts`, `types.ts` (DTO shapes shared with client);
     `client-ip.ts` — best-effort client IP for rate limiting (fails closed)
+  - `loudness.ts` — measures integrated loudness (EBU R128 LUFS) via ffmpeg on
+    upload; `image-upload.ts` — allowlist mapping MIME/ext for cover/playlist
+    images (see security note below); `use-persisted-scope.ts` — client hook
+    for the own/all/friends scope selector (localStorage-backed, SSR-safe)
+  - `clap-embedding.ts` — computes a CLAP audio embedding (512-d, via
+    `@huggingface/transformers` + ffmpeg) on upload for "play similar";
+    `similar.ts` — access-respecting cosine nearest-neighbour query over the
+    `track_embeddings` side table
   - `offline/` — PWA download internals: `db.ts` (IndexedDB metadata),
     `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
 - `src/app/api/` — REST-ish JSON routes. Some GET endpoints are unused by the
@@ -77,6 +85,26 @@ setup, and architecture rationale.
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
 - Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
+- Loudness normalization: on upload `lib/loudness.ts` shells out to **ffmpeg**
+  (a runtime dependency — must be on `PATH` in dev and prod) to measure EBU R128
+  loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:
+  failure stores NULL and skips normalization for that track, never fails the
+  upload. `scripts/analyze-loudness.mjs` backfills pre-feature rows.
+- "Play similar" radio: on upload `lib/clap-embedding.ts` decodes audio with
+  ffmpeg and runs the CLAP audio encoder (`@huggingface/transformers`, ONNX,
+  marked `serverExternalPackages`; weights cached in gitignored
+  `.transformers-cache/`) into a 512-d L2-normalized vector stored in the
+  `track_embeddings` 1:1 side table (kept off the `tracks` row so it never loads
+  in hot list/search paths). Best-effort like loudness — failure stores no row.
+  `GET /api/tracks/[id]/similar?offset&limit` ranks accessible tracks by cosine
+  (brute-force JS, fine at personal scale); the PlayerBar toggle seeds a
+  fixed-seed, auto-refilling queue. `scripts/analyze-clap-embeddings.mjs`
+  backfills. Both the lib and the script must share the same model id + dtype
+  (fp32) or embeddings stop being comparable.
+- Image uploads (track cover art, playlist covers) are resolved through the
+  `lib/image-upload.ts` allowlist — never echo the browser-supplied MIME type
+  or filename extension back into the stored S3 Content-Type/key, since the
+  offline SW replays Content-Type from a same-origin cache (stored-XSS risk).
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`

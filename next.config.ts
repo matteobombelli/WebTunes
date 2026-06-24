@@ -43,6 +43,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   basePath: BASE_PATH,
+  // @huggingface/transformers loads onnxruntime-node's native .node binary at
+  // runtime (CLAP audio embeddings, lib/clap-embedding.ts); bundling it breaks
+  // the build, so keep it external and required from node_modules at runtime.
+  serverExternalPackages: ["@huggingface/transformers"],
   experimental: {
     // Proxy buffers request bodies in RAM (default cap 10MB), which truncated
     // track uploads and broke FormData parsing. 100MB covers lossless audio.

@@ -24,6 +24,13 @@ type PlayerState = {
    * object reference — every mutation shares track references between them.
    */
   unshuffledQueue: TrackDTO[] | null;
+  /** "Play similar" radio is active: the queue auto-refills with tracks
+   *  acoustically similar to a frozen seed (see usePlaySimilarRefill). */
+  playSimilar: boolean;
+  /** The seed track id similarity is ranked against; frozen when enabled. */
+  similarSeedId: string | null;
+  /** How many similar tracks have been pulled (the next fetch's offset). */
+  similarOffset: number;
   isPlaying: boolean;
   volume: number; // 0..1
   /** When true, attenuate each track toward a common loudness target. */
@@ -45,6 +52,13 @@ type PlayerState = {
   /** Drop everything after the current track. */
   clearUpcoming: () => void;
   toggleShuffle: () => void;
+  /** Enable "play similar": keep the current track playing, replace the rest of
+   *  the queue with the first batch of similar tracks, freeze the seed. */
+  startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
+  /** Append the next refill batch and advance the pagination offset. */
+  advanceSimilar: (tracks: TrackDTO[]) => void;
+  /** Disable "play similar" (leaves the current queue intact). */
+  stopSimilar: () => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
@@ -63,6 +77,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   index: -1,
   shuffled: false,
   unshuffledQueue: null,
+  playSimilar: false,
+  similarSeedId: null,
+  similarOffset: 0,
   isPlaying: false,
   volume: 1,
   normalizeVolume: true,
@@ -71,6 +88,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekRequest: null,
 
   playQueue: (tracks, startIndex) => {
+    // Starting a brand-new queue means the user picked new content — end any
+    // "play similar" radio so it doesn't keep refilling from the old seed.
+    const stopSim = {
+      playSimilar: false,
+      similarSeedId: null,
+      similarOffset: 0,
+    };
     if (get().shuffled && tracks.length > 0) {
       // Clicked track first, rest shuffled behind it.
       const rest = tracks.filter((_, i) => i !== startIndex);
@@ -80,6 +104,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: tracks,
         isPlaying: true,
         currentTime: 0,
+        ...stopSim,
       });
     } else {
       set({
@@ -88,6 +113,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: null,
         isPlaying: true,
         currentTime: 0,
+        ...stopSim,
       });
     }
   },
@@ -177,9 +203,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   toggleShuffle: () => {
     const s = get();
+    // Shuffle and "play similar" are mutually exclusive ways to order the
+    // queue; turning shuffle on ends the radio.
+    const stopSim = {
+      playSimilar: false,
+      similarSeedId: null,
+      similarOffset: 0,
+    };
     if (!s.shuffled) {
       if (s.index < 0) {
-        set({ shuffled: true });
+        set({ shuffled: true, ...stopSim });
         return;
       }
       const rest = s.queue.filter((_, i) => i !== s.index);
@@ -188,6 +221,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: s.queue,
         queue: [s.queue[s.index], ...shuffle(rest)],
         index: 0,
+        ...stopSim,
       });
     } else {
       if (s.index < 0 || !s.unshuffledQueue) {
@@ -203,6 +237,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       });
     }
   },
+
+  startSimilar: (seedId, tracks) => {
+    const s = get();
+    if (s.index < 0) return;
+    // Keep the current track playing (don't reset isPlaying/currentTime); drop
+    // the rest of the queue and seed it with the first similar batch.
+    set({
+      queue: [s.queue[s.index], ...tracks],
+      index: 0,
+      shuffled: false,
+      unshuffledQueue: null,
+      playSimilar: true,
+      similarSeedId: seedId,
+      similarOffset: tracks.length,
+    });
+  },
+
+  advanceSimilar: (tracks) => {
+    const s = get();
+    if (!s.playSimilar) return;
+    set({
+      queue: [...s.queue, ...tracks],
+      similarOffset: s.similarOffset + tracks.length,
+    });
+  },
+
+  stopSimilar: () =>
+    set({ playSimilar: false, similarSeedId: null, similarOffset: 0 }),
 
   toggle: () => {
     if (get().index >= 0) set((s) => ({ isPlaying: !s.isPlaying }));
