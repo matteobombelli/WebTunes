@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
 import { usePlayerStore } from "@/stores/player";
 import { XIcon } from "@/components/icons";
@@ -22,13 +23,19 @@ const VARIATION_LABELS = [
  */
 export default function SettingsModal({
   initialSimilarVariation,
+  userEmail,
 }: {
   initialSimilarVariation: number;
+  userEmail: string;
 }) {
   const open = usePlayerStore((s) => s.settingsOpen);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
   const similarDrift = usePlayerStore((s) => s.similarDrift);
   const [variation, setVariation] = useState(initialSimilarVariation);
+  const [confirming, setConfirming] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   if (!open) return null;
   const close = () => usePlayerStore.getState().setSettingsOpen(false);
@@ -70,6 +77,26 @@ export default function SettingsModal({
       });
     } catch {
       setVariation(prev); // revert on failure
+    }
+  };
+
+  const emailMatches =
+    emailInput.trim().toLowerCase() === userEmail.toLowerCase();
+
+  const deleteAccount = async () => {
+    if (!emailMatches || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api("/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      await signOutAction(); // clears the cookie and redirects to /login
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Deletion failed");
+      setDeleting(false);
     }
   };
 
@@ -143,6 +170,56 @@ export default function SettingsModal({
             each time; &ldquo;Pure uniform&rdquo; always plays the closest
             matches.
           </p>
+        </div>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>
+          {!confirming ? (
+            <button
+              onClick={() => setConfirming(true)}
+              className="mt-2 rounded-md border border-red-500/40 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+            >
+              Delete account
+            </button>
+          ) : (
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-xs text-fg-muted">
+                This permanently deletes your account, tracks, and playlists.
+                Type <span className="text-fg">{userEmail}</span> to confirm.
+              </p>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="Type your email to confirm"
+                autoComplete="off"
+                className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-fg outline-none focus:border-red-500/60"
+              />
+              {deleteError && (
+                <p className="text-xs text-red-400">{deleteError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={deleteAccount}
+                  disabled={!emailMatches || deleting}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {deleting ? "Deleting…" : "Delete account"}
+                </button>
+                <button
+                  onClick={() => {
+                    setConfirming(false);
+                    setEmailInput("");
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                  className="rounded-md px-3 py-1.5 text-sm text-fg-muted hover:text-white"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -32,7 +32,10 @@ export default async function AppLayout({
         initialSimilarDrift={similarDrift}
       />
       <MobileNav />
-      <SettingsModal initialSimilarVariation={similarVariation} />
+      <SettingsModal
+        initialSimilarVariation={similarVariation}
+        userEmail={user.email}
+      />
     </div>
   );
 }
