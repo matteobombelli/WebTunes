@@ -81,6 +81,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
+  await db.delete(playlists).where(eq(playlists.id, id));
   if (playlist.coverS3Key) {
     try {
       await deleteObject(playlist.coverS3Key);
@@ -88,6 +89,5 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       // Orphaned cover object is harmless.
     }
   }
-  await db.delete(playlists).where(eq(playlists.id, id));
   return new NextResponse(null, { status: 204 });
 }

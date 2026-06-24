@@ -1,5 +1,13 @@
 @AGENTS.md
 
+## Verification
+
+There is **no test framework** in this repo (no vitest/jest, no test script). The
+verification loop is `npx tsc --noEmit`, `npx eslint src/` (both must stay clean),
+and `npm run build` plus a manual check. Read guideline 4's "write a test" below in
+that light: reproduce/verify via types, lint, a build, or a runnable check — not a
+unit-test runner that doesn't exist.
+
 Always signoff your responses with "What do you think, Matteo?"
 
 Follow the Karpathy Guidelines
