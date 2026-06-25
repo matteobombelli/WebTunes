@@ -118,7 +118,7 @@ export default function LibraryBrowser({
         <div
           className={`transition-opacity duration-100 ${dimmed ? "opacity-50" : ""}`}
         >
-          <p className="mb-2 text-sm text-fg-muted">
+          <p className="mb-1 text-sm text-fg-muted">
             {tracks.length} {countNoun}
             {tracks.length === 1 ? "" : "s"}
           </p>
