@@ -4,7 +4,12 @@ import { db } from "@/db";
 import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { friendIdsOf } from "@/lib/friends";
-import { notDuplicateOfOwn, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
+import {
+  canonicalFriendCopy,
+  notDuplicateOfOwn,
+  toTrackDTO,
+  trackDtoColumns,
+} from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
 export async function GET(req: NextRequest) {
@@ -16,12 +21,15 @@ export async function GET(req: NextRequest) {
   if (!q) return NextResponse.json([]);
 
   let ownerIds: string[];
+  let friendIds: string[] = [];
   if (scope === "own") {
     ownerIds = [user.id];
   } else if (scope === "friends") {
-    ownerIds = await friendIdsOf(user.id);
+    friendIds = await friendIdsOf(user.id);
+    ownerIds = friendIds;
   } else {
-    ownerIds = [user.id, ...(await friendIdsOf(user.id))];
+    friendIds = await friendIdsOf(user.id);
+    ownerIds = [user.id, ...friendIds];
   }
   if (ownerIds.length === 0) return NextResponse.json([]);
 
@@ -42,7 +50,10 @@ export async function GET(req: NextRequest) {
   const { hideFriendDuplicates } = await getUserSettings(user.id);
   const noFriendDupes =
     scope !== "own" && hideFriendDuplicates
-      ? or(eq(tracks.ownerId, user.id), notDuplicateOfOwn(user.id))
+      ? or(
+          eq(tracks.ownerId, user.id),
+          and(notDuplicateOfOwn(user.id), canonicalFriendCopy(friendIds))
+        )
       : undefined;
 
   const rows = await db

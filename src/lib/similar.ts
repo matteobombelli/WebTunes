@@ -11,7 +11,12 @@ import {
 import { db } from "@/db";
 import { trackEmbeddings, tracks, users } from "@/db/schema";
 import { canAccessTrack, friendIdsOf } from "@/lib/friends";
-import { notDuplicateOfOwn, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
+import {
+  canonicalFriendCopy,
+  notDuplicateOfOwn,
+  toTrackDTO,
+  trackDtoColumns,
+} from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 import type { TrackDTO } from "@/lib/types";
 
@@ -83,7 +88,8 @@ export async function findSimilarTracks(
             ? and(
                 inArray(tracks.ownerId, friendIds),
                 eq(tracks.isPrivate, false),
-                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined
+                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+                hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
               )
             : sql`false`
         )

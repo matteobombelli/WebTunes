@@ -71,6 +71,31 @@ export function notDuplicateOfOwn(userId: string) {
   )`;
 }
 
+/**
+ * SQL filter (apply to friend-owned rows): this friend's copy is the canonical
+ * one for its song — i.e. no OTHER friend has a copy of the same title + artist
+ * (case/whitespace-insensitive) with a smaller id. Collapses the same song
+ * owned by two different friends down to a single (lowest-id) row. `friendIds`
+ * must be the viewer's friends, so an inaccessible stranger's copy can never
+ * suppress a friend's track. Returns undefined when there are no friends —
+ * nothing to dedupe. Pair with notDuplicateOfOwn so own copies always win.
+ */
+export function canonicalFriendCopy(friendIds: string[]) {
+  if (!friendIds.length) return undefined;
+  const ids = sql.join(
+    friendIds.map((id) => sql`${id}`),
+    sql`, `
+  );
+  return sql`not exists (
+    select 1 from ${tracks} other
+    where other.id < ${tracks.id}
+      and other.owner_id in (${ids})
+      and other.is_private = false
+      and lower(btrim(other.title)) = lower(btrim(${tracks.title}))
+      and lower(btrim(coalesce(other.artist, ''))) = lower(btrim(coalesce(${tracks.artist}, '')))
+  )`;
+}
+
 /** The user's own tracks, newest first. */
 export async function listOwnTracks(userId: string): Promise<TrackDTO[]> {
   const rows = await db
@@ -102,7 +127,8 @@ export async function listAccessibleTracks(
           ? and(
               inArray(tracks.ownerId, friendIds),
               eq(tracks.isPrivate, false),
-              hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined
+              hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+              hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
             )
           : sql`false`
       )
@@ -139,7 +165,8 @@ async function listAccessibleTracksByField(
             ? and(
                 inArray(tracks.ownerId, friendIds),
                 eq(tracks.isPrivate, false),
-                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined
+                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+                hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
               )
             : sql`false`
         )
