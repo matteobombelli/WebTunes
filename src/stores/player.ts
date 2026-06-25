@@ -117,6 +117,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekRequest: null,
 
   playQueue: (tracks, startIndex) => {
+    const prev = get();
     // Starting a brand-new queue means the user picked new content — end any
     // "play similar" radio so it doesn't keep refilling from the old seed.
     const stopSim = {
@@ -125,7 +126,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       similarSeen: [],
     };
     const items = wrap(tracks);
-    if (get().shuffled && items.length > 0) {
+    // Re-selecting the track that's already current won't change track?.id, so
+    // PlayerBar's load effect won't refire — restart it with a seek to 0 so
+    // clicking a song you're already playing starts it over.
+    const prevCurrentId =
+      prev.index >= 0 ? prev.queue[prev.index].track.id : null;
+    const restart =
+      prevCurrentId !== null && tracks[startIndex]?.id === prevCurrentId
+        ? { seekRequest: 0 }
+        : {};
+    if (prev.shuffled && items.length > 0) {
       // Clicked track first, rest shuffled behind it.
       const rest = items.filter((_, i) => i !== startIndex);
       set({
@@ -135,6 +145,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         ...stopSim,
+        ...restart,
       });
     } else {
       set({
@@ -144,13 +155,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         ...stopSim,
+        ...restart,
       });
     }
   },
 
   playAt: (index) => {
     const s = get();
-    if (index < 0 || index >= s.queue.length || index === s.index) return;
+    if (index < 0 || index >= s.queue.length) return;
+    // Tapping the row that's already current restarts it: track?.id is
+    // unchanged, so PlayerBar's load effect won't refire — seek to 0 instead.
+    if (index === s.index) {
+      set({ isPlaying: true, currentTime: 0, seekRequest: 0 });
+      return;
+    }
     set({ index, isPlaying: true, currentTime: 0 });
   },
 

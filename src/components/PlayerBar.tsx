@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
+import { prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import QueuePanel from "@/components/QueuePanel";
@@ -55,6 +56,24 @@ function QueueArtPreloader() {
       const img = new Image();
       img.src = artSrc(track.id);
     }
+  }, [queue, index]);
+  return null;
+}
+
+/**
+ * Render-nothing helper that pre-caches the *next* track's audio while the
+ * current one plays. iOS throttles live network for a backgrounded PWA, so a
+ * streamed next track can't load when one ends in the background and sits
+ * silently stuck; warming it here (in the foreground) lets the service worker
+ * serve the auto-advance from cache. Its own narrow subscription keeps this off
+ * the PlayerBar's render path.
+ */
+function NextTrackPrefetcher() {
+  const queue = usePlayerStore((s) => s.queue);
+  const index = usePlayerStore((s) => s.index);
+  useEffect(() => {
+    if (index < 0) return;
+    prefetchUpcoming(queue[index]?.track.id, queue[index + 1]?.track.id);
   }, [queue, index]);
   return null;
 }
@@ -134,11 +153,14 @@ export default function PlayerBar({
   } = usePlayerStore.getState();
 
   // Some mobile browsers misreport <audio>.duration for Ogg/Opus files (seen
-  // ~3x too long: the 48 kHz granule divided by a wrong rate). The server
-  // extracts the true length on upload, so when the browser's value disagrees
-  // materially, trust track.durationSec and rescale currentTime (it shares the
-  // same wrong timebase) so the seek bar, labels, and seeking stay consistent.
-  // When the browser is correct (desktop, well-formed reads) this is a no-op.
+  // ~3x too long: the 48 kHz granule divided by a wrong rate), and they do it
+  // intermittently — the same track can read a sane duration on one load and an
+  // inflated one on the next. The server extracts the true length on upload, so
+  // when the browser's value disagrees materially we display track.durationSec
+  // as the total. We do NOT rescale currentTime: on the affected devices it
+  // already advances in real seconds even when duration is inflated, so dividing
+  // it (as a previous fix did, assuming it shared duration's wrong timebase) made
+  // the elapsed counter crawl and the bar stop short of the end.
   const serverDuration = track?.durationSec ?? 0;
   const durationUnreliable =
     serverDuration > 0 &&
@@ -147,8 +169,7 @@ export default function PlayerBar({
   const totalDuration = durationUnreliable
     ? serverDuration
     : duration || serverDuration || 0;
-  const timeScale = durationUnreliable ? serverDuration / duration : 1;
-  const playedSeconds = currentTime * timeScale;
+  const playedSeconds = currentTime;
 
   // play() rejects with AbortError when a newer src load or a pause()
   // supersedes it (e.g. skipping tracks faster than they start) — that's
@@ -352,7 +373,7 @@ export default function PlayerBar({
         max={totalDuration}
         step={0.5}
         value={Math.min(playedSeconds, totalDuration || Infinity)}
-        onChange={(e) => seekTo(Number(e.target.value) / timeScale)}
+        onChange={(e) => seekTo(Number(e.target.value))}
         className="h-5 min-w-0 flex-1 cursor-pointer accent-accent"
         aria-label="Seek"
       />
@@ -406,6 +427,7 @@ export default function PlayerBar({
   return (
     <div className="relative border-t border-border-subtle bg-surface-1">
       <QueueArtPreloader />
+      <NextTrackPrefetcher />
       <QueuePanel open={queueOpen} onClose={closeQueue} />
       <audio
         ref={audioRef}

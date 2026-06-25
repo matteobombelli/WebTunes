@@ -14,11 +14,19 @@
 //                 it holds user downloads that must outlive SW updates.
 //   wt-art      — downloaded track cover art, keyed by the stable art URL
 //                 (/api/tracks/:id/art). Same lifecycle as wt-audio.
+//   wt-prefetch — the next upcoming track's audio, pre-cached (keyed by the
+//                 stable stream URL) while the current track plays so a
+//                 background auto-advance is served from here instead of a live
+//                 fetch — iOS throttles network for a backgrounded PWA, which
+//                 otherwise leaves a streamed next track silently stuck. Holds
+//                 only the next track (pruned client-side); ephemeral and safe
+//                 to drop. Written by src/lib/offline/prefetch.ts, read here.
 
 const BASE_PATH = "/projects/webtunes";
 const SHELL_CACHE = "wt-shell-v2";
 const AUDIO_CACHE = "wt-audio";
 const ART_CACHE = "wt-art";
+const PREFETCH_CACHE = "wt-prefetch";
 const OFFLINE_FALLBACK = `${BASE_PATH}/downloads`;
 
 const STREAM_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/stream$`);
@@ -60,16 +68,19 @@ self.addEventListener("fetch", (event) => {
 });
 
 /**
- * Downloaded audio. Cache hit → serve the blob ourselves, honoring Range:
+ * Downloaded or pre-cached audio. Cache hit → serve the blob ourselves, honoring Range:
  * iOS <audio> sends Range requests and silently refuses to play plain 200
  * responses from a SW, so 206 slicing is mandatory. Cache miss → network
  * (the route 302s to a presigned S3 URL, which the media request follows).
  */
 async function serveStream(request) {
-  const cache = await caches.open(AUDIO_CACHE);
-  // Match on the URL, not the request: Cache API matching is confused by
-  // Range headers on the request.
-  const cached = await cache.match(request.url);
+  // Match on the URL, not the request: Cache API matching is confused by Range
+  // headers on the request. Check user downloads (wt-audio) first, then the
+  // pre-cached next track (wt-prefetch); a miss falls through to the network
+  // (the route 302s to a presigned S3 URL, which the media request follows).
+  const cached =
+    (await caches.match(request.url, { cacheName: AUDIO_CACHE })) ||
+    (await caches.match(request.url, { cacheName: PREFETCH_CACHE }));
   if (!cached) return fetch(request);
 
   const blob = await cached.blob();
