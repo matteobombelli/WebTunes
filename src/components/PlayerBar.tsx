@@ -47,8 +47,17 @@ export default function PlayerBar({
   // True from a fresh track load until playback actually begins. A cold first
   // request (slow first byte after a refresh) can let the media clock drift
   // ahead while the element stalls, so the track audibly starts a second or
-  // two in. When it really starts playing we snap a drifted playhead back to 0.
+  // two in. We keep the element muted across this window (see Effect 1) and,
+  // when it really starts playing, snap a drifted playhead back to 0 before
+  // revealing audio — so neither the garbage burst nor the skip is heard.
   const freshLoadRef = useRef(false);
+  // True once the user picked a position (seek) during the current load, so the
+  // drift-snap doesn't override their choice. seekRequest itself is cleared
+  // near-synchronously, too early to read in a cold onPlaying.
+  const userSeekRef = useRef(false);
+  // setTimeout id for the reveal backstop: a missed 'playing'/'seeked' event
+  // must never leave a track muted. Cleared on every reveal and track change.
+  const failsafeRef = useRef<number | null>(null);
   // Gates the volume-persist effect until the saved value has been read on
   // mount, so the default (1) isn't written over the saved value first.
   const volumeHydratedRef = useRef(false);
@@ -122,23 +131,51 @@ export default function PlayerBar({
     if ((err as { name?: string })?.name !== "AbortError") _setPlaying(false);
   };
 
+  const clearFailsafe = () => {
+    if (failsafeRef.current != null) {
+      clearTimeout(failsafeRef.current);
+      failsafeRef.current = null;
+    }
+  };
+  // Force-reveal audio after `ms`, so a media event that never fires can't
+  // leave a track silent. Armed only when the element is (or is about to be)
+  // producing sound; cleared as soon as a real reveal happens.
+  const armFailsafe = (ms: number) => {
+    clearFailsafe();
+    failsafeRef.current = window.setTimeout(() => {
+      const audio = audioRef.current;
+      if (audio) audio.muted = false;
+      freshLoadRef.current = false;
+      failsafeRef.current = null;
+    }, ms);
+  };
+
   // Point the audio element at the track's stable stream URL (302s to a
   // presigned S3 URL online; served from the offline cache by the SW).
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
     audio.src = streamSrc(track.id);
+    audio.muted = true; // silence cold-start garbage until a clean start is confirmed
     freshLoadRef.current = true;
+    userSeekRef.current = false;
+    clearFailsafe();
     if (usePlayerStore.getState().isPlaying) {
       audio.play().catch(onPlayError);
+      armFailsafe(10000); // pathological backstop only (plays but never fires 'playing')
     }
+    return () => clearFailsafe();
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    if (isPlaying) audio.play().catch(onPlayError);
-    else audio.pause();
+    if (isPlaying) {
+      audio.play().catch(onPlayError);
+      if (freshLoadRef.current) armFailsafe(10000); // first play of a paused-loaded track
+    } else {
+      audio.pause();
+    }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hydrate the persisted "Normalize volume" setting from the server once, so
@@ -196,6 +233,7 @@ export default function PlayerBar({
     const audio = audioRef.current;
     if (audio && seekRequest !== null) {
       audio.currentTime = seekRequest;
+      userSeekRef.current = true; // honor a user-chosen position over the drift-snap
       _clearSeek();
     }
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -324,17 +362,27 @@ export default function PlayerBar({
       <audio
         ref={audioRef}
         onPlaying={(e) => {
-          // First real playback after a load: if the clock drifted ahead while
-          // the cold stream stalled (and the user didn't ask to resume/seek),
-          // restart from the top so the intro isn't skipped.
+          // First real playback after a load. The element is muted from the
+          // fresh load, so any cold-start garbage was silent. If the clock
+          // drifted ahead while the stream stalled (and the user didn't pick a
+          // position), snap back to the top — silently, since onSeeked reveals
+          // once the seek lands. Otherwise it started clean, so reveal now.
           if (!freshLoadRef.current) return;
           freshLoadRef.current = false;
-          if (
-            usePlayerStore.getState().seekRequest === null &&
-            e.currentTarget.currentTime > 0.8
-          ) {
-            e.currentTarget.currentTime = 0;
+          const audio = e.currentTarget;
+          if (!userSeekRef.current && audio.currentTime > 0.8) {
+            audio.currentTime = 0;
+            armFailsafe(1500); // reveal even if the corrective seek's 'seeked' is missed
+          } else {
+            audio.muted = false;
+            clearFailsafe();
           }
+        }}
+        onSeeked={(e) => {
+          // The corrective seek-to-0 (or any user scrub) has landed: reveal
+          // audio at the already-set normalized volume. Idempotent.
+          e.currentTarget.muted = false;
+          clearFailsafe();
         }}
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
