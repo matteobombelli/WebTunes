@@ -131,6 +131,18 @@ setup, and architecture rationale.
   metadata mirrors DTOs into IndexedDB (`src/lib/offline/db.ts`); queue/UI
   state in `src/stores/downloads.ts`. Downloads persist until manually
   deleted; downloaded playlists auto-sync on app load when online.
+- Bluetooth keep-alive: the single reused `<audio>` element pauses briefly
+  between tracks; on Bluetooth (A2DP) that gap lets the output device sleep,
+  and waking it for the next track flushes the previous track's ~178 ms still
+  in the BT buffer as an audible glitch/bleed (inaudible on wired — tiny
+  buffer, never sleeps). Nothing on the `<audio>` element (`muted`/`pause()`/
+  `load()`) fixes it: those samples are downstream in the OS/BT pipeline.
+  `PlayerBar`'s `ensureOutputAwake` runs a continuous inaudible Web Audio tone
+  (~-80 dB / 40 Hz on its own `AudioContext`) while a track plays so the device
+  never sleeps across the gap — resumed within the play gesture (autoplay
+  policy requires it) and suspended on pause so it isn't holding BT open while
+  idle. Corollary when debugging: a Bluetooth-only audio symptom that survives
+  element-level fixes lives in the output pipeline, not the element.
 
 ## Production logs
 
