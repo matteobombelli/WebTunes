@@ -78,6 +78,24 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
 const MENU_ROW =
   "flex w-full items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 text-left hover:bg-surface-3/60";
 
+// Decide the vertical anchor for a portalled (position: fixed) menu of measured
+// height `menuH`: open downward from the trigger, but flip above it when it
+// wouldn't fit below and there's more room above — like an OS right-click menu.
+// Flipping anchors by the bottom edge (just above the trigger) so the resting
+// spot is already correct and the pop-in animation doesn't fight a shift.
+const MENU_GAP = 4;
+function menuVerticalAnchor(
+  rect: DOMRect,
+  menuH: number
+): { top: number } | { bottom: number } {
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  if (menuH + MENU_GAP > spaceBelow && spaceAbove > spaceBelow) {
+    return { bottom: window.innerHeight - rect.top + MENU_GAP };
+  }
+  return { top: rect.bottom + MENU_GAP };
+}
+
 export function AddToPlaylistMenu({
   trackIds,
   align = "right",
@@ -85,7 +103,6 @@ export function AddToPlaylistMenu({
   label,
   onAdded,
   floating = false,
-  dropUp = false,
   triggerClassName,
 }: {
   trackIds: string[];
@@ -98,8 +115,6 @@ export function AddToPlaylistMenu({
   /** Anchor the dropdown to <body> with outside-click dismissal (like bulk),
    *  but keep the plain "+" icon trigger — for use outside the track table. */
   floating?: boolean;
-  /** Open the floating menu upward (e.g. anchored to the bottom player bar). */
-  dropUp?: boolean;
   /** Overrides the default icon-trigger classes (no label, non-bulk). */
   triggerClassName?: string;
 }) {
@@ -146,22 +161,26 @@ export function AddToPlaylistMenu({
     };
   }, [open, portalled, close]);
 
+  // Once mounted (and again when the playlist list loads and changes its
+  // height), flip the menu above the trigger if it would overflow the bottom.
+  useEffect(() => {
+    if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({
+      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
+      left: rect.left,
+    });
+  }, [open, portalled, playlists]);
+
   const load = async () => {
     if (open) {
       close();
       return;
     }
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      // dropUp anchors by the bottom edge (just above the trigger) so the menu's
-      // resting position is already correct — using a translateY shift instead
-      // would be overridden by the pop-in animation's transform and cause a jump.
-      setPos(
-        dropUp
-          ? { bottom: window.innerHeight - rect.top + 4, left: rect.left }
-          : { top: rect.bottom + 4, left: rect.left }
-      );
-    }
+    // Provisional downward anchor; the effect below flips it up once the menu
+    // has mounted and its real height is known.
+    if (rect) setPos({ top: rect.bottom + MENU_GAP, left: rect.left });
     setOpen(true);
     setMessage(null);
     if (!playlists) {
@@ -442,7 +461,11 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
   // anchors the fixed position; menuRef scopes outside-click dismissal.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  } | null>(null);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -456,12 +479,24 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
       return;
     }
     const rect = triggerRef.current?.getBoundingClientRect();
+    // Right-align the menu under the button; the effect below flips it above
+    // the button once its real height is known if it would overflow.
     if (rect) {
-      // Right-align the menu under the button.
-      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      setPos({ top: rect.bottom + MENU_GAP, right: window.innerWidth - rect.right });
     }
     setOpen(true);
   };
+
+  // After the menu mounts, flip it above the trigger if it would overflow the
+  // bottom of the viewport (OS-style). Scrolling/resizing dismisses it instead.
+  useEffect(() => {
+    if (!open || !menuRef.current || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({
+      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
+      right: window.innerWidth - rect.right,
+    });
+  }, [open]);
 
   // Detached from the trigger, so dismiss on outside click and on
   // scroll/resize instead of letting it drift. Selecting an option closes
@@ -501,7 +536,7 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", top: pos.top, right: pos.right }}
+            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
             className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-60 rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
           >
             <TrackActions {...props} onClose={close} />

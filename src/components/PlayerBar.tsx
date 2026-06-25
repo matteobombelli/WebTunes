@@ -360,7 +360,6 @@ export default function PlayerBar({
             <AddToPlaylistMenu
               trackIds={[track.id]}
               floating
-              dropUp
               triggerClassName="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted active:bg-surface-2"
             />
           </div>
@@ -421,7 +420,6 @@ export default function PlayerBar({
           <AddToPlaylistMenu
             trackIds={[track.id]}
             floating
-            dropUp
             triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
           />
         </div>
