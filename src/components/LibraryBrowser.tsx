@@ -82,7 +82,7 @@ export default function LibraryBrowser({
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative w-full max-w-md">
+        <div className="relative min-w-[16rem] flex-1">
           <SearchIcon
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"

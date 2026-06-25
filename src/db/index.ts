@@ -7,7 +7,15 @@ const globalForDb = globalThis as unknown as { webtunesPool?: Pool };
 
 const pool =
   globalForDb.webtunesPool ??
-  new Pool({ connectionString: process.env.DATABASE_URL, max: 25 });
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 25,
+    // Disable JIT pool-wide. Queries whose *estimated* cost crosses Postgres's
+    // jit_above_cost (notably scope=all/search, inflated by the dedup subplan)
+    // otherwise spend ~400ms compiling machine code to speed up a query that
+    // runs in single-digit ms — at this data scale JIT is pure overhead.
+    options: "-c jit=off",
+  });
 
 if (process.env.NODE_ENV !== "production") globalForDb.webtunesPool = pool;
 

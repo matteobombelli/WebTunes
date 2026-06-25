@@ -37,7 +37,7 @@ function formatDuration(seconds: number | null): string {
 
 // How many rows to render initially and to add each time the scroll sentinel
 // comes into view.
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 type SortKey = "title" | "artist" | "album" | "owner" | "duration" | "plays";
 type SortState = { key: SortKey; dir: 1 | -1 } | null;
