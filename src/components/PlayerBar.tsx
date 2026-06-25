@@ -52,6 +52,12 @@ export default function PlayerBar({
   // Gates the volume-persist effect until the saved value has been read on
   // mount, so the default (1) isn't written over the saved value first.
   const volumeHydratedRef = useRef(false);
+  // A continuous, inaudible Web Audio tone kept running while a track plays so
+  // the output device (notably Bluetooth) doesn't sleep during the gap between
+  // tracks. When it sleeps, resuming for the next track flushes the previous
+  // track's ~178 ms still in the Bluetooth buffer as an audible glitch; wired
+  // output has a tiny buffer and never sleeps. See ensureOutputAwake.
+  const keepAliveRef = useRef<AudioContext | null>(null);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
@@ -122,6 +128,32 @@ export default function PlayerBar({
     if ((err as { name?: string })?.name !== "AbortError") _setPlaying(false);
   };
 
+  // Keep the audio output device awake across the gap between tracks so a
+  // Bluetooth A2DP link doesn't sleep and replay the previous track's buffered
+  // tail as a glitch on resume (see keepAliveRef). Created lazily and resumed
+  // within the play gesture (an AudioContext starts suspended until then); the
+  // tone is inaudible and only holds the output stream open.
+  const ensureOutputAwake = () => {
+    if (typeof window === "undefined") return;
+    let ctx = keepAliveRef.current;
+    if (!ctx) {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!Ctor) return;
+      ctx = new Ctor();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001; // ~-80 dB at 40 Hz: inaudible, non-zero keeps the stream active
+      osc.frequency.value = 40;
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      keepAliveRef.current = ctx;
+    }
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  };
+
   // Point the audio element at the track's stable stream URL (302s to a
   // presigned S3 URL online; served from the offline cache by the SW).
   useEffect(() => {
@@ -130,6 +162,7 @@ export default function PlayerBar({
     audio.src = streamSrc(track.id);
     freshLoadRef.current = true;
     if (usePlayerStore.getState().isPlaying) {
+      ensureOutputAwake();
       audio.play().catch(onPlayError);
     }
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -137,9 +170,22 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    if (isPlaying) audio.play().catch(onPlayError);
-    else audio.pause();
+    if (isPlaying) {
+      ensureOutputAwake();
+      audio.play().catch(onPlayError);
+    } else {
+      audio.pause();
+      keepAliveRef.current?.suspend().catch(() => {});
+    }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Release the keep-alive context when the player unmounts.
+  useEffect(() => {
+    return () => {
+      keepAliveRef.current?.close().catch(() => {});
+      keepAliveRef.current = null;
+    };
+  }, []);
 
   // Hydrate the persisted "Normalize volume" setting from the server once, so
   // the player and the library toggle share one source of truth without a flash.
