@@ -320,7 +320,7 @@ export default function PlayerBar({
 
   return (
     <div className="relative border-t border-border-subtle bg-surface-1">
-      {queueOpen && <QueuePanel onClose={() => setQueueOpen(false)} />}
+      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       <audio
         ref={audioRef}
         onPlaying={(e) => {

@@ -1,27 +1,50 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePlayerStore } from "@/stores/player";
 import { XIcon } from "@/components/icons";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
+const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
+
 /** Queue popover anchored above the player bar; PlayerBar owns open state. */
-export default function QueuePanel({ onClose }: { onClose: () => void }) {
+export default function QueuePanel({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const { playAt, removeFromQueue, clearUpcoming } = usePlayerStore.getState();
   const currentRowRef = useRef<HTMLLIElement>(null);
 
+  // Stay mounted briefly after close so the exit animation can play.
+  const [closing, setClosing] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setClosing(true);
+  }
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => setClosing(false), EXIT_MS);
+    return () => clearTimeout(t);
+  }, [closing]);
+
   // Start the view at the playing track, not the top of history.
   useEffect(() => {
-    currentRowRef.current?.scrollIntoView({ block: "center" });
-  }, []);
+    if (open) currentRowRef.current?.scrollIntoView({ block: "center" });
+  }, [open]);
 
   const upcoming = queue.length - index - 1;
 
+  if (!open && !closing) return null;
+
   return (
-    <div className="absolute bottom-full right-0 z-20 mb-2 mr-2 flex max-h-[60dvh] w-[26rem] max-w-[calc(100vw-1rem)] animate-pop-in flex-col rounded-md border border-border bg-surface-2 shadow-lg md:mr-4">
+    <div className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute bottom-full right-0 z-20 mb-2 mr-2 flex max-h-[60dvh] w-[26rem] max-w-[calc(100vw-1rem)] flex-col rounded-md border border-border bg-surface-2 shadow-lg md:mr-4`}>
       <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <h2 className="text-sm font-semibold text-fg">Queue</h2>
         <span className="text-xs text-fg-muted">

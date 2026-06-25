@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { PlaylistDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import PlaylistCard from "@/components/PlaylistCard";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 const SCOPES = [
   { value: "own", label: "My library" },
@@ -55,21 +56,7 @@ export default function PlaylistBrowser({
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex rounded-md border border-border text-sm">
-          {SCOPES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setScope(s.value)}
-              className={`px-3 py-2 first:rounded-l-md last:rounded-r-md ${
-                scope === s.value
-                  ? "bg-accent text-white"
-                  : "text-fg-muted hover:bg-surface-2"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={SCOPES} value={scope} onChange={setScope} />
       </div>
 
       {playlists === null ? (

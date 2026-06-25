@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
@@ -512,6 +512,159 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
   );
 }
 
+type TrackRowProps = {
+  track: TrackDTO;
+  index: number;
+  view: TrackDTO[];
+  isCurrent: boolean;
+  /** Only meaningful when isCurrent; false otherwise so non-current rows stay
+   *  referentially stable and skip re-render on play/pause. */
+  isPlaying: boolean;
+  selectable: boolean;
+  selected: boolean;
+  showOwner: boolean;
+  showPlays: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  playQueue: (tracks: TrackDTO[], startIndex: number) => void;
+  onToggleSelect: (id: string) => void;
+  onOpenActions: (track: TrackDTO) => void;
+  onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
+  onRemove?: (track: TrackDTO) => Promise<void>;
+  removeLabel?: string;
+  onEdit: (track: TrackDTO) => void;
+  onDelete: (track: TrackDTO) => void;
+};
+
+// Memoized so playback-state changes (current track, play/pause) re-render only
+// the affected rows, not every visible row in a long library.
+const TrackRow = memo(function TrackRow({
+  track,
+  index,
+  view,
+  isCurrent,
+  isPlaying,
+  selectable,
+  selected,
+  showOwner,
+  showPlays,
+  canEdit,
+  canDelete,
+  playQueue,
+  onToggleSelect,
+  onOpenActions,
+  onMove,
+  onRemove,
+  removeLabel,
+  onEdit,
+  onDelete,
+}: TrackRowProps) {
+  return (
+    <tr
+      style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}
+      className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
+        isCurrent ? "text-accent-bright" : "text-fg"
+      }`}
+    >
+      {selectable && (
+        <td className="py-2">
+          <input
+            type="checkbox"
+            aria-label={`Select ${track.title}`}
+            checked={selected}
+            onChange={() => onToggleSelect(track.id)}
+            className="checkbox"
+          />
+        </td>
+      )}
+      <td className="py-2">
+        <button
+          onClick={() => playQueue(view, index)}
+          title={`Play ${track.title}`}
+          className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
+        >
+          <span className="relative shrink-0">
+            <TrackArt track={track} size="h-9 w-9" iconSize={18} />
+            {isCurrent && (
+              <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
+                <NowPlayingBars playing={isPlaying} />
+              </span>
+            )}
+          </span>
+          <span className="truncate hover:underline">{track.title}</span>
+          {track.isPrivate && !track.ownerName && (
+            <LockIcon size={12} className="shrink-0 text-fg-subtle" />
+          )}
+        </button>
+      </td>
+      <td className="hidden truncate py-2 pr-2 text-fg-muted sm:table-cell">
+        {track.artist ? (
+          <Link
+            href={`/artist?name=${encodeURIComponent(track.artist)}`}
+            className="hover:text-accent-bright hover:underline"
+          >
+            {track.artist}
+          </Link>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
+        {track.album ? (
+          <Link
+            href={`/album?name=${encodeURIComponent(track.album)}`}
+            className="hover:text-accent-bright hover:underline"
+          >
+            {track.album}
+          </Link>
+        ) : (
+          "—"
+        )}
+      </td>
+      {showOwner && (
+        <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
+          {track.ownerName ?? "You"}
+        </td>
+      )}
+      <td className="py-2 text-center tabular-nums text-fg-muted">
+        {formatDuration(track.durationSec)}
+      </td>
+      {showPlays && (
+        <td className="hidden py-2 text-center tabular-nums text-fg-muted md:table-cell">
+          {track.friendPlayCount}
+        </td>
+      )}
+      <td className="py-2">
+        {/* Desktop: hover-revealed three-dot dropdown. */}
+        <div className="hidden justify-end md:flex">
+          <TrackActionsMenu
+            track={track}
+            index={index}
+            viewLength={view.length}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            onMove={onMove}
+            onRemove={onRemove}
+            removeLabel={removeLabel}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        </div>
+        {/* Mobile: collapse the actions into a single kebab dialog. */}
+        <div className="flex justify-end md:hidden">
+          <button
+            onClick={() => onOpenActions(track)}
+            aria-label="Track actions"
+            className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+          >
+            <EllipsisIcon size={18} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export default function TrackList({
   tracks,
   showOwner = false,
@@ -621,14 +774,14 @@ export default function TrackList({
       label
     );
 
-  const toggleSelected = (id: string) => {
+  const toggleSelected = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
   // Selection can hold ids of tracks that were since deleted (router.refresh
   // keeps client state) — only count ids present in the current list.
   const validSelected = useMemo(() => {
@@ -643,18 +796,21 @@ export default function TrackList({
   }
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const remove = async (track: TrackDTO) => {
-    if (
-      !onRemove &&
-      !confirm(`Are you sure you want to delete "${track.title}"?`)
-    ) {
-      return;
-    }
-    if (onRemove) await onRemove(track);
-    else await api(`/tracks/${track.id}`, { method: "DELETE" });
-    router.refresh();
-    onMutated?.();
-  };
+  const remove = useCallback(
+    async (track: TrackDTO) => {
+      if (
+        !onRemove &&
+        !confirm(`Are you sure you want to delete "${track.title}"?`)
+      ) {
+        return;
+      }
+      if (onRemove) await onRemove(track);
+      else await api(`/tracks/${track.id}`, { method: "DELETE" });
+      router.refresh();
+      onMutated?.();
+    },
+    [onRemove, router, onMutated]
+  );
 
   // Only the viewer's own tracks can be deleted; a selection made in a
   // shared view (search, friends) may also contain friends' tracks.
@@ -665,6 +821,14 @@ export default function TrackList({
         .map((t) => t.id),
     [view, validSelected]
   );
+  // Keep the Delete button rendered while the bar fades out on deselect (the
+  // bar lingers ~100ms); mirrors the lastSelectedCount sticky value above.
+  const hasDeletable = canDelete && deletableSelectedIds.length > 0;
+  const [lastHadDeletable, setLastHadDeletable] = useState(false);
+  if (validSelected.size > 0 && hasDeletable !== lastHadDeletable) {
+    setLastHadDeletable(hasDeletable);
+  }
+  const showDelete = validSelected.size > 0 ? hasDeletable : lastHadDeletable;
 
   const bulkDelete = async () => {
     const ids = deletableSelectedIds;
@@ -735,7 +899,7 @@ export default function TrackList({
         >
           Download
         </button>
-        {canDelete && deletableSelectedIds.length > 0 && (
+        {showDelete && (
           <button
             onClick={bulkDelete}
             disabled={bulkBusy}
@@ -806,114 +970,30 @@ export default function TrackList({
         </tr>
       </thead>
       <tbody>
-        {visible.map((track, i) => {
-          const isCurrent = current?.id === track.id;
-          return (
-            <tr
-              key={track.id}
-              style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
-              className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
-                isCurrent ? "text-accent-bright" : "text-fg"
-              }`}
-            >
-              {selectable && (
-                <td className="py-2">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${track.title}`}
-                    checked={validSelected.has(track.id)}
-                    onChange={() => toggleSelected(track.id)}
-                    className="checkbox"
-                  />
-                </td>
-              )}
-              <td className="py-2">
-                <button
-                  onClick={() => playQueue(view, i)}
-                  title={`Play ${track.title}`}
-                  className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
-                >
-                  <span className="relative shrink-0">
-                    <TrackArt track={track} size="h-9 w-9" iconSize={18} />
-                    {isCurrent && (
-                      <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
-                        <NowPlayingBars playing={isPlaying} />
-                      </span>
-                    )}
-                  </span>
-                  <span className="truncate hover:underline">{track.title}</span>
-                  {track.isPrivate && !track.ownerName && (
-                    <LockIcon size={12} className="shrink-0 text-fg-subtle" />
-                  )}
-                </button>
-              </td>
-              <td className="hidden truncate py-2 pr-2 text-fg-muted sm:table-cell">
-                {track.artist ? (
-                  <Link
-                    href={`/artist?name=${encodeURIComponent(track.artist)}`}
-                    className="hover:text-accent-bright hover:underline"
-                  >
-                    {track.artist}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
-                {track.album ? (
-                  <Link
-                    href={`/album?name=${encodeURIComponent(track.album)}`}
-                    className="hover:text-accent-bright hover:underline"
-                  >
-                    {track.album}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </td>
-              {showOwner && (
-                <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
-                  {track.ownerName ?? "You"}
-                </td>
-              )}
-              <td className="py-2 text-center tabular-nums text-fg-muted">
-                {formatDuration(track.durationSec)}
-              </td>
-              {showPlays && (
-                <td className="hidden py-2 text-center tabular-nums text-fg-muted md:table-cell">
-                  {track.friendPlayCount}
-                </td>
-              )}
-              <td className="py-2">
-                {/* Desktop: hover-revealed three-dot dropdown. */}
-                <div className="hidden justify-end md:flex">
-                  <TrackActionsMenu
-                    track={track}
-                    index={i}
-                    viewLength={view.length}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    onMove={onMove}
-                    onRemove={onRemove}
-                    removeLabel={removeLabel}
-                    onEdit={setEditing}
-                    onDelete={remove}
-                  />
-                </div>
-                {/* Mobile: collapse the actions into a single kebab dialog. */}
-                <div className="flex justify-end md:hidden">
-                  <button
-                    onClick={() => setActionsTrack(track)}
-                    aria-label="Track actions"
-                    className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
-                  >
-                    <EllipsisIcon size={18} />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          );
-        })}
+        {visible.map((track, i) => (
+          <TrackRow
+            key={track.id}
+            track={track}
+            index={i}
+            view={view}
+            isCurrent={current?.id === track.id}
+            isPlaying={current?.id === track.id ? isPlaying : false}
+            selectable={selectable}
+            selected={validSelected.has(track.id)}
+            showOwner={showOwner}
+            showPlays={showPlays}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            playQueue={playQueue}
+            onToggleSelect={toggleSelected}
+            onOpenActions={setActionsTrack}
+            onMove={onMove}
+            onRemove={onRemove}
+            removeLabel={removeLabel}
+            onEdit={setEditing}
+            onDelete={remove}
+          />
+        ))}
       </tbody>
     </table>
     {/* Sentinel lives outside the table so its width has no effect on the

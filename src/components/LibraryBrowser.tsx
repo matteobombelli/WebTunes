@@ -8,6 +8,7 @@ import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
 import { SearchIcon } from "@/components/icons";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 const SCOPES = [
   { value: "own", label: "My library" },
@@ -94,21 +95,7 @@ export default function LibraryBrowser({
             className="w-full pl-9"
           />
         </div>
-        <div className="flex rounded-md border border-border text-sm">
-          {SCOPES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setScope(s.value)}
-              className={`px-3 py-2 first:rounded-l-md last:rounded-r-md ${
-                scope === s.value
-                  ? "bg-accent text-white"
-                  : "text-fg-muted hover:bg-surface-2"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={SCOPES} value={scope} onChange={setScope} />
       </div>
 
       {tracks === null ? (

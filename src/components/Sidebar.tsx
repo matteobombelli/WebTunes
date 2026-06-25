@@ -7,6 +7,7 @@ import { usePlayerStore } from "@/stores/player";
 import {
   DownloadIcon,
   FolderIcon,
+  LogoutIcon,
   MusicIcon,
   SettingsIcon,
   UsersIcon,
@@ -71,8 +72,9 @@ export default function Sidebar({
           <form action={signOutAction} className="flex">
             <button
               type="submit"
-              className="flex items-center text-xs text-fg-muted hover:text-white"
+              className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
             >
+              <LogoutIcon size={14} />
               Sign out
             </button>
           </form>

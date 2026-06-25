@@ -1,0 +1,71 @@
+"use client";
+
+import { useLayoutEffect, useRef, useState } from "react";
+import { cn } from "./cn";
+
+type Option<T extends string> = { value: T; label: string };
+
+/**
+ * Segmented control with a single accent pill that slides between options.
+ * The pill is measured off the active button (offsetLeft/offsetWidth) so
+ * options may have different widths; the first measurement skips the slide
+ * transition so the pill doesn't animate in from the left on mount.
+ */
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly Option<T>[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const activeIndex = options.findIndex((o) => o.value === value);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      const btn = container.querySelectorAll("button")[activeIndex];
+      if (btn) setPill({ left: btn.offsetLeft, width: btn.offsetWidth });
+    };
+    measure();
+    setReady(true);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeIndex]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative flex rounded-md border border-border text-sm"
+    >
+      {pill && (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute bottom-0 top-0 rounded-md bg-accent",
+            ready && "transition-all duration-200 ease-out",
+          )}
+          style={{ left: pill.left, width: pill.width }}
+        />
+      )}
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "relative z-10 px-3 py-2 first:rounded-l-md last:rounded-r-md",
+            o.value === value ? "text-white" : "text-fg-muted hover:text-fg",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}

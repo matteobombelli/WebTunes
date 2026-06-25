@@ -4,7 +4,7 @@ import { useState } from "react";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
 import { usePlayerStore } from "@/stores/player";
-import { XIcon } from "@/components/icons";
+import Dialog from "@/components/Dialog";
 
 // Indexed by users.similar_variation (0..4); must match SIGMA_BY_VARIATION in
 // lib/similar.ts (0 = most random … 4 = deterministic cosine).
@@ -38,7 +38,6 @@ export default function SettingsModal({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  if (!open) return null;
   const close = () => usePlayerStore.getState().setSettingsOpen(false);
 
   const toggleNormalize = async (value: boolean) => {
@@ -115,25 +114,7 @@ export default function SettingsModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={close}
-    >
-      <div
-        className="w-full max-w-sm rounded-lg border border-border bg-surface-1 p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-fg">Settings</h2>
-          <button
-            aria-label="Close settings"
-            onClick={close}
-            className="text-fg-muted hover:text-white"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
-
+    <Dialog title="Settings" open={open} onClose={close}>
         <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
           <input
             type="checkbox"
@@ -249,7 +230,6 @@ export default function SettingsModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

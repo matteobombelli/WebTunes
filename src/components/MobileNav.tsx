@@ -47,10 +47,10 @@ export function MobileNav() {
 /** Compact top bar with logo and sign-out, shown below md. */
 export function MobileTopBar() {
   return (
-    <header className="flex items-center justify-between border-b border-border-subtle bg-surface-1 px-4 py-3 md:hidden">
+    <header className="flex items-center justify-between border-b border-border-subtle bg-surface-1 px-4 py-4 md:hidden">
       <Link
         href="/library"
-        className="font-display text-lg font-bold tracking-tight"
+        className="font-display text-xl font-bold tracking-tight"
       >
         <span className="text-accent-bright">Web</span>Tunes
       </Link>
@@ -60,16 +60,15 @@ export function MobileTopBar() {
           aria-label="Settings"
           className="flex items-center text-fg-muted hover:text-white"
         >
-          <SettingsIcon size={18} />
+          <SettingsIcon size={22} />
         </button>
         <form action={signOutAction}>
           <button
             type="submit"
             aria-label="Sign out"
-            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
+            className="flex items-center text-fg-muted hover:text-white"
           >
-            <LogoutIcon size={16} />
-            Sign out
+            <LogoutIcon size={22} />
           </button>
         </form>
       </div>
