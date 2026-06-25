@@ -31,6 +31,7 @@ export default function SettingsModal({
   const open = usePlayerStore((s) => s.settingsOpen);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
   const similarDrift = usePlayerStore((s) => s.similarDrift);
+  const hideFriendDuplicates = usePlayerStore((s) => s.hideFriendDuplicates);
   const [variation, setVariation] = useState(initialSimilarVariation);
   const [confirming, setConfirming] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -63,6 +64,19 @@ export default function SettingsModal({
       });
     } catch {
       usePlayerStore.getState().setSimilarDrift(!value); // revert on failure
+    }
+  };
+
+  const toggleHideDuplicates = async (value: boolean) => {
+    usePlayerStore.getState().setHideFriendDuplicates(value);
+    try {
+      await api("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideFriendDuplicates: value }),
+      });
+    } catch {
+      usePlayerStore.getState().setHideFriendDuplicates(!value); // revert on failure
     }
   };
 
@@ -171,6 +185,20 @@ export default function SettingsModal({
             matches.
           </p>
         </div>
+
+        <label className="mt-5 flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
+          <input
+            type="checkbox"
+            checked={hideFriendDuplicates}
+            onChange={(e) => toggleHideDuplicates(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Hide duplicates from friends&apos; libraries
+        </label>
+        <p className="mt-1 text-xs text-fg-muted">
+          Hides friends&apos; tracks that match one already in your library when
+          browsing everything or friends.
+        </p>
 
         <div className="mt-6 border-t border-border pt-4">
           <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>

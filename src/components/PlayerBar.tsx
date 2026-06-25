@@ -35,9 +35,11 @@ const VOLUME_KEY = "wt-volume";
 export default function PlayerBar({
   initialNormalizeVolume,
   initialSimilarDrift,
+  initialHideFriendDuplicates,
 }: {
   initialNormalizeVolume: boolean;
   initialSimilarDrift: boolean;
+  initialHideFriendDuplicates: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
@@ -150,6 +152,14 @@ export default function PlayerBar({
   useEffect(() => {
     usePlayerStore.getState().setSimilarDrift(initialSimilarDrift);
   }, [initialSimilarDrift]);
+
+  // Hydrate the persisted "hide friend duplicates" setting once, so the Settings
+  // toggle and the library list share one source of truth.
+  useEffect(() => {
+    usePlayerStore
+      .getState()
+      .setHideFriendDuplicates(initialHideFriendDuplicates);
+  }, [initialHideFriendDuplicates]);
 
   // Restore the master volume from localStorage on mount (client-only setting),
   // then allow the persist effect below to write subsequent changes.

@@ -41,6 +41,10 @@ type PlayerState = {
   /** When true, "play similar" refills seed from the currently-playing track
    *  (the radio drifts); when false they stay anchored to similarSeedId. */
   similarDrift: boolean;
+  /** Hide friends' tracks that duplicate one of the viewer's own (scope=all/
+   *  friends + search). Shared with LibraryBrowser so the Settings toggle
+   *  re-filters the visible list. */
+  hideFriendDuplicates: boolean;
   currentTime: number;
   duration: number;
   /** One-shot seek target consumed by PlayerBar's audio element. */
@@ -73,6 +77,7 @@ type PlayerState = {
   setVolume: (volume: number) => void;
   setNormalizeVolume: (normalizeVolume: boolean) => void;
   setSimilarDrift: (similarDrift: boolean) => void;
+  setHideFriendDuplicates: (hideFriendDuplicates: boolean) => void;
 
   // Setters owned by PlayerBar (the single <audio> element).
   _setProgress: (currentTime: number, duration: number) => void;
@@ -93,6 +98,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 1,
   normalizeVolume: true,
   similarDrift: true,
+  hideFriendDuplicates: true,
   currentTime: 0,
   duration: 0,
   seekRequest: null,
@@ -307,6 +313,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: (volume) => set({ volume }),
   setNormalizeVolume: (normalizeVolume) => set({ normalizeVolume }),
   setSimilarDrift: (similarDrift) => set({ similarDrift }),
+  setHideFriendDuplicates: (hideFriendDuplicates) =>
+    set({ hideFriendDuplicates }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),

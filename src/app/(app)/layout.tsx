@@ -13,7 +13,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requirePageUser();
-  const { normalizeVolume, similarVariation, similarDrift } =
+  const { normalizeVolume, similarVariation, similarDrift, hideFriendDuplicates } =
     await getUserSettings(user.id);
 
   return (
@@ -30,6 +30,7 @@ export default async function AppLayout({
       <PlayerBar
         initialNormalizeVolume={normalizeVolume}
         initialSimilarDrift={similarDrift}
+        initialHideFriendDuplicates={hideFriendDuplicates}
       />
       <MobileNav />
       <SettingsModal
