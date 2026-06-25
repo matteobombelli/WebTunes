@@ -158,6 +158,28 @@ export const QueueIcon = (p: IconProps) => (
   </Svg>
 );
 
+// List lines with a play triangle: "play this right after the current track".
+export const PlayNextIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="6" width="11" height="2" rx="1" />
+    <rect x="3" y="11" width="11" height="2" rx="1" />
+    <rect x="3" y="16" width="7" height="2" rx="1" />
+    <path d="M14.5 14.4v6.2c0 .45.5.72.87.47l4.65-3.1a.56.56 0 0 0 0-.94l-4.65-3.1a.56.56 0 0 0-.87.47z" />
+  </Svg>
+);
+
+// Six-dot drag handle.
+export const GripIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="6" r="1.6" />
+    <circle cx="15" cy="6" r="1.6" />
+    <circle cx="9" cy="12" r="1.6" />
+    <circle cx="15" cy="12" r="1.6" />
+    <circle cx="9" cy="18" r="1.6" />
+    <circle cx="15" cy="18" r="1.6" />
+  </Svg>
+);
+
 export const UpIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 5l6 7h-4v7h-4v-7H6l6-7z" />

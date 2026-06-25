@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
+import TrackArt from "@/components/TrackArt";
 
 // Stays mounted so the Dialog can animate out; the body mounts per open so
 // the filter and selection start fresh each time.
@@ -133,6 +134,7 @@ function AddTracksBody({
               onChange={() => toggle(t.id)}
               className="checkbox shrink-0"
             />
+            <TrackArt track={t} size="h-9 w-9" iconSize={16} />
             <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
             <span className="hidden max-w-32 truncate text-fg-muted sm:block">
               {t.artist ?? "—"}

@@ -15,13 +15,14 @@ import {
   EllipsisIcon,
   HeadphonesIcon,
   LockIcon,
+  MusicIcon,
   PencilIcon,
+  PlayNextIcon,
   PlusIcon,
   QueueIcon,
   UpIcon,
   XIcon,
 } from "@/components/icons";
-import Dialog from "@/components/Dialog";
 import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
 import TrackArt from "@/components/TrackArt";
@@ -84,16 +85,25 @@ const MENU_ROW =
 // Flipping anchors by the bottom edge (just above the trigger) so the resting
 // spot is already correct and the pop-in animation doesn't fight a shift.
 const MENU_GAP = 4;
+const MENU_MARGIN = 8; // keep the menu at least this far from the viewport edges
 function menuVerticalAnchor(
   rect: DOMRect,
   menuH: number
 ): { top: number } | { bottom: number } {
   const spaceBelow = window.innerHeight - rect.bottom;
   const spaceAbove = rect.top;
-  if (menuH + MENU_GAP > spaceBelow && spaceAbove > spaceBelow) {
+  // Flip above the trigger only when the menu actually fits there — otherwise a
+  // tall menu would run off the top of the screen. Default to opening downward.
+  if (menuH + MENU_GAP > spaceBelow && menuH + MENU_GAP <= spaceAbove) {
     return { bottom: window.innerHeight - rect.top + MENU_GAP };
   }
-  return { top: rect.bottom + MENU_GAP };
+  // Anchored below: clamp the top so a menu taller than the space below stays
+  // on-screen instead of overflowing the bottom edge (never above MENU_MARGIN).
+  const top = Math.min(
+    rect.bottom + MENU_GAP,
+    Math.max(MENU_MARGIN, window.innerHeight - menuH - MENU_MARGIN)
+  );
+  return { top };
 }
 
 export function AddToPlaylistMenu({
@@ -221,9 +231,23 @@ export function AddToPlaylistMenu({
         <button
           key={p.id}
           onClick={() => add(p.id)}
-          className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-fg hover:bg-surface-3"
         >
-          {p.name}
+          {p.coverUrl ? (
+            // Presigned S3 URL; next/image cannot optimize short-lived URLs.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={p.coverUrl}
+              alt=""
+              loading="lazy"
+              className="h-8 w-8 shrink-0 rounded object-cover"
+            />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-surface-3 text-fg-subtle">
+              <MusicIcon size={16} />
+            </span>
+          )}
+          <span className="truncate">{p.name}</span>
         </button>
       ))}
     </>
@@ -268,7 +292,7 @@ export function AddToPlaylistMenu({
                 bottom: pos.bottom,
                 left: pos.left,
               }}
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
+              className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 max-h-[80vh] w-56 overflow-y-auto rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
             >
               {items}
             </div>,
@@ -276,64 +300,11 @@ export function AddToPlaylistMenu({
           )
         : (open || menuClosing) && (
             <div
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-44 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
+              className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-56 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
             >
               {items}
             </div>
           )}
-    </div>
-  );
-}
-
-function AddToQueueMenu({
-  tracks,
-  label,
-}: {
-  tracks: TrackDTO[];
-  /** When set, the trigger is a full-width labelled menu row. */
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  // Keeps the menu mounted briefly after close so it can animate out.
-  const [menuClosing, setMenuClosing] = useState(false);
-
-  const close = () => {
-    setOpen(false);
-    setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 150);
-  };
-
-  const option = (label: string, action: (tracks: TrackDTO[]) => void) => (
-    <button
-      onClick={() => {
-        action(tracks);
-        close();
-      }}
-      className="block w-full px-3 py-1 text-left text-fg hover:bg-surface-3"
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => (open ? close() : setOpen(true))}
-        aria-label="Add to queue"
-        title="Add to queue"
-        className={label ? MENU_ROW : "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"}
-      >
-        {label && <span>{label}</span>}
-        <QueueIcon size={16} className={label ? "shrink-0 text-fg-muted" : undefined} />
-      </button>
-      {(open || menuClosing) && (
-        <div
-          className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute right-0 z-10 mt-1 w-36 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
-        >
-          {option("Play next", usePlayerStore.getState().playNext)}
-          {option("Add to queue", usePlayerStore.getState().addToQueue)}
-        </div>
-      )}
     </div>
   );
 }
@@ -389,7 +360,30 @@ function TrackActions({
           <span className="truncate text-fg-muted">{track.album}</span>
         </Link>
       )}
-      <AddToQueueMenu tracks={[track]} label="Queue" />
+      {/* Desktop hosts Play next / Add to queue as single-click icons on the
+          row itself; the menu only needs them on mobile (no hover row). */}
+      <div className="flex flex-col gap-2 md:hidden">
+        <button
+          onClick={() => {
+            usePlayerStore.getState().playNext([track]);
+            onClose();
+          }}
+          className={MENU_ROW}
+        >
+          <span>Play next</span>
+          <PlayNextIcon size={16} className="shrink-0 text-fg-muted" />
+        </button>
+        <button
+          onClick={() => {
+            usePlayerStore.getState().addToQueue([track]);
+            onClose();
+          }}
+          className={MENU_ROW}
+        >
+          <span>Add to queue</span>
+          <QueueIcon size={16} className="shrink-0 text-fg-muted" />
+        </button>
+      </div>
       <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
       <DownloadButton track={track} label="Download" />
       {canEdit && !track.ownerName && (
@@ -525,11 +519,11 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
         onClick={toggle}
         aria-label="Track actions"
         title="Track actions"
-        className={`rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white ${
+        className={`flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white ${
           open ? "" : "md:opacity-0 md:group-hover:opacity-100"
         }`}
       >
-        <EllipsisIcon size={18} />
+        <EllipsisIcon size={20} />
       </button>
       {(open || menuClosing) &&
         pos &&
@@ -537,7 +531,7 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
           <div
             ref={menuRef}
             style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
-            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 w-60 rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
+            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 max-h-[80vh] w-60 overflow-y-auto rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
           >
             <TrackActions {...props} onClose={close} />
           </div>,
@@ -563,7 +557,6 @@ type TrackRowProps = {
   canDelete: boolean;
   playQueue: (tracks: TrackDTO[], startIndex: number) => void;
   onToggleSelect: (id: string) => void;
-  onOpenActions: (track: TrackDTO) => void;
   onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
@@ -587,7 +580,6 @@ const TrackRow = memo(function TrackRow({
   canDelete,
   playQueue,
   onToggleSelect,
-  onOpenActions,
   onMove,
   onRemove,
   removeLabel,
@@ -670,8 +662,26 @@ const TrackRow = memo(function TrackRow({
         </td>
       )}
       <td className="py-2">
-        {/* Desktop: hover-revealed three-dot dropdown. */}
-        <div className="hidden justify-end md:flex">
+        <div className="flex items-center justify-end gap-0.5">
+          {/* Desktop: single-click queue actions, revealed on row hover. */}
+          <button
+            onClick={() => usePlayerStore.getState().playNext([track])}
+            aria-label="Play next"
+            title="Play next"
+            className="hidden h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white md:flex md:opacity-0 md:group-hover:opacity-100"
+          >
+            <PlayNextIcon size={20} />
+          </button>
+          <button
+            onClick={() => usePlayerStore.getState().addToQueue([track])}
+            aria-label="Add to queue"
+            title="Add to queue"
+            className="hidden h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white md:flex md:opacity-0 md:group-hover:opacity-100"
+          >
+            <QueueIcon size={20} />
+          </button>
+          {/* Kebab dropdown for both layouts: hover-revealed on desktop, always
+              shown on mobile (where it also hosts Play next / Add to queue). */}
           <TrackActionsMenu
             track={track}
             index={index}
@@ -684,16 +694,6 @@ const TrackRow = memo(function TrackRow({
             onEdit={onEdit}
             onDelete={onDelete}
           />
-        </div>
-        {/* Mobile: collapse the actions into a single kebab dialog. */}
-        <div className="flex justify-end md:hidden">
-          <button
-            onClick={() => onOpenActions(track)}
-            aria-label="Track actions"
-            className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
-          >
-            <EllipsisIcon size={18} />
-          </button>
         </div>
       </td>
     </tr>
@@ -738,8 +738,6 @@ export default function TrackList({
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = useCurrentTrack();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
-  // Mobile: the row whose action sheet (kebab dialog) is open.
-  const [actionsTrack, setActionsTrack] = useState<TrackDTO | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortState>(null);
 
@@ -886,10 +884,6 @@ export default function TrackList({
     return <p className="py-8 text-center text-sm text-fg-subtle">No tracks here yet.</p>;
   }
 
-  const actionsIndex = actionsTrack
-    ? view.findIndex((t) => t.id === actionsTrack.id)
-    : -1;
-
   return (
     <>
     {/* Space is always reserved so selecting doesn't shift the table. */}
@@ -1001,7 +995,9 @@ export default function TrackList({
               )}
             </th>
           )}
-          <th className="w-10 py-2"></th>
+          {/* Mobile shows just the kebab; desktop adds Play next + Add to
+              queue icons, so reserve more width there. */}
+          <th className="w-10 py-2 md:w-28"></th>
         </tr>
       </thead>
       <tbody>
@@ -1021,7 +1017,6 @@ export default function TrackList({
             canDelete={canDelete}
             playQueue={playQueue}
             onToggleSelect={toggleSelected}
-            onOpenActions={setActionsTrack}
             onMove={onMove}
             onRemove={onRemove}
             removeLabel={removeLabel}
@@ -1043,27 +1038,6 @@ export default function TrackList({
       onClose={() => setEditing(null)}
       onSaved={onMutated}
     />
-    <Dialog
-      title={actionsTrack?.title ?? "Track"}
-      open={!!actionsTrack}
-      onClose={() => setActionsTrack(null)}
-    >
-      {actionsTrack && (
-        <TrackActions
-          track={actionsTrack}
-          index={actionsIndex}
-          viewLength={view.length}
-          canEdit={canEdit}
-          canDelete={canDelete}
-          onMove={onMove}
-          onRemove={onRemove}
-          removeLabel={removeLabel}
-          onEdit={setEditing}
-          onDelete={remove}
-          onClose={() => setActionsTrack(null)}
-        />
-      )}
-    </Dialog>
     </>
   );
 }

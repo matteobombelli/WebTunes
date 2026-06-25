@@ -33,7 +33,7 @@ export function usePlaySimilarRefill() {
     // Drift: rank each refill against the track playing now so the radio
     // evolves; otherwise stay anchored to the original frozen seed.
     const seedId = st.similarDrift
-      ? st.queue[st.index]?.id ?? similarSeedId
+      ? st.queue[st.index]?.track.id ?? similarSeedId
       : similarSeedId;
     fetchSimilarTracks(seedId, st.similarSeen, REFILL_COUNT)
       .then((tracks) => {

@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { api, fetchSimilarTracks, streamSrc } from "@/lib/api";
+import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
@@ -31,6 +32,32 @@ const TARGET_LUFS = -18;
 
 /** localStorage key for the persisted master volume (client-only preference). */
 const VOLUME_KEY = "wt-volume";
+
+/**
+ * Always-mounted, render-nothing helper that warms the browser image cache for
+ * the queue art the user is about to see (head, tail, and around the current
+ * track) so thumbnails are instant when the queue panel opens. Its own narrow
+ * store subscription keeps queue churn from re-rendering the PlayerBar.
+ */
+function QueueArtPreloader() {
+  const queue = usePlayerStore((s) => s.queue);
+  const index = usePlayerStore((s) => s.index);
+  useEffect(() => {
+    const picks = [
+      ...queue.slice(0, 10),
+      ...queue.slice(-10),
+      ...queue.slice(Math.max(0, index - 3), index + 4),
+    ];
+    const seen = new Set<string>();
+    for (const { track } of picks) {
+      if (!track.artS3Key || seen.has(track.id)) continue;
+      seen.add(track.id);
+      const img = new Image();
+      img.src = artSrc(track.id);
+    }
+  }, [queue, index]);
+  return null;
+}
 
 export default function PlayerBar({
   initialNormalizeVolume,
@@ -81,7 +108,7 @@ export default function PlayerBar({
       return;
     }
     if (store.index < 0) return;
-    const seed = store.queue[store.index];
+    const seed = store.queue[store.index].track;
     try {
       const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
       // No embedding for the seed yet (or nothing similar) — stay off.
@@ -323,7 +350,7 @@ export default function PlayerBar({
         step={0.5}
         value={Math.min(playedSeconds, totalDuration || Infinity)}
         onChange={(e) => seekTo(Number(e.target.value) / timeScale)}
-        className="h-1 min-w-0 flex-1 accent-accent"
+        className="h-5 min-w-0 flex-1 cursor-pointer accent-accent"
         aria-label="Seek"
       />
       <span className="w-10 shrink-0 tabular-nums">
@@ -342,7 +369,16 @@ export default function PlayerBar({
     <>
       <p className="truncate text-sm font-medium text-fg">{track.title}</p>
       <p className="truncate text-xs text-fg-muted">
-        {track.artist ?? "Unknown artist"}
+        {track.artist ? (
+          <Link
+            href={`/artist?name=${encodeURIComponent(track.artist)}`}
+            className="hover:text-accent-bright hover:underline"
+          >
+            {track.artist}
+          </Link>
+        ) : (
+          "Unknown artist"
+        )}
         {track.ownerName ? ` · from ${track.ownerName}` : ""}
       </p>
     </>
@@ -366,6 +402,7 @@ export default function PlayerBar({
 
   return (
     <div className="relative border-t border-border-subtle bg-surface-1">
+      <QueueArtPreloader />
       <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
       <audio
         ref={audioRef}

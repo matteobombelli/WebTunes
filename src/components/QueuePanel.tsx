@@ -1,8 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePlayerStore } from "@/stores/player";
-import { XIcon } from "@/components/icons";
+import Link from "next/link";
+import {
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { usePlayerStore, type QueueItem } from "@/stores/player";
+import { GripIcon, XIcon } from "@/components/icons";
+import TrackArt from "@/components/TrackArt";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
@@ -18,8 +37,26 @@ export default function QueuePanel({
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const { playAt, removeFromQueue, clearUpcoming } = usePlayerStore.getState();
-  const currentRowRef = useRef<HTMLLIElement>(null);
+  const { playAt, removeFromQueue, clearUpcoming, reorder } =
+    usePlayerStore.getState();
+  const currentRowRef = useRef<HTMLLIElement | null>(null);
+
+  // A small activation distance lets a plain tap on the grip still register as
+  // a click (and lets touch-scrolling the list work) before a drag kicks in.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = queue.findIndex((q) => q.uid === active.id);
+    const to = queue.findIndex((q) => q.uid === over.id);
+    if (from !== -1 && to !== -1) reorder(from, to);
+  };
 
   // Stay mounted briefly after close so the exit animation can play.
   const [closing, setClosing] = useState(false);
@@ -68,55 +105,116 @@ export default function QueuePanel({
         </button>
       </div>
 
-      <ul className="overflow-y-auto py-1">
-        {queue.map((track, i) => {
-          const isCurrent = i === index;
-          return (
-            // Same track can be queued twice, so the id alone isn't unique.
-            <li
-              key={`${track.id}-${i}`}
-              ref={isCurrent ? currentRowRef : undefined}
-              className={`group flex items-center gap-2 px-4 py-1.5 ${
-                isCurrent ? "bg-surface-3/40" : "hover:bg-surface-3/40"
-              }`}
-            >
-              <button
-                onClick={() => playAt(i)}
-                disabled={isCurrent}
-                className="min-w-0 flex-1 text-left"
-                title={isCurrent ? undefined : `Play ${track.title}`}
-              >
-                <p
-                  className={`truncate text-sm font-medium ${
-                    isCurrent ? "text-accent-bright" : "text-fg"
-                  }`}
-                >
-                  {track.title}
-                </p>
-                <p className="truncate text-xs text-fg-muted">
-                  {track.artist ?? "Unknown artist"}
-                  {track.ownerName ? ` · from ${track.ownerName}` : ""}
-                </p>
-              </button>
-              {isCurrent ? (
-                <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent-bright">
-                  <NowPlayingBars playing={isPlaying} className="h-3 w-3" />
-                  Playing
-                </span>
-              ) : (
-                <button
-                  onClick={() => removeFromQueue(i)}
-                  aria-label={`Remove ${track.title} from queue`}
-                  title="Remove from queue"
-                  className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
-                >
-                  <XIcon size={14} />
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis]}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext
+          items={queue.map((q) => q.uid)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="overflow-y-auto py-1">
+            {queue.map((item, i) => (
+              <QueueRow
+                key={item.uid}
+                item={item}
+                isCurrent={i === index}
+                isPlaying={isPlaying}
+                rowRef={i === index ? currentRowRef : undefined}
+                onPlay={() => playAt(i)}
+                onRemove={() => removeFromQueue(i)}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
     </div>
+  );
+}
+
+function QueueRow({
+  item,
+  isCurrent,
+  isPlaying,
+  rowRef,
+  onPlay,
+  onRemove,
+}: {
+  item: QueueItem;
+  isCurrent: boolean;
+  isPlaying: boolean;
+  rowRef?: React.MutableRefObject<HTMLLIElement | null>;
+  onPlay: () => void;
+  onRemove: () => void;
+}) {
+  const { track } = item;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.uid });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <li
+      ref={(node) => {
+        setNodeRef(node);
+        if (rowRef) rowRef.current = node;
+      }}
+      style={style}
+      className={`group flex items-center gap-2 px-4 py-1.5 ${
+        isDragging ? "relative z-10 bg-surface-3 shadow-lg" : ""
+      } ${isCurrent ? "bg-surface-3/40" : "hover:bg-surface-3/40"}`}
+    >
+      <TrackArt track={track} size="h-10 w-10" iconSize={18} />
+      <div className="min-w-0 flex-1">
+        <button
+          onClick={onPlay}
+          disabled={isCurrent}
+          title={isCurrent ? undefined : `Play ${track.title}`}
+          className={`block max-w-full truncate text-left text-sm font-medium ${
+            isCurrent ? "text-accent-bright" : "text-fg"
+          }`}
+        >
+          {track.title}
+        </button>
+        <p className="truncate text-xs text-fg-muted">
+          {track.artist ? (
+            <Link
+              href={`/artist?name=${encodeURIComponent(track.artist)}`}
+              className="hover:text-accent-bright hover:underline"
+            >
+              {track.artist}
+            </Link>
+          ) : (
+            "Unknown artist"
+          )}
+          {track.ownerName ? ` · from ${track.ownerName}` : ""}
+        </p>
+      </div>
+      {isCurrent ? (
+        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent-bright">
+          <NowPlayingBars playing={isPlaying} className="h-3 w-3" />
+          Playing
+        </span>
+      ) : (
+        <button
+          onClick={onRemove}
+          aria-label={`Remove ${track.title} from queue`}
+          title="Remove from queue"
+          className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+        >
+          <XIcon size={14} />
+        </button>
+      )}
+      <button
+        {...attributes}
+        {...listeners}
+        aria-label={`Reorder ${track.title}`}
+        title="Drag to reorder"
+        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100"
+      >
+        <GripIcon size={16} />
+      </button>
+    </li>
   );
 }

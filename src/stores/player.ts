@@ -13,17 +13,28 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
+/**
+ * A queue slot: a track plus a stable id unique to this slot. The same track can
+ * sit in the queue more than once, so `uid` (not `track.id`) is what the queue UI
+ * keys/reorders by — otherwise duplicates collide and drag-reorder can't animate.
+ */
+export type QueueItem = { uid: string; track: TrackDTO };
+
+let uidSeq = 0;
+const wrap = (tracks: TrackDTO[]): QueueItem[] =>
+  tracks.map((track) => ({ uid: `q${uidSeq++}`, track }));
+
 type PlayerState = {
-  queue: TrackDTO[];
+  queue: QueueItem[];
   index: number; // -1 when nothing is loaded
   /** Sticky across playQueue calls: new queues start shuffled too. */
   shuffled: boolean;
   /**
    * Pre-shuffle order, restored on unshuffle; null while shuffle is off.
    * Queue edits (add/remove) maintain both arrays, matching entries by
-   * object reference — every mutation shares track references between them.
+   * object reference — every mutation shares QueueItem references between them.
    */
-  unshuffledQueue: TrackDTO[] | null;
+  unshuffledQueue: QueueItem[] | null;
   /** "Play similar" radio is active: the queue auto-refills with tracks
    *  acoustically similar to a frozen seed (see usePlaySimilarRefill). */
   playSimilar: boolean;
@@ -61,6 +72,8 @@ type PlayerState = {
   removeFromQueue: (index: number) => void;
   /** Drop everything after the current track. */
   clearUpcoming: () => void;
+  /** Move a queue entry to a new position (drag-to-reorder). */
+  reorder: (from: number, to: number) => void;
   toggleShuffle: () => void;
   /** Enable "play similar": keep the current track playing, replace the rest of
    *  the queue with the first batch of similar tracks, freeze the seed. */
@@ -111,20 +124,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       similarSeedId: null,
       similarSeen: [],
     };
-    if (get().shuffled && tracks.length > 0) {
+    const items = wrap(tracks);
+    if (get().shuffled && items.length > 0) {
       // Clicked track first, rest shuffled behind it.
-      const rest = tracks.filter((_, i) => i !== startIndex);
+      const rest = items.filter((_, i) => i !== startIndex);
       set({
-        queue: [tracks[startIndex], ...shuffle(rest)],
+        queue: [items[startIndex], ...shuffle(rest)],
         index: 0,
-        unshuffledQueue: tracks,
+        unshuffledQueue: items,
         isPlaying: true,
         currentTime: 0,
         ...stopSim,
       });
     } else {
       set({
-        queue: tracks,
+        queue: items,
         index: startIndex,
         unshuffledQueue: null,
         isPlaying: true,
@@ -142,26 +156,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playNext: (tracks) => {
     const s = get();
+    const items = wrap(tracks);
     if (s.index < 0) {
       // Nothing loaded: play the picked tracks as-is, even when shuffled.
       set({
-        queue: tracks,
+        queue: items,
         index: 0,
-        unshuffledQueue: s.shuffled ? tracks : null,
+        unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
       });
       return;
     }
     const queue = [...s.queue];
-    queue.splice(s.index + 1, 0, ...tracks);
+    queue.splice(s.index + 1, 0, ...items);
     let unshuffledQueue = s.unshuffledQueue;
     if (unshuffledQueue) {
       unshuffledQueue = [...unshuffledQueue];
       unshuffledQueue.splice(
         unshuffledQueue.indexOf(s.queue[s.index]) + 1,
         0,
-        ...tracks
+        ...items
       );
     }
     set({ queue, unshuffledQueue });
@@ -169,20 +184,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   addToQueue: (tracks) => {
     const s = get();
+    const items = wrap(tracks);
     if (s.index < 0) {
       set({
-        queue: tracks,
+        queue: items,
         index: 0,
-        unshuffledQueue: s.shuffled ? tracks : null,
+        unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
       });
       return;
     }
     set({
-      queue: [...s.queue, ...tracks],
+      queue: [...s.queue, ...items],
       unshuffledQueue: s.unshuffledQueue
-        ? [...s.unshuffledQueue, ...tracks]
+        ? [...s.unshuffledQueue, ...items]
         : null,
     });
   },
@@ -211,10 +227,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const queue = s.queue.slice(0, s.index + 1);
     let unshuffledQueue = s.unshuffledQueue;
     if (unshuffledQueue) {
-      const kept = new Set<TrackDTO>(queue);
+      const kept = new Set<QueueItem>(queue);
       unshuffledQueue = unshuffledQueue.filter((t) => kept.has(t));
     }
     set({ queue, unshuffledQueue });
+  },
+
+  reorder: (from, to) => {
+    const s = get();
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= s.queue.length ||
+      to >= s.queue.length
+    )
+      return;
+    // Track the current entry by reference so the now-playing pointer follows
+    // its track to the new position. unshuffledQueue is left as the original
+    // pre-shuffle order — a manual reorder is a transient arrangement of the
+    // live queue, undone if shuffle is later turned off.
+    const current = s.index >= 0 ? s.queue[s.index] : null;
+    const queue = [...s.queue];
+    const [moved] = queue.splice(from, 1);
+    queue.splice(to, 0, moved);
+    set({ queue, index: current ? queue.indexOf(current) : s.index });
   },
 
   toggleShuffle: () => {
@@ -260,7 +297,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Keep the current track playing (don't reset isPlaying/currentTime); drop
     // the rest of the queue and seed it with the first similar batch.
     set({
-      queue: [s.queue[s.index], ...tracks],
+      queue: [s.queue[s.index], ...wrap(tracks)],
       index: 0,
       shuffled: false,
       unshuffledQueue: null,
@@ -274,7 +311,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const s = get();
     if (!s.playSimilar) return;
     set({
-      queue: [...s.queue, ...tracks],
+      queue: [...s.queue, ...wrap(tracks)],
       similarSeen: [...s.similarSeen, ...tracks.map((t) => t.id)],
     });
   },
@@ -322,4 +359,4 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 }));
 
 export const useCurrentTrack = () =>
-  usePlayerStore((s) => (s.index >= 0 ? s.queue[s.index] : null));
+  usePlayerStore((s) => (s.index >= 0 ? s.queue[s.index].track : null));

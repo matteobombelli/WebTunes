@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -22,6 +22,15 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "WebTunes",
   description: "Your personal music library, anywhere",
+};
+
+// Lock the viewport so phones don't pinch/double-tap zoom (the app is its own
+// scroll-managed UI). iOS Safari may still allow zoom in some versions.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
