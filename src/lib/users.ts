@@ -73,7 +73,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
     row ?? {
       hideFriendDuplicates: true,
       normalizeVolume: true,
-      similarVariation: 2,
+      similarVariation: 3,
       similarDrift: true,
     }
   );

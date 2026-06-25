@@ -11,7 +11,7 @@ import { XIcon } from "@/components/icons";
 const VARIATION_LABELS = [
   "Very random",
   "More random",
-  "Default",
+  "Balanced",
   "More uniform",
   "Pure uniform",
 ];

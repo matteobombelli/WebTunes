@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "similar_variation" SET DEFAULT 3;

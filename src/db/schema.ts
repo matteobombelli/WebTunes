@@ -28,7 +28,7 @@ export const users = pgTable("users", {
   normalizeVolume: boolean("normalize_volume").notNull().default(true),
   // "Play similar" variation level 0..4 (0 = very random … 4 = pure
   // deterministic cosine). Maps to a Gumbel-sampling sigma in lib/similar.ts.
-  similarVariation: integer("similar_variation").notNull().default(2),
+  similarVariation: integer("similar_variation").notNull().default(3),
   // When true, "play similar" refills track the currently-playing song (the
   // radio drifts); when false it stays anchored to the original seed track.
   similarDrift: boolean("similar_drift").notNull().default(true),
