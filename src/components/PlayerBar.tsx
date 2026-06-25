@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -95,6 +95,9 @@ export default function PlayerBar({
   const shuffled = usePlayerStore((s) => s.shuffled);
   const playSimilar = usePlayerStore((s) => s.playSimilar);
   const [queueOpen, setQueueOpen] = useState(false);
+  // Stable identity so currentTime ticks (which re-render PlayerBar ~4-30 Hz)
+  // don't re-render the memoized QueuePanel through a fresh onClose each render.
+  const closeQueue = useCallback(() => setQueueOpen(false), [setQueueOpen]);
 
   // Keep the "play similar" radio's queue topped up while it's active.
   usePlaySimilarRefill();
@@ -403,7 +406,7 @@ export default function PlayerBar({
   return (
     <div className="relative border-t border-border-subtle bg-surface-1">
       <QueueArtPreloader />
-      <QueuePanel open={queueOpen} onClose={() => setQueueOpen(false)} />
+      <QueuePanel open={queueOpen} onClose={closeQueue} />
       <audio
         ref={audioRef}
         onPlaying={(e) => {

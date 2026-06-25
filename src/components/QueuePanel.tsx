@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -27,7 +27,7 @@ import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
 
 /** Queue popover anchored above the player bar; PlayerBar owns open state. */
-export default function QueuePanel({
+export default memo(function QueuePanel({
   open,
   onClose,
 }: {
@@ -37,8 +37,7 @@ export default function QueuePanel({
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const { playAt, removeFromQueue, clearUpcoming, reorder } =
-    usePlayerStore.getState();
+  const { clearUpcoming } = usePlayerStore.getState();
   const currentRowRef = useRef<HTMLLIElement | null>(null);
 
   // A small activation distance lets a plain tap on the grip still register as
@@ -50,13 +49,14 @@ export default function QueuePanel({
     })
   );
 
-  const onDragEnd = (e: DragEndEvent) => {
+  const onDragEnd = useCallback((e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+    const { queue, reorder } = usePlayerStore.getState();
     const from = queue.findIndex((q) => q.uid === active.id);
     const to = queue.findIndex((q) => q.uid === over.id);
     if (from !== -1 && to !== -1) reorder(from, to);
-  };
+  }, []);
 
   // Stay mounted briefly after close so the exit animation can play.
   const [closing, setClosing] = useState(false);
@@ -71,17 +71,27 @@ export default function QueuePanel({
     return () => clearTimeout(t);
   }, [closing]);
 
-  // Start the view at the playing track, not the top of history.
+  // Start the view at the playing track, not the top of history. rAF so the
+  // forced reflow rides the browser's natural post-open layout, off the open
+  // commit's critical frame.
   useEffect(() => {
-    if (open) currentRowRef.current?.scrollIntoView({ block: "center" });
+    if (!open) return;
+    const id = requestAnimationFrame(() =>
+      currentRowRef.current?.scrollIntoView({ block: "center" })
+    );
+    return () => cancelAnimationFrame(id);
   }, [open]);
 
   const upcoming = queue.length - index - 1;
+  // Stable across index/isPlaying changes so SortableContext doesn't churn.
+  const items = useMemo(() => queue.map((q) => q.uid), [queue]);
 
-  if (!open && !closing) return null;
+  // Stay mounted while fully closed (display:none) so the @dnd-kit tree and rows
+  // mount as the queue is built, not in one cold synchronous frame on first open.
+  const hidden = !open && !closing;
 
   return (
-    <div className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute bottom-full right-0 z-20 mb-2 mr-2 flex max-h-[60dvh] w-[26rem] max-w-[calc(100vw-1rem)] flex-col rounded-md border border-border bg-surface-2 shadow-lg md:mr-4`}>
+    <div className={`${hidden ? "hidden" : open ? "animate-pop-in" : "animate-pop-out"} absolute bottom-full right-0 z-20 mb-2 mr-2 flex max-h-[60dvh] w-[26rem] max-w-[calc(100vw-1rem)] flex-col rounded-md border border-border bg-surface-2 shadow-lg md:mr-4`}>
       <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <h2 className="text-sm font-semibold text-fg">Queue</h2>
         <span className="text-xs text-fg-muted">
@@ -111,20 +121,15 @@ export default function QueuePanel({
         modifiers={[restrictToVerticalAxis]}
         onDragEnd={onDragEnd}
       >
-        <SortableContext
-          items={queue.map((q) => q.uid)}
-          strategy={verticalListSortingStrategy}
-        >
+        <SortableContext items={items} strategy={verticalListSortingStrategy}>
           <ul className="overflow-y-auto py-1">
             {queue.map((item, i) => (
               <QueueRow
                 key={item.uid}
                 item={item}
                 isCurrent={i === index}
-                isPlaying={isPlaying}
+                isPlaying={i === index && isPlaying}
                 rowRef={i === index ? currentRowRef : undefined}
-                onPlay={() => playAt(i)}
-                onRemove={() => removeFromQueue(i)}
               />
             ))}
           </ul>
@@ -132,27 +137,34 @@ export default function QueuePanel({
       </DndContext>
     </div>
   );
-}
+});
 
-function QueueRow({
+const QueueRow = memo(function QueueRow({
   item,
   isCurrent,
   isPlaying,
   rowRef,
-  onPlay,
-  onRemove,
 }: {
   item: QueueItem;
   isCurrent: boolean;
   isPlaying: boolean;
   rowRef?: React.MutableRefObject<HTMLLIElement | null>;
-  onPlay: () => void;
-  onRemove: () => void;
 }) {
   const { track } = item;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.uid });
   const style = { transform: CSS.Transform.toString(transform), transition };
+
+  // Look up the live index at click time (keyed on the stable uid) so handlers
+  // stay referentially stable across reorders and keep React.memo effective.
+  const onPlay = useCallback(() => {
+    const s = usePlayerStore.getState();
+    s.playAt(s.queue.findIndex((q) => q.uid === item.uid));
+  }, [item.uid]);
+  const onRemove = useCallback(() => {
+    const s = usePlayerStore.getState();
+    s.removeFromQueue(s.queue.findIndex((q) => q.uid === item.uid));
+  }, [item.uid]);
 
   return (
     <li
@@ -217,4 +229,4 @@ function QueueRow({
       </button>
     </li>
   );
-}
+});
