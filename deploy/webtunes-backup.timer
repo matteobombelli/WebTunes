@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the WebTunes DB backup daily
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# Fire on next boot if the box was down at the scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

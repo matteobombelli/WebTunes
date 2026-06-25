@@ -1,0 +1,12 @@
+[Unit]
+Description=WebTunes nightly Postgres backup to R2
+# The dump runs `docker compose exec` against the postgres container.
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=debian
+WorkingDirectory=/home/debian/WebTunes
+# Login shell so node/docker resolve on PATH, exactly like webtunes.service.
+ExecStart=/bin/sh -lc 'node scripts/backup-db-to-r2.mjs'
