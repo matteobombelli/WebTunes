@@ -27,11 +27,12 @@ export function proxy(req: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (hasSessionCookie && isAuthPage) {
-    const url = nextUrl.clone();
-    url.pathname = "/library";
-    return NextResponse.redirect(url);
-  }
+  // The reverse ("cookie present + auth page → /library") is intentionally NOT
+  // done here: cookie presence doesn't mean the session is valid, so a stale
+  // cookie (e.g. after a password reset wipes every sessions row) would bounce
+  // /login → /library while the server bounced /library → /login — an infinite
+  // loop. The (auth) layout makes that redirect instead, validated against the
+  // database via auth().
   return NextResponse.next();
 }
 
