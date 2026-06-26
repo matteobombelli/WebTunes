@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
+  CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
@@ -328,6 +329,9 @@ type TrackActionsProps = {
   removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
   onDelete: (track: TrackDTO) => void;
+  /** Fires alongside onClose when an artist/album link is tapped, so a
+   *  containing overlay (now-playing sheet, queue panel) can dismiss first. */
+  onNavigate?: () => void;
   onClose: () => void;
 };
 
@@ -344,6 +348,7 @@ function TrackActions({
   removeLabel,
   onEdit,
   onDelete,
+  onNavigate,
   onClose,
 }: TrackActionsProps) {
   return (
@@ -351,7 +356,10 @@ function TrackActions({
       {track.artist && (
         <Link
           href={`/artist?name=${encodeURIComponent(track.artist)}`}
-          onClick={onClose}
+          onClick={() => {
+            onNavigate?.();
+            onClose();
+          }}
           className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
         >
           <span className="shrink-0">Go to artist</span>
@@ -361,7 +369,10 @@ function TrackActions({
       {track.album && (
         <Link
           href={`/album?name=${encodeURIComponent(track.album)}`}
-          onClick={onClose}
+          onClick={() => {
+            onNavigate?.();
+            onClose();
+          }}
           className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
         >
           <span className="shrink-0">Go to album</span>
@@ -453,8 +464,13 @@ function TrackActions({
 }
 
 // Desktop: a single three-dot button revealing the actions in an anchored
-// dropdown (replaces the old hover-revealed row of buttons).
-function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
+// dropdown (replaces the old hover-revealed row of buttons). Reused outside the
+// table (queue header, now-playing sheet) with `alwaysVisible` so the trigger
+// isn't hidden behind a row-hover that doesn't exist there.
+export function TrackActionsMenu({
+  alwaysVisible = false,
+  ...props
+}: Omit<TrackActionsProps, "onClose"> & { alwaysVisible?: boolean }) {
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
@@ -528,7 +544,7 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
         aria-label="Track actions"
         title="Track actions"
         className={`flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white ${
-          open ? "" : "md:opacity-0 md:group-hover:opacity-100"
+          open || alwaysVisible ? "" : "md:opacity-0 md:group-hover:opacity-100"
         }`}
       >
         <EllipsisIcon size={20} />
@@ -558,6 +574,8 @@ type TrackRowProps = {
    *  referentially stable and skip re-render on play/pause. */
   isPlaying: boolean;
   selectable: boolean;
+  /** Whether the checkbox column is expanded (selection mode active). */
+  selectMode: boolean;
   selected: boolean;
   showOwner: boolean;
   canEdit: boolean;
@@ -580,6 +598,7 @@ const TrackRow = memo(function TrackRow({
   isCurrent,
   isPlaying,
   selectable,
+  selectMode,
   selected,
   showOwner,
   canEdit,
@@ -600,13 +619,18 @@ const TrackRow = memo(function TrackRow({
       }`}
     >
       {selectable && (
-        <td className="py-2">
+        <td className="overflow-hidden py-2">
           <input
             type="checkbox"
             aria-label={`Select ${track.title}`}
             checked={selected}
             onChange={() => onToggleSelect(track.id)}
-            className="checkbox"
+            tabIndex={selectMode ? 0 : -1}
+            className={`checkbox transition-[opacity,transform] duration-200 ${
+              selectMode
+                ? "translate-x-0 opacity-100"
+                : "pointer-events-none -translate-x-2 opacity-0"
+            }`}
           />
         </td>
       )}
@@ -742,6 +766,9 @@ export default function TrackList({
   const current = useCurrentTrack();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Selection is opt-in: checkboxes and the bulk bar stay hidden behind a
+  // "Select…" button until the user turns this on (Clear turns it back off).
+  const [selectMode, setSelectMode] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
 
   // Display order; the play queue and bulk-add follow it.
@@ -825,12 +852,14 @@ export default function TrackList({
     return new Set([...selected].filter((id) => ids.has(id)));
   }, [tracks, selected]);
   const allSelected = validSelected.size === tracks.length && tracks.length > 0;
-  // The bar shows the last real count while fading out, never "0 selected".
-  const [lastSelectedCount, setLastSelectedCount] = useState(0);
-  if (validSelected.size > 0 && validSelected.size !== lastSelectedCount) {
-    setLastSelectedCount(validSelected.size);
-  }
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Leaving select mode clears the selection too, so the bar and checkboxes
+  // animate out together and re-entering starts fresh.
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelected(new Set());
+  }, []);
 
   const remove = useCallback(
     async (track: TrackDTO) => {
@@ -857,14 +886,7 @@ export default function TrackList({
         .map((t) => t.id),
     [view, validSelected]
   );
-  // Keep the Delete button rendered while the bar fades out on deselect (the
-  // bar lingers ~100ms); mirrors the lastSelectedCount sticky value above.
-  const hasDeletable = canDelete && deletableSelectedIds.length > 0;
-  const [lastHadDeletable, setLastHadDeletable] = useState(false);
-  if (validSelected.size > 0 && hasDeletable !== lastHadDeletable) {
-    setLastHadDeletable(hasDeletable);
-  }
-  const showDelete = validSelected.size > 0 ? hasDeletable : lastHadDeletable;
+  const showDelete = canDelete && deletableSelectedIds.length > 0;
 
   const bulkDelete = async () => {
     const ids = deletableSelectedIds;
@@ -889,77 +911,94 @@ export default function TrackList({
 
   return (
     <>
-    {/* Space is always reserved so selecting doesn't shift the table. */}
+    {/* The h-11 slot is always reserved so toggling selection never shifts the
+        table; it cross-fades between the "Select…" toggle (default) and the
+        bulk-actions bar (select mode). */}
     {selectable && (
-      <div
-        className={`mb-3 flex h-11 items-center gap-3 overflow-x-auto rounded-md border px-4 transition-all duration-100 ${
-          validSelected.size > 0
-            ? "border-border bg-surface-2/60 opacity-100"
-            : "pointer-events-none border-transparent opacity-0"
-        }`}
-      >
-        <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
-          {lastSelectedCount} selected
-        </span>
-        <div className="shrink-0">
-          <AddToPlaylistMenu
-            bulk
-            align="left"
-            trackIds={view.filter((t) => validSelected.has(t.id)).map((t) => t.id)}
-            onAdded={() => setSelected(new Set())}
-          />
-        </div>
-        <button
-          onClick={() => {
-            usePlayerStore
-              .getState()
-              .addToQueue(view.filter((t) => validSelected.has(t.id)));
-            setSelected(new Set());
-          }}
-          aria-label="Add to queue"
-          title="Add to queue"
-          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+      <div className="relative mb-3 h-11">
+        <div
+          className={`absolute inset-0 flex items-center transition-opacity duration-150 ${
+            selectMode ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
         >
-          <QueueIcon size={18} />
-          <span className="hidden md:inline">Add to queue</span>
-        </button>
-        <button
-          onClick={() => {
-            useDownloadsStore
-              .getState()
-              .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
-            setSelected(new Set());
-          }}
-          aria-label="Download"
-          title="Download"
-          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
-        >
-          <DownloadIcon size={18} />
-          <span className="hidden md:inline">Download</span>
-        </button>
-        {showDelete && (
           <button
-            onClick={bulkDelete}
-            disabled={bulkBusy}
-            aria-label="Delete"
-            title="Delete"
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+            onClick={() => setSelectMode(true)}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
           >
-            <TrashIcon size={18} />
-            <span className="hidden md:inline">
-              {bulkBusy ? "Deleting…" : "Delete"}
-            </span>
+            <CheckIcon size={16} />
+            Select…
           </button>
-        )}
-        <button
-          onClick={() => setSelected(new Set())}
-          aria-label="Clear selection"
-          title="Clear selection"
-          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted hover:text-white"
+        </div>
+        <div
+          className={`absolute inset-0 flex items-center gap-3 overflow-x-auto rounded-md border px-4 transition-opacity duration-150 ${
+            selectMode
+              ? "border-border bg-surface-2/60 opacity-100"
+              : "pointer-events-none border-transparent opacity-0"
+          }`}
         >
-          <XIcon size={18} />
-          <span className="hidden md:inline">Clear</span>
-        </button>
+          <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
+            {validSelected.size} selected
+          </span>
+          <div className="shrink-0">
+            <AddToPlaylistMenu
+              bulk
+              align="left"
+              trackIds={view.filter((t) => validSelected.has(t.id)).map((t) => t.id)}
+              onAdded={() => setSelected(new Set())}
+            />
+          </div>
+          <button
+            onClick={() => {
+              usePlayerStore
+                .getState()
+                .addToQueue(view.filter((t) => validSelected.has(t.id)));
+              setSelected(new Set());
+            }}
+            aria-label="Add to queue"
+            title="Add to queue"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+          >
+            <QueueIcon size={18} />
+            <span className="hidden md:inline">Add to queue</span>
+          </button>
+          <button
+            onClick={() => {
+              useDownloadsStore
+                .getState()
+                .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
+              setSelected(new Set());
+            }}
+            aria-label="Download"
+            title="Download"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+          >
+            <DownloadIcon size={18} />
+            <span className="hidden md:inline">Download</span>
+          </button>
+          {showDelete && (
+            <button
+              onClick={bulkDelete}
+              disabled={bulkBusy}
+              aria-label="Delete"
+              title="Delete"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+            >
+              <TrashIcon size={18} />
+              <span className="hidden md:inline">
+                {bulkBusy ? "Deleting…" : "Delete"}
+              </span>
+            </button>
+          )}
+          <button
+            onClick={exitSelectMode}
+            aria-label="Clear selection"
+            title="Clear selection"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted hover:text-white"
+          >
+            <XIcon size={18} />
+            <span className="hidden md:inline">Clear</span>
+          </button>
+        </div>
       </div>
     )}
     {/* Fixed layout: column widths come from the <th>s, so long values
@@ -968,7 +1007,11 @@ export default function TrackList({
       <thead className="text-xs uppercase text-fg-subtle">
         <tr className="border-b border-border-subtle">
           {selectable && (
-            <th className="w-8 py-2">
+            <th
+              className={`overflow-hidden py-2 transition-[width] duration-200 ${
+                selectMode ? "w-8" : "w-0"
+              }`}
+            >
               <input
                 type="checkbox"
                 aria-label="Select all"
@@ -978,7 +1021,12 @@ export default function TrackList({
                     allSelected ? new Set() : new Set(tracks.map((t) => t.id))
                   )
                 }
-                className="checkbox"
+                tabIndex={selectMode ? 0 : -1}
+                className={`checkbox transition-[opacity,transform] duration-200 ${
+                  selectMode
+                    ? "translate-x-0 opacity-100"
+                    : "pointer-events-none -translate-x-2 opacity-0"
+                }`}
               />
             </th>
           )}
@@ -1031,6 +1079,7 @@ export default function TrackList({
             isCurrent={current?.id === track.id}
             isPlaying={current?.id === track.id ? isPlaying : false}
             selectable={selectable}
+            selectMode={selectMode}
             selected={validSelected.has(track.id)}
             showOwner={showOwner}
             canEdit={canEdit}

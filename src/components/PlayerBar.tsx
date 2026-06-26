@@ -822,19 +822,17 @@ export default function PlayerBar({
 
       {/* Desktop (md and up): the original single row, unchanged. */}
       <div className="hidden items-center gap-3 py-3 pl-4 pr-6 md:flex">
+        <div className="flex w-56 shrink-0 items-center gap-2">
+          {art("h-11 w-11", 20)}
+          <div className="min-w-0 flex-1">{trackInfo}</div>
+        </div>
+
         <div className="flex shrink-0 items-center gap-1">
-          <div className="flex w-56 shrink-0 items-center gap-2">
-            {art("h-11 w-11", 20)}
-            <div className="min-w-0 flex-1">{trackInfo}</div>
-          </div>
           <AddToPlaylistMenu
             trackIds={[track.id]}
             floating
             triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
           />
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
           {transportButton(
             () => setQueueOpen((o) => !o),
             queueOpen ? "Hide queue" : "Show queue",

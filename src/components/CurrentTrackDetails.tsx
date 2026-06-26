@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { TrackDTO } from "@/lib/types";
 import TrackArt from "@/components/TrackArt";
 
@@ -17,6 +18,7 @@ export default function CurrentTrackDetails({
   iconSize,
   row = false,
   align = "start",
+  trailing,
   onNavigate,
 }: {
   track: TrackDTO;
@@ -26,6 +28,9 @@ export default function CurrentTrackDetails({
   row?: boolean;
   /** Text/cross-axis alignment for the stacked layout. */
   align?: "start" | "center";
+  /** Optional action node (e.g. a kebab menu) pinned to the right of the
+   *  title/artist text; forces the text to left-align even when `centered`. */
+  trailing?: ReactNode;
   onNavigate?: () => void;
 }) {
   const centered = !row && align === "center";
@@ -72,6 +77,7 @@ export default function CurrentTrackDetails({
       <div className="flex min-w-0 items-center gap-3">
         <TrackArt track={track} size={artSize} iconSize={iconSize} />
         <div className="min-w-0 flex-1">{text}</div>
+        {trailing}
       </div>
     );
   }
@@ -79,11 +85,18 @@ export default function CurrentTrackDetails({
   return (
     <div
       className={`flex min-w-0 flex-col gap-3 ${
-        centered ? "items-center text-center" : ""
+        centered ? (trailing ? "items-center" : "items-center text-center") : ""
       }`}
     >
       <TrackArt track={track} size={artSize} iconSize={iconSize} />
-      {text}
+      {trailing ? (
+        <div className="flex w-full items-center gap-2">
+          <div className="min-w-0 flex-1">{text}</div>
+          {trailing}
+        </div>
+      ) : (
+        text
+      )}
     </div>
   );
 }

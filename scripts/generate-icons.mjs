@@ -1,5 +1,7 @@
 // Regenerates the brand raster icons (favicon, apple-icon, PWA icons) from the
-// in-app MusicIcon glyph, rendered in the indigo accent on a dark circular tile.
+// in-app MusicIcon glyph, rendered in the indigo accent on a dark square tile.
+// Full-bleed square (not a circle) so install/login screens show a solid dark
+// tile rather than a dark circle composited on a white background.
 // Run: node scripts/generate-icons.mjs
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -24,7 +26,7 @@ function svg(size) {
   const offset = (size - 24 * scale) / 2;
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
-      `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="${BG}"/>` +
+      `<rect x="0" y="0" width="${size}" height="${size}" fill="${BG}"/>` +
       `<g transform="translate(${offset} ${offset}) scale(${scale}) translate(${OPTICAL_DX} 0)" fill="${FG}">` +
       `<path d="${GLYPH}"/></g></svg>`,
   );
