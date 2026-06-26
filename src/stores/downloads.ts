@@ -28,6 +28,8 @@ type DownloadsState = {
   downloadPlaylist: (playlistId: string) => Promise<void>;
   removeTrack: (trackId: string) => Promise<void>;
   removePlaylist: (playlistId: string) => Promise<void>;
+  /** Wipes every download and clears the pending queue. */
+  removeAll: () => Promise<void>;
 };
 
 export type DownloadStatus = "none" | "queued" | "downloading" | "downloaded";
@@ -142,6 +144,12 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
 
     removePlaylist: async (playlistId) => {
       await offline.removePlaylist(playlistId);
+      await refresh();
+    },
+
+    removeAll: async () => {
+      set({ queue: [] });
+      await offline.removeAll();
       await refresh();
     },
   };

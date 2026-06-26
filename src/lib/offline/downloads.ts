@@ -11,6 +11,7 @@ import {
   deleteDownloadedTrack,
   getDownloadedPlaylists,
   getDownloadedTrack,
+  getDownloadedTracks,
   putDownloadedPlaylist,
   putDownloadedTrack,
   type DownloadedPlaylist,
@@ -152,6 +153,18 @@ export async function removePlaylist(playlistId: string): Promise<void> {
   if (!playlist) return;
   await deleteDownloadedPlaylist(playlistId);
   await collectRemoved(playlist.trackIds, playlistId);
+}
+
+/** Wipes every download — playlists and tracks (audio, art, metadata) alike. */
+export async function removeAll(): Promise<void> {
+  for (const playlist of await getDownloadedPlaylists()) {
+    await deleteDownloadedPlaylist(playlist.id);
+  }
+  for (const track of await getDownloadedTracks()) {
+    await deleteAudio(track.id);
+    await deleteArt(track.id);
+    await deleteDownloadedTrack(track.id);
+  }
 }
 
 /**

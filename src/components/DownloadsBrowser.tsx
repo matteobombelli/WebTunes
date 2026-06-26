@@ -106,6 +106,7 @@ export default function DownloadsBrowser() {
   const current = useDownloadsStore((s) => s.current);
   const storage = useDownloadsStore((s) => s.storage);
   const removeTrack = useDownloadsStore((s) => s.removeTrack);
+  const removeAll = useDownloadsStore((s) => s.removeAll);
 
   // Idempotent; the layout's registrar normally beat us to it, but this page
   // may be the first (or only) thing that loads offline.
@@ -134,6 +135,16 @@ export default function DownloadsBrowser() {
             {formatBytes(storage.usage)} used
             {storage.quota > 0 ? ` of ${formatBytes(storage.quota)}` : ""}
           </span>
+        )}
+        {(playlists.length > 0 || pinned.length > 0) && (
+          <button
+            onClick={() => {
+              if (confirm("Remove all downloads?")) void removeAll();
+            }}
+            className="ml-auto shrink-0 text-xs text-fg-muted hover:text-red-400"
+          >
+            Remove all
+          </button>
         )}
       </div>
 
