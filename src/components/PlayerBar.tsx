@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
+import PlayerProgress from "@/components/PlayerProgress";
 import QueuePanel from "@/components/QueuePanel";
 import { AddToPlaylistMenu } from "@/components/TrackList";
 import TrackArt from "@/components/TrackArt";
@@ -20,13 +21,6 @@ import {
   SimilarIcon,
   VolumeIcon,
 } from "@/components/icons";
-
-function formatTime(totalSeconds: number): string {
-  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
-  const m = Math.floor(totalSeconds / 60);
-  const s = Math.floor(totalSeconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 /** Target loudness (LUFS) tracks are attenuated toward; ReplayGain reference. */
 const TARGET_LUFS = -18;
@@ -61,7 +55,7 @@ function logAudio(event: string, detail?: string) {
  * track) so thumbnails are instant when the queue panel opens. Its own narrow
  * store subscription keeps queue churn from re-rendering the PlayerBar.
  */
-function QueueArtPreloader() {
+const QueueArtPreloader = memo(function QueueArtPreloader() {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   useEffect(() => {
@@ -79,7 +73,7 @@ function QueueArtPreloader() {
     }
   }, [queue, index]);
   return null;
-}
+});
 
 /**
  * Render-nothing helper that pre-caches the next few tracks' audio while the
@@ -89,7 +83,7 @@ function QueueArtPreloader() {
  * service worker serve consecutive background auto-advances from cache. Its own
  * narrow subscription keeps this off the PlayerBar's render path.
  */
-function NextTrackPrefetcher() {
+const NextTrackPrefetcher = memo(function NextTrackPrefetcher() {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   useEffect(() => {
@@ -100,7 +94,7 @@ function NextTrackPrefetcher() {
     prefetchUpcoming(queue[index]?.track.id, nextIds);
   }, [queue, index]);
   return null;
-}
+});
 
 export default function PlayerBar({
   initialNormalizeVolume,
@@ -137,18 +131,22 @@ export default function PlayerBar({
   const pendingPlayRef = useRef(false);
   // Bounded recovery budget per track load (reset on load and on foreground).
   const recoverAttemptsRef = useRef(0);
+  // Last currentTime pushed to the store, so onTimeUpdate can throttle the
+  // 4-30 Hz timeupdate down to ~4 Hz of store writes (see onTimeUpdate).
+  const lastProgressRef = useRef(0);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
-  const currentTime = usePlayerStore((s) => s.currentTime);
-  const duration = usePlayerStore((s) => s.duration);
+  // NOTE: currentTime/duration are deliberately NOT subscribed here — they tick
+  // 4-30 Hz and would re-render this whole bar. The time readout + seek slider
+  // live in <PlayerProgress>, which subscribes to them in isolation.
   const seekRequest = usePlayerStore((s) => s.seekRequest);
   const shuffled = usePlayerStore((s) => s.shuffled);
   const playSimilar = usePlayerStore((s) => s.playSimilar);
   const [queueOpen, setQueueOpen] = useState(false);
-  // Stable identity so currentTime ticks (which re-render PlayerBar ~4-30 Hz)
-  // don't re-render the memoized QueuePanel through a fresh onClose each render.
+  // Stable identity so transport-state changes don't re-render the memoized
+  // QueuePanel through a fresh onClose each render.
   const closeQueue = useCallback(() => setQueueOpen(false), [setQueueOpen]);
 
   // Keep the "play similar" radio's queue topped up while it's active.
@@ -177,7 +175,6 @@ export default function PlayerBar({
     toggle,
     next,
     prev,
-    seekTo,
     setVolume,
     toggleShuffle,
     _setProgress,
@@ -185,24 +182,6 @@ export default function PlayerBar({
     _clearSeek,
   } = usePlayerStore.getState();
 
-  // Some mobile browsers misreport <audio>.duration for Ogg/Opus files (seen
-  // ~3x too long: the 48 kHz granule divided by a wrong rate), and they do it
-  // intermittently — the same track can read a sane duration on one load and an
-  // inflated one on the next. The server extracts the true length on upload, so
-  // when the browser's value disagrees materially we display track.durationSec
-  // as the total. We do NOT rescale currentTime: on the affected devices it
-  // already advances in real seconds even when duration is inflated, so dividing
-  // it (as a previous fix did, assuming it shared duration's wrong timebase) made
-  // the elapsed counter crawl and the bar stop short of the end.
-  const serverDuration = track?.durationSec ?? 0;
-  const durationUnreliable =
-    serverDuration > 0 &&
-    duration > 0 &&
-    Math.abs(duration - serverDuration) / serverDuration > 0.1;
-  const totalDuration = durationUnreliable
-    ? serverDuration
-    : duration || serverDuration || 0;
-  const playedSeconds = currentTime;
 
   // play() rejects with AbortError when a newer src load or a pause() supersedes
   // it (e.g. skipping faster than tracks start) — benign, ignore. On an automatic
@@ -473,51 +452,15 @@ export default function PlayerBar({
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }, [isPlaying]);
 
-  // Report the *reliable* duration + live position to the OS Now Playing UI.
-  // Without this, iOS reads the <audio> element's own duration, which for some
-  // Ogg/Opus files is wildly misreported (hours — see the durationUnreliable
-  // note above); iOS then treats the track as long-form scrubbable content and
-  // shows ±10s skip buttons instead of the previous/next-track arrows. Feeding
-  // the server-measured duration (totalDuration) keeps the readout correct and
-  // the track short, which is what lets the track arrows surface.
-  useEffect(() => {
-    if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState)
-      return;
-    if (!totalDuration || !Number.isFinite(totalDuration)) return;
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: totalDuration,
-        playbackRate: 1,
-        position: Math.min(Math.max(0, playedSeconds), totalDuration),
-      });
-    } catch {
-      // Invalid state (e.g. a transient position > duration mid-transition).
-    }
-  }, [totalDuration, playedSeconds]);
+  // (The OS Now Playing position + the elapsed/total readout and seek slider
+  // live in <PlayerProgress>, which subscribes to currentTime/duration in
+  // isolation so those 4-30 Hz ticks don't re-render this whole bar.)
 
   if (!track) return null;
 
-  // Times + slider, shared by both layouts (the wrapper class differs).
-  const seekBar = (className: string) => (
-    <div className={`${className} items-center gap-2 text-xs text-fg-muted`}>
-      <span className="w-10 shrink-0 text-right tabular-nums">
-        {formatTime(playedSeconds)}
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={totalDuration}
-        step={0.5}
-        value={Math.min(playedSeconds, totalDuration || Infinity)}
-        onChange={(e) => seekTo(Number(e.target.value))}
-        className="h-5 min-w-0 flex-1 cursor-pointer accent-accent"
-        aria-label="Seek"
-      />
-      <span className="w-10 shrink-0 tabular-nums">
-        {formatTime(totalDuration)}
-      </span>
-    </div>
-  );
+  // The reliable total length passed to <PlayerProgress>; it reconciles this
+  // against the element's own (sometimes misreported) duration.
+  const serverDuration = track.durationSec ?? 0;
 
   const art = (size: string, iconSize: number) => (
     <div className="shrink-0">
@@ -588,7 +531,19 @@ export default function PlayerBar({
         }}
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
-          _setProgress(ct, e.currentTarget.duration || 0);
+          const dur = e.currentTarget.duration || 0;
+          // Throttle store writes to ~4 Hz: the browser fires timeupdate 4-30 Hz,
+          // but the progress UI only needs ~quarter-second resolution. Push when
+          // the clock moved ≥0.25s, jumped backward (seek/restart), or the
+          // duration changed (first metadata / a corrected value). This is what
+          // keeps the 4-30 Hz tick from re-rendering <PlayerProgress> needlessly.
+          if (
+            Math.abs(ct - lastProgressRef.current) >= 0.25 ||
+            dur !== usePlayerStore.getState().duration
+          ) {
+            lastProgressRef.current = ct;
+            _setProgress(ct, dur);
+          }
           // Count a "friend play" once the track passes 30s (server ignores
           // the owner's own plays). Fire-and-forget; silent if offline.
           if (track && ct >= 30 && countedRef.current !== track.id) {
@@ -617,7 +572,7 @@ export default function PlayerBar({
           room for a usable slider, so stack a full-width seek row above a
           track-info + transport row with finger-sized targets. */}
       <div className="flex flex-col gap-1 px-4 pb-2 pt-3 md:hidden">
-        {seekBar("flex")}
+        <PlayerProgress className="flex" serverDuration={serverDuration} />
         <div className="flex items-center gap-2">
           {art("h-10 w-10", 18)}
           <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -729,7 +684,10 @@ export default function PlayerBar({
           )}
         </div>
 
-        {seekBar("flex min-w-0 flex-1")}
+        <PlayerProgress
+          className="flex min-w-0 flex-1"
+          serverDuration={serverDuration}
+        />
 
         {transportButton(
           () => setQueueOpen((o) => !o),
