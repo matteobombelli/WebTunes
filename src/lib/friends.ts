@@ -1,10 +1,18 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { cache } from "react";
 import { db } from "@/db";
 import { friendships, users } from "@/db/schema";
 import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
 
-export async function areFriends(a: string, b: string): Promise<boolean> {
+// Wrapped in React's per-request cache(): the (app) layout and the page it
+// renders both reach for friendship data on the same request, and so do the
+// per-thumbnail /art and /stream access checks. cache() collapses those to one
+// query each per request (no effect across requests).
+export const areFriends = cache(async function areFriends(
+  a: string,
+  b: string
+): Promise<boolean> {
   const [row] = await db
     .select({ id: friendships.id })
     .from(friendships)
@@ -22,10 +30,12 @@ export async function areFriends(a: string, b: string): Promise<boolean> {
     )
     .limit(1);
   return !!row;
-}
+});
 
 /** IDs of all accepted friends of a user (both directions). */
-export async function friendIdsOf(userId: string): Promise<string[]> {
+export const friendIdsOf = cache(async function friendIdsOf(
+  userId: string
+): Promise<string[]> {
   const rows = await db
     .select({
       requesterId: friendships.requesterId,
@@ -44,7 +54,7 @@ export async function friendIdsOf(userId: string): Promise<string[]> {
   return rows.map((r) =>
     r.requesterId === userId ? r.addresseeId : r.requesterId
   );
-}
+});
 
 /** All accepted friends of a user, with their display fields. */
 export async function friendsOf(userId: string): Promise<FriendDTO[]> {
@@ -109,4 +119,19 @@ export async function canAccessTrack(
   if (userId === track.ownerId) return true;
   if (track.isPrivate) return false;
   return areFriends(userId, track.ownerId);
+}
+
+/**
+ * The same access rule as canAccessTrack, but DB-free: for callers that have
+ * already loaded the viewer's friend ids (e.g. a query that also needs them),
+ * so they don't pay a second areFriends round-trip.
+ */
+export function canAccessTrackWithFriends(
+  userId: string,
+  track: { ownerId: string; isPrivate: boolean },
+  friendIds: string[]
+): boolean {
+  if (userId === track.ownerId) return true;
+  if (track.isPrivate) return false;
+  return friendIds.includes(track.ownerId);
 }

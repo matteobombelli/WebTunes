@@ -66,17 +66,31 @@ export async function getAccessiblePlaylist(playlistId: string, userId: string) 
   return playlist;
 }
 
+// Track counts for all playlists in one pre-aggregated pass, LEFT JOINed below
+// (COALESCE→0 for empty playlists) instead of a per-row correlated subquery.
+function playlistTrackCounts() {
+  return db
+    .select({
+      playlistId: playlistTracks.playlistId,
+      count: sql<number>`count(*)::int`.as("count"),
+    })
+    .from(playlistTracks)
+    .groupBy(playlistTracks.playlistId)
+    .as("track_counts");
+}
+
 /** A user's playlists with track counts, most recently updated first. */
 export async function listPlaylistsWithCount(
   userId: string
 ): Promise<PlaylistDTO[]> {
+  const counts = playlistTrackCounts();
   const rows = await db
     .select({
       playlist: playlists,
-      trackCount: sql<number>`(select count(*)::int from ${playlistTracks}
-        where ${playlistTracks.playlistId} = ${playlists.id})`,
+      trackCount: sql<number>`coalesce(${counts.count}, 0)`,
     })
     .from(playlists)
+    .leftJoin(counts, eq(counts.playlistId, playlists.id))
     .where(eq(playlists.ownerId, userId))
     .orderBy(desc(playlists.updatedAt));
   return Promise.all(rows.map((r) => toPlaylistDTO(r.playlist, r.trackCount)));
@@ -92,15 +106,16 @@ export async function listAccessiblePlaylists(
   userId: string
 ): Promise<PlaylistDTO[]> {
   const friendIds = await friendIdsOf(userId);
+  const counts = playlistTrackCounts();
   const rows = await db
     .select({
       playlist: playlists,
       ownerName: users.name,
-      trackCount: sql<number>`(select count(*)::int from ${playlistTracks}
-        where ${playlistTracks.playlistId} = ${playlists.id})`,
+      trackCount: sql<number>`coalesce(${counts.count}, 0)`,
     })
     .from(playlists)
     .innerJoin(users, eq(playlists.ownerId, users.id))
+    .leftJoin(counts, eq(counts.playlistId, playlists.id))
     .where(
       or(
         eq(playlists.ownerId, userId),

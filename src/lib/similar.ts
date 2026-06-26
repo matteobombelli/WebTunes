@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm";
 import { db } from "@/db";
 import { trackEmbeddings, tracks, users } from "@/db/schema";
-import { canAccessTrack, friendIdsOf } from "@/lib/friends";
+import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
   notDuplicateOfOwn,
@@ -51,24 +51,29 @@ export async function findSimilarTracks(
   seedTrackId: string,
   { limit, excludeIds }: { limit: number; excludeIds: string[] }
 ): Promise<TrackDTO[]> {
-  const [seed] = await db
-    .select({
-      ownerId: tracks.ownerId,
-      isPrivate: tracks.isPrivate,
-      embedding: trackEmbeddings.embedding,
-    })
-    .from(tracks)
-    .leftJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))
-    .where(eq(tracks.id, seedTrackId))
-    .limit(1);
+  // All independent reads — including the viewer's friend ids, needed both for
+  // the access check and the candidate query — run together, so the access
+  // check is in-memory (no serial areFriends round-trip before the rest).
+  const [seedRows, { hideFriendDuplicates, similarVariation }, friendIds] =
+    await Promise.all([
+      db
+        .select({
+          ownerId: tracks.ownerId,
+          isPrivate: tracks.isPrivate,
+          embedding: trackEmbeddings.embedding,
+        })
+        .from(tracks)
+        .leftJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))
+        .where(eq(tracks.id, seedTrackId))
+        .limit(1),
+      getUserSettings(userId),
+      friendIdsOf(userId),
+    ]);
 
+  const seed = seedRows[0];
   if (!seed || !seed.embedding) return [];
-  if (!(await canAccessTrack(userId, seed))) return [];
+  if (!canAccessTrackWithFriends(userId, seed, friendIds)) return [];
   const seedVec = seed.embedding;
-
-  // Independent reads — run them together.
-  const [{ hideFriendDuplicates, similarVariation }, friendIds] =
-    await Promise.all([getUserSettings(userId), friendIdsOf(userId)]);
   const sigma = SIGMA_BY_VARIATION[similarVariation] ?? 0;
 
   // Cosine distance computed in-DB; ascending = most similar first.

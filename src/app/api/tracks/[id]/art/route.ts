@@ -41,7 +41,14 @@ export async function GET(
   }
 
   const { url } = await getPresignedGetUrl(track.artS3Key);
-  return NextResponse.redirect(url, 302);
+  // Cache the redirect per-browser, well under the 1h presigned-URL TTL, so a
+  // list's thumbnails reuse across scroll/navigation without re-hitting the
+  // server (session lookup + DB + access check + presign) on every render. The
+  // stable /art path is kept for the SW's offline art cache; this only affects
+  // online browser caching, and `private` keeps it scoped to this user.
+  const res = NextResponse.redirect(url, 302);
+  res.headers.set("Cache-Control", "private, max-age=3000");
+  return res;
 }
 
 // Upload/replace a track's cover art (owner only). Mirrors the playlist-cover

@@ -1,5 +1,6 @@
 import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { cache } from "react";
 import { z } from "zod";
 import { db, isUniqueViolation } from "@/db";
 import { users } from "@/db/schema";
@@ -59,7 +60,12 @@ export type UserSettings = {
   similarDrift: boolean;
 };
 
-export async function getUserSettings(userId: string): Promise<UserSettings> {
+// Per-request cache(): read once even though the (app) layout and the page it
+// renders both call it on the same request (no effect across requests, and a
+// PATCH that mutates settings runs in its own request).
+export const getUserSettings = cache(async function getUserSettings(
+  userId: string
+): Promise<UserSettings> {
   const [row] = await db
     .select({
       hideFriendDuplicates: users.hideFriendDuplicates,
@@ -77,7 +83,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
       similarDrift: true,
     }
   );
-}
+});
 
 export async function updateUserSettings(
   userId: string,
