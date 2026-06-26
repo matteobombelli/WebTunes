@@ -5,8 +5,12 @@ import { z } from "zod";
 import { db, isUniqueViolation } from "@/db";
 import { users } from "@/db/schema";
 
+// Shared so the register form and the in-app rename (PATCH /api/account) can't
+// validate the display name differently.
+export const nameSchema = z.string().trim().min(1, "Name is required").max(100);
+
 export const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100),
+  name: nameSchema,
   email: z.string().trim().toLowerCase().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
@@ -41,6 +45,19 @@ export async function createUser(
     }
     throw err;
   }
+}
+
+/** Update the signed-in user's display name; returns the stored value. */
+export async function updateDisplayName(
+  userId: string,
+  name: string
+): Promise<string> {
+  const [row] = await db
+    .update(users)
+    .set({ name })
+    .where(eq(users.id, userId))
+    .returning({ name: users.name });
+  return row.name!; // non-null: we just set it
 }
 
 /** A user's display name (falling back to email), or null if no such user. */

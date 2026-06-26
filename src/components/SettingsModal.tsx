@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
 import { usePlayerStore } from "@/stores/player";
@@ -41,15 +42,22 @@ const VARIATION_LABELS = [
 export default function SettingsModal({
   initialSimilarVariation,
   userEmail,
+  userName,
 }: {
   initialSimilarVariation: number;
   userEmail: string;
+  userName: string | null;
 }) {
+  const router = useRouter();
   const open = usePlayerStore((s) => s.settingsOpen);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
   const similarDrift = usePlayerStore((s) => s.similarDrift);
   const hideFriendDuplicates = usePlayerStore((s) => s.hideFriendDuplicates);
   const [variation, setVariation] = useState(initialSimilarVariation);
+  const [name, setName] = useState(userName ?? "");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameSaved, setNameSaved] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -148,6 +156,29 @@ export default function SettingsModal({
     }
   };
 
+  const trimmedName = name.trim();
+  const nameUnchanged = trimmedName === (userName ?? "");
+
+  const saveName = async () => {
+    if (!trimmedName || nameUnchanged || savingName) return;
+    setSavingName(true);
+    setNameError(null);
+    setNameSaved(false);
+    try {
+      await api("/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      setNameSaved(true);
+      router.refresh(); // re-render the Sidebar etc. with the new name
+    } catch (err) {
+      setNameError(err instanceof Error ? err.message : "Could not save name");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const emailMatches =
     emailInput.trim().toLowerCase() === userEmail.toLowerCase();
 
@@ -170,6 +201,46 @@ export default function SettingsModal({
 
   return (
     <Dialog title="Settings" open={open} onClose={close}>
+        <div className="mb-5 border-b border-border pb-5">
+          <label
+            htmlFor="display-name"
+            className="block text-sm text-fg"
+          >
+            Display name
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              id="display-name"
+              type="text"
+              value={name}
+              maxLength={100}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameSaved(false);
+                setNameError(null);
+              }}
+              placeholder="Your name"
+              className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-fg outline-none focus:border-accent"
+            />
+            <button
+              onClick={saveName}
+              disabled={!trimmedName || nameUnchanged || savingName}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savingName ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {nameError ? (
+            <p className="mt-1 text-xs text-red-400">{nameError}</p>
+          ) : nameSaved ? (
+            <p className="mt-1 text-xs text-accent-bright">Name updated.</p>
+          ) : (
+            <p className="mt-1 text-xs text-fg-muted">
+              Shown to your friends and on your tracks.
+            </p>
+          )}
+        </div>
+
         <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
           <input
             type="checkbox"

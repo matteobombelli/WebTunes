@@ -36,6 +36,7 @@ export default async function AppLayout({
       <SettingsModal
         initialSimilarVariation={similarVariation}
         userEmail={user.email}
+        userName={user.name}
       />
     </div>
   );

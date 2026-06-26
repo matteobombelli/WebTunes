@@ -5,8 +5,25 @@ import { db } from "@/db";
 import { playlists, tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { deleteObject } from "@/lib/s3";
+import { nameSchema, updateDisplayName } from "@/lib/users";
 
 const schema = z.object({ email: z.string() });
+const patchSchema = z.object({ name: nameSchema });
+
+// Rename the signed-in user. The database session reads users.name fresh per
+// request, so the new name surfaces everywhere on the client's next refresh.
+export async function PATCH(req: NextRequest) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
+  const parsed = patchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid name" }, { status: 400 });
+  }
+  return NextResponse.json({
+    name: await updateDisplayName(user.id, parsed.data.name),
+  });
+}
 
 // Deletes the signed-in user's own account. Typing the account email is a
 // confirmation gate (the security boundary is requireUser — you can only delete
