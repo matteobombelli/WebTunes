@@ -405,8 +405,15 @@ export default function PlayerBar({
     }
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lock-screen / hardware-key controls (MediaSession API).
-  useEffect(() => {
+  // Lock-screen / hardware-key controls (MediaSession API). Wire play/pause/
+  // previous/next and explicitly null the seek actions. iOS/WebKit auto-enables
+  // the ±10/15s skip commands when the <audio> element becomes *seekable*, and
+  // that re-enable happens at playback time, AFTER a one-time mount registration
+  // has run — so nulling once at mount doesn't stick and the lock screen reverts
+  // to skip buttons. We therefore re-assert this set on every play start (when
+  // the element is seekable), which is when WebKit would otherwise have brought
+  // the seek buttons back, so the previous/next-track arrows win.
+  const applyMediaSessionHandlers = useCallback(() => {
     if (!("mediaSession" in navigator)) return;
     const session = navigator.mediaSession;
     const { toggle, next, prev } = usePlayerStore.getState();
@@ -423,14 +430,22 @@ export default function PlayerBar({
     session.setActionHandler("pause", () => {
       if (usePlayerStore.getState().isPlaying) toggle();
     });
-    // Only previoustrack/nexttrack are registered (and seekto/position-state are
-    // deliberately omitted): on iOS, a registered "seekto" + setPositionState
-    // make the lock screen treat the audio as scrubbable long-form and show
-    // ±10s skip buttons instead of previous/next-track arrows. We want the
-    // track arrows, at the cost of the lock-screen scrubber/elapsed readout.
     session.setActionHandler("previoustrack", prev);
     session.setActionHandler("nexttrack", next);
+    for (const seek of ["seekbackward", "seekforward", "seekto"] as const) {
+      try {
+        session.setActionHandler(seek, null);
+      } catch {
+        // Unsupported action on this browser.
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    applyMediaSessionHandlers();
     return () => {
+      if (!("mediaSession" in navigator)) return;
+      const session = navigator.mediaSession;
       for (const action of ["play", "pause", "previoustrack", "nexttrack"] as const) {
         try {
           session.setActionHandler(action, null);
@@ -439,7 +454,7 @@ export default function PlayerBar({
         }
       }
     };
-  }, []);
+  }, [applyMediaSessionHandlers]);
 
   useEffect(() => {
     if (!("mediaSession" in navigator) || !track) return;
@@ -457,6 +472,28 @@ export default function PlayerBar({
     if (!("mediaSession" in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }, [isPlaying]);
+
+  // Report the *reliable* duration + live position to the OS Now Playing UI.
+  // Without this, iOS reads the <audio> element's own duration, which for some
+  // Ogg/Opus files is wildly misreported (hours — see the durationUnreliable
+  // note above); iOS then treats the track as long-form scrubbable content and
+  // shows ±10s skip buttons instead of the previous/next-track arrows. Feeding
+  // the server-measured duration (totalDuration) keeps the readout correct and
+  // the track short, which is what lets the track arrows surface.
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState)
+      return;
+    if (!totalDuration || !Number.isFinite(totalDuration)) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: totalDuration,
+        playbackRate: 1,
+        position: Math.min(Math.max(0, playedSeconds), totalDuration),
+      });
+    } catch {
+      // Invalid state (e.g. a transient position > duration mid-transition).
+    }
+  }, [totalDuration, playedSeconds]);
 
   if (!track) return null;
 
@@ -533,6 +570,10 @@ export default function PlayerBar({
         onPlaying={(e) => {
           logAudio("playing");
           pendingPlayRef.current = false; // playback truly began: nothing owed
+          // Re-assert media-session handlers now that the element is seekable,
+          // so WebKit's playback-time auto-enable of the ±10/15s seek commands
+          // gets overridden and the previous/next-track arrows show instead.
+          applyMediaSessionHandlers();
           // First real playback after a load: if the clock drifted ahead while
           // the cold stream stalled (and the user didn't ask to resume/seek),
           // restart from the top so the intro isn't skipped.
