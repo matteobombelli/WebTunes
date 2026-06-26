@@ -332,6 +332,10 @@ type TrackActionsProps = {
   /** Fires alongside onClose when an artist/album link is tapped, so a
    *  containing overlay (now-playing sheet, queue panel) can dismiss first. */
   onNavigate?: () => void;
+  /** Current-track surfaces (queue header, now-playing sheet): drop the
+   *  mobile-only Play next / Add to queue rows (the player already does that),
+   *  and keep Edit desktop-only. */
+  playerContext?: boolean;
   onClose: () => void;
 };
 
@@ -349,6 +353,7 @@ function TrackActions({
   onEdit,
   onDelete,
   onNavigate,
+  playerContext = false,
   onClose,
 }: TrackActionsProps) {
   return (
@@ -380,8 +385,9 @@ function TrackActions({
         </Link>
       )}
       {/* Desktop hosts Play next / Add to queue as single-click icons on the
-          row itself; the menu only needs them on mobile (no hover row). */}
-      <div className="flex flex-col gap-2 md:hidden">
+          row itself; the menu only needs them on mobile (no hover row). The
+          player surfaces (queue/now-playing) drop them entirely. */}
+      <div className={`flex-col gap-2 md:hidden ${playerContext ? "hidden" : "flex"}`}>
         <button
           onClick={() => {
             usePlayerStore.getState().playNext([track]);
@@ -412,7 +418,7 @@ function TrackActions({
             onClose();
           }}
           aria-label="Edit track"
-          className={MENU_ROW}
+          className={`${MENU_ROW}${playerContext ? " hidden md:flex" : ""}`}
         >
           <span>Edit details</span>
           <PencilIcon size={16} className="shrink-0 text-fg-muted" />
@@ -555,13 +561,64 @@ export function TrackActionsMenu({
           <div
             ref={menuRef}
             style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
-            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 max-h-[80vh] w-60 overflow-y-auto rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
+            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-[70] max-h-[80vh] w-60 overflow-y-auto rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
           >
             <TrackActions {...props} onClose={close} />
           </div>,
           document.body,
         )}
     </div>
+  );
+}
+
+// A self-contained song-options kebab for the "current track" surfaces (queue
+// header, now-playing sheet) that aren't backed by a table row. It wires
+// Edit/Delete against the library and, via `playerContext`, drops the queue
+// actions and keeps Edit desktop-only. The edit dialog is portalled to <body>
+// so an ancestor's transform/overflow (the queue popover) can't clip it.
+export function CurrentTrackKebab({
+  track,
+  onNavigate,
+}: {
+  track: TrackDTO;
+  onNavigate?: () => void;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<TrackDTO | null>(null);
+
+  const remove = async (t: TrackDTO) => {
+    if (!confirm(`Are you sure you want to delete "${t.title}"?`)) return;
+    await api(`/tracks/${t.id}`, { method: "DELETE" });
+    router.refresh();
+  };
+
+  return (
+    <>
+      <TrackActionsMenu
+        track={track}
+        index={0}
+        viewLength={1}
+        canEdit
+        canDelete
+        playerContext
+        alwaysVisible
+        onEdit={setEditing}
+        onDelete={remove}
+        onNavigate={onNavigate}
+      />
+      {/* Portalled to <body> so the queue popover's transform/overflow can't
+          clip it. Guarded since the portal target is client-only (this kebab
+          isn't server-rendered — there's no current track during SSR). */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <EditTrackDialog
+            track={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => router.refresh()}
+          />,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -886,7 +943,6 @@ export default function TrackList({
         .map((t) => t.id),
     [view, validSelected]
   );
-  const showDelete = canDelete && deletableSelectedIds.length > 0;
 
   const bulkDelete = async () => {
     const ids = deletableSelectedIds;
@@ -923,7 +979,7 @@ export default function TrackList({
         >
           <button
             onClick={() => setSelectMode(true)}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
+            className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
           >
             <CheckIcon size={16} />
             Select…
@@ -975,13 +1031,13 @@ export default function TrackList({
             <DownloadIcon size={18} />
             <span className="hidden md:inline">Download</span>
           </button>
-          {showDelete && (
+          {canDelete && (
             <button
               onClick={bulkDelete}
-              disabled={bulkBusy}
+              disabled={bulkBusy || deletableSelectedIds.length === 0}
               aria-label="Delete"
               title="Delete"
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-40"
             >
               <TrashIcon size={18} />
               <span className="hidden md:inline">

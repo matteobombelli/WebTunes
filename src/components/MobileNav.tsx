@@ -24,19 +24,19 @@ const NAV = [
 export function MobileNav() {
   const pathname = usePathname();
   return (
-    <nav className="flex border-t border-border-subtle bg-surface-1 pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="flex border-t border-border-subtle bg-surface-1 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] md:hidden">
       {NAV.map(({ href, label, Icon }) => {
         const active = pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
-            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ${
+            aria-label={label}
+            className={`flex flex-1 items-center justify-center py-3 ${
               active ? "text-accent-bright" : "text-fg-muted"
             }`}
           >
-            <Icon size={20} />
-            {label}
+            <Icon size={26} />
           </Link>
         );
       })}

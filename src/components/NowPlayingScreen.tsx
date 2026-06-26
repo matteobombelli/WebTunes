@@ -5,7 +5,7 @@ import { usePlayerStore, useCurrentTrack } from "@/stores/player";
 import { useArtGradient } from "@/lib/use-dominant-color";
 import CurrentTrackDetails from "@/components/CurrentTrackDetails";
 import PlayerProgress from "@/components/PlayerProgress";
-import { AddToPlaylistMenu, TrackActionsMenu } from "@/components/TrackList";
+import { AddToPlaylistMenu, CurrentTrackKebab } from "@/components/TrackList";
 import {
   ChevronDownIcon,
   NextIcon,
@@ -171,19 +171,7 @@ export default function NowPlayingScreen({
             artSize="h-[min(88vw,46vh)] w-[min(88vw,46vh)]"
             iconSize={110}
             onNavigate={onClose}
-            trailing={
-              <TrackActionsMenu
-                track={track}
-                index={0}
-                viewLength={1}
-                canEdit={false}
-                canDelete={false}
-                onEdit={() => {}}
-                onDelete={() => {}}
-                alwaysVisible
-                onNavigate={onClose}
-              />
-            }
+            trailing={<CurrentTrackKebab track={track} onNavigate={onClose} />}
           />
         </div>
 

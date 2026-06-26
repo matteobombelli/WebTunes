@@ -30,7 +30,7 @@ import {
 } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import CurrentTrackDetails from "@/components/CurrentTrackDetails";
-import { TrackActionsMenu } from "@/components/TrackList";
+import { CurrentTrackKebab } from "@/components/TrackList";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
@@ -230,19 +230,7 @@ export default memo(function QueuePanel({
             artSize={mobile ? "h-12 w-12" : "w-full aspect-square"}
             iconSize={mobile ? 22 : 64}
             onNavigate={onClose}
-            trailing={
-              <TrackActionsMenu
-                track={current}
-                index={0}
-                viewLength={1}
-                canEdit={false}
-                canDelete={false}
-                onEdit={() => {}}
-                onDelete={() => {}}
-                alwaysVisible
-                onNavigate={onClose}
-              />
-            }
+            trailing={<CurrentTrackKebab track={current} onNavigate={onClose} />}
           />
         </div>
       )}
