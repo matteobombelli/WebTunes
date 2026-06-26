@@ -28,9 +28,11 @@ function formatTime(totalSeconds: number): string {
 export default function PlayerProgress({
   className,
   serverDuration,
+  barOnly = false,
 }: {
   className: string;
   serverDuration: number;
+  barOnly?: boolean;
 }) {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
@@ -65,6 +67,23 @@ export default function PlayerProgress({
       // Invalid state (e.g. a transient position > duration mid-transition).
     }
   }, [totalDuration, playedSeconds]);
+
+  if (barOnly) {
+    const pct =
+      totalDuration > 0
+        ? Math.min(100, (playedSeconds / totalDuration) * 100)
+        : 0;
+    return (
+      <div
+        className={`${className} h-1 overflow-hidden rounded-full bg-surface-2`}
+      >
+        <div
+          className="h-full rounded-full bg-accent"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`${className} items-center gap-2 text-xs text-fg-muted`}>

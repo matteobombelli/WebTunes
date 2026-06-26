@@ -116,6 +116,7 @@ export function AddToPlaylistMenu({
   onAdded,
   floating = false,
   triggerClassName,
+  iconSize = 16,
 }: {
   trackIds: string[];
   align?: "left" | "right";
@@ -129,6 +130,8 @@ export function AddToPlaylistMenu({
   floating?: boolean;
   /** Overrides the default icon-trigger classes (no label, non-bulk). */
   triggerClassName?: string;
+  /** Size of the "+" trigger icon (non-bulk, no label). Default 16. */
+  iconSize?: number;
 }) {
   // Floating shares the portal + outside-click machinery the bulk menu uses.
   const portalled = bulk || floating;
@@ -282,7 +285,7 @@ export function AddToPlaylistMenu({
           title="Add to playlist"
         >
           {label && <span>{label}</span>}
-          <PlusIcon size={16} className={label ? "shrink-0 text-fg-muted" : undefined} />
+          <PlusIcon size={iconSize} className={label ? "shrink-0 text-fg-muted" : undefined} />
         </button>
       )}
       {portalled

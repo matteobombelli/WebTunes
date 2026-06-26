@@ -10,6 +10,7 @@ import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import PlayerProgress from "@/components/PlayerProgress";
 import QueuePanel from "@/components/QueuePanel";
+import NowPlayingScreen from "@/components/NowPlayingScreen";
 import { AddToPlaylistMenu } from "@/components/TrackList";
 import TrackArt from "@/components/TrackArt";
 import {
@@ -175,9 +176,17 @@ export default function PlayerBar({
   const shuffled = usePlayerStore((s) => s.shuffled);
   const playSimilar = usePlayerStore((s) => s.playSimilar);
   const [queueOpen, setQueueOpen] = useState(false);
-  // Stable identity so transport-state changes don't re-render the memoized
+  // Mobile-only fullscreen surfaces: the now-playing sheet (tap the mini-bar)
+  // and the queue sheet it opens.
+  const [npOpen, setNpOpen] = useState(false);
+  const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  // Stable identities so transport-state changes don't re-render the memoized
   // QueuePanel through a fresh onClose each render.
   const closeQueue = useCallback(() => setQueueOpen(false), [setQueueOpen]);
+  const closeNp = useCallback(() => setNpOpen(false), []);
+  const openNp = useCallback(() => setNpOpen(true), []);
+  const openMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
+  const closeMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
 
   // Keep the "play similar" radio's queue topped up while it's active.
   usePlaySimilarRefill();
@@ -634,7 +643,18 @@ export default function PlayerBar({
     <div className="relative border-t border-border-subtle bg-surface-1">
       <QueueArtPreloader />
       <NextTrackPrefetcher />
-      <QueuePanel open={queueOpen} onClose={closeQueue} />
+      <QueuePanel open={queueOpen} onClose={closeQueue} variant="desktop" />
+      <NowPlayingScreen
+        open={npOpen}
+        onClose={closeNp}
+        onOpenQueue={openMobileQueue}
+        onPlaySimilar={handlePlaySimilar}
+      />
+      <QueuePanel
+        open={mobileQueueOpen}
+        onClose={closeMobileQueue}
+        variant="mobile"
+      />
       <audio
         ref={audioRef}
         onPlaying={(e) => {
@@ -744,37 +764,29 @@ export default function PlayerBar({
         }}
       />
 
-      {/* Mobile (below md, matching MobileNav): the desktop single row has no
-          room for a usable slider, so stack a full-width seek row above a
-          track-info + transport row with finger-sized targets. */}
-      <div className="flex flex-col gap-1 px-4 pb-2 pt-3 md:hidden">
-        <PlayerProgress className="flex" serverDuration={serverDuration} />
-        <div className="flex items-center gap-2">
-          {art("h-10 w-10", 18)}
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            <AddToPlaylistMenu
-              trackIds={[track.id]}
-              floating
-              triggerClassName="flex h-10 w-10 items-center justify-center rounded-full text-fg-muted active:bg-surface-2"
-            />
-          </div>
+      {/* Mobile (below md, matching MobileNav): a minimal mini-player — art +
+          title/artist on the left (tap to open the now-playing sheet),
+          rewind/play/skip on the right, and a thin non-interactive progress
+          line underneath (also taps through to the sheet). */}
+      <div className="flex flex-col gap-2 px-4 pb-2 pt-3 md:hidden">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={openNp}
+            aria-label="Open now playing"
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          >
+            {art("h-10 w-10", 18)}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-fg">
+                {track.title}
+              </p>
+              <p className="truncate text-xs text-fg-muted">
+                {track.artist || "Unknown artist"}
+                {track.ownerName ? ` · from ${track.ownerName}` : ""}
+              </p>
+            </div>
+          </button>
           <div className="flex shrink-0 items-center gap-1">
-            {transportButton(
-              toggleShuffle,
-              shuffled ? "Disable shuffle" : "Enable shuffle",
-              <ShuffleIcon size={18} />,
-              `h-10 w-10 active:bg-surface-2 ${
-                shuffled ? "text-accent-bright" : "text-fg-muted"
-              }`
-            )}
-            {transportButton(
-              handlePlaySimilar,
-              playSimilar ? "Stop play similar" : "Play similar",
-              <SimilarIcon size={18} />,
-              `h-10 w-10 active:bg-surface-2 ${
-                playSimilar ? "text-accent-bright" : "text-fg-muted"
-              }`
-            )}
             {transportButton(
               prev,
               "Previous",
@@ -793,16 +805,19 @@ export default function PlayerBar({
               <NextIcon size={20} />,
               "h-11 w-11 text-fg-muted active:bg-surface-2"
             )}
-            {transportButton(
-              () => setQueueOpen((o) => !o),
-              queueOpen ? "Hide queue" : "Show queue",
-              <QueueIcon size={18} />,
-              `h-10 w-10 active:bg-surface-2 ${
-                queueOpen ? "text-accent-bright" : "text-fg-muted"
-              }`
-            )}
           </div>
         </div>
+        <button
+          onClick={openNp}
+          aria-label="Open now playing"
+          className="w-full"
+        >
+          <PlayerProgress
+            barOnly
+            className="flex w-full"
+            serverDuration={serverDuration}
+          />
+        </button>
       </div>
 
       {/* Desktop (md and up): the original single row, unchanged. */}
@@ -820,6 +835,16 @@ export default function PlayerBar({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {transportButton(
+            () => setQueueOpen((o) => !o),
+            queueOpen ? "Hide queue" : "Show queue",
+            <QueueIcon size={16} />,
+            `h-10 w-10 hover:bg-surface-2 ${
+              queueOpen
+                ? "text-accent-bright hover:text-accent-bright"
+                : "text-fg-muted hover:text-white"
+            }`
+          )}
           {transportButton(
             toggleShuffle,
             shuffled ? "Disable shuffle" : "Enable shuffle",
@@ -864,17 +889,6 @@ export default function PlayerBar({
           className="flex min-w-0 flex-1"
           serverDuration={serverDuration}
         />
-
-        {transportButton(
-          () => setQueueOpen((o) => !o),
-          queueOpen ? "Hide queue" : "Show queue",
-          <QueueIcon size={16} />,
-          `h-10 w-10 shrink-0 hover:bg-surface-2 ${
-            queueOpen
-              ? "text-accent-bright hover:text-accent-bright"
-              : "text-fg-muted hover:text-white"
-          }`
-        )}
 
         <div className="flex w-32 shrink-0 items-center gap-2">
           <span title="Volume" className="flex shrink-0">

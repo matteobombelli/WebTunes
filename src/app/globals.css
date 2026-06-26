@@ -114,6 +114,23 @@ button:not(:disabled):active {
     transform: none;
   }
 }
+/* Fullscreen sheets (mobile now-playing / queue) slide up from the bottom. */
+@keyframes slide-up-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes slide-up-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
 /* Now-playing equaliser bars. */
 @keyframes eq-bounce {
   0%,
@@ -139,6 +156,12 @@ button:not(:disabled):active {
 }
 .animate-fade-in-up {
   animation: fade-in-up 0.22s ease-out both;
+}
+.animate-slide-up-in {
+  animation: slide-up-in 0.22s ease-out;
+}
+.animate-slide-up-out {
+  animation: slide-up-out 0.22s ease-in forwards;
 }
 /* Tailwind's default pulse is 2s; tighten it so spinners feel responsive. */
 .animate-pulse {

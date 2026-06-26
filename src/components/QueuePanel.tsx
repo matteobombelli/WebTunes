@@ -22,15 +22,21 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { usePlayerStore, type QueueItem } from "@/stores/player";
-import { GripIcon, XIcon } from "@/components/icons";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  GripIcon,
+  XIcon,
+} from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
+import CurrentTrackDetails from "@/components/CurrentTrackDetails";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
 
 // Rows above/below the visible window kept mounted so a fast scroll or a drag
 // near the edge doesn't flash blank. ~20 rows render regardless of queue size.
-const OVERSCAN = 6;
+const OVERSCAN = 8;
 const ROW_FALLBACK = 56; // first-paint estimate; replaced by a real measurement
 
 /**
@@ -55,18 +61,47 @@ const closestVertical: CollisionDetection = ({
   return best ? [{ id: best.id }] : [];
 };
 
-/** Queue popover anchored above the player bar; PlayerBar owns open state. */
+/** The queue list, shown as a desktop popover anchored above the player bar
+ *  (`variant="desktop"`) or a mobile fullscreen sheet (`variant="mobile"`);
+ *  PlayerBar owns the open state. */
 export default memo(function QueuePanel({
   open,
   onClose,
+  variant = "desktop",
 }: {
   open: boolean;
   onClose: () => void;
+  variant?: "desktop" | "mobile";
 }) {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const { clearUpcoming } = usePlayerStore.getState();
+  const mobile = variant === "mobile";
+  const current = index >= 0 ? queue[index]?.track ?? null : null;
+  // Desktop-only: collapse the list down to just the current-song header.
+  const [collapsed, setCollapsed] = useState(false);
+  // Desktop popover animates its height as it collapses/expands or the queue
+  // resizes: measure the content and transition the wrapper's height to match.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [animHeight, setAnimHeight] = useState<number | undefined>(undefined);
+  const [animReady, setAnimReady] = useState(false);
+  useEffect(() => {
+    if (mobile) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      // Ignore 0 (the panel is display:none while closed) so reopening doesn't
+      // animate up from nothing.
+      if (h > 0) {
+        setAnimHeight(h);
+        setAnimReady(true);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mobile]);
 
   // Windowing: only the visible slice of rows is mounted. The list lives in
   // normal flow between two spacers (no per-row transform), so @dnd-kit's drag
@@ -115,9 +150,11 @@ export default memo(function QueuePanel({
   }
   useEffect(() => {
     if (!closing) return;
-    const t = setTimeout(() => setClosing(false), EXIT_MS);
+    // The mobile sheet uses the longer slide-up animation; the desktop popover
+    // the quick pop. Keep the node mounted until its exit animation finishes.
+    const t = setTimeout(() => setClosing(false), mobile ? 220 : EXIT_MS);
     return () => clearTimeout(t);
-  }, [closing]);
+  }, [closing, mobile]);
 
   // Keep the viewport height current (open transition, viewport resize/rotate).
   useEffect(() => {
@@ -168,73 +205,168 @@ export default memo(function QueuePanel({
   // as the queue is built, not in one cold synchronous frame on first open.
   const hidden = !open && !closing;
 
-  return (
-    <div className={`${hidden ? "hidden" : open ? "animate-pop-in" : "animate-pop-out"} absolute bottom-full right-0 z-20 mb-2 mr-2 flex max-h-[60dvh] w-[26rem] max-w-[calc(100vw-1rem)] flex-col rounded-md border border-border bg-surface-2 shadow-lg md:mr-4`}>
-      <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-        <h2 className="text-sm font-semibold text-fg">Queue</h2>
-        <span className="text-xs text-fg-muted">
-          {queue.length} track{queue.length === 1 ? "" : "s"}
-        </span>
-        <div className="flex-1" />
-        {upcoming > 0 && (
-          <button
-            onClick={clearUpcoming}
-            className="text-xs text-fg-muted hover:text-white"
+  const rootChrome = mobile
+    ? `${
+        hidden ? "hidden" : open ? "animate-slide-up-in" : "animate-slide-up-out"
+      } fixed inset-0 z-[60] flex flex-col bg-surface-1 md:hidden`
+    : `${
+        hidden ? "hidden" : open ? "animate-pop-in" : "animate-pop-out"
+      } absolute bottom-full left-2 z-20 mb-2 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-border bg-surface-2 shadow-lg md:left-56`;
+
+  const body = (
+    <>
+      {current && (
+        <div
+          className={`border-b border-border px-4 ${
+            mobile
+              ? "pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
+              : "pb-3 pt-4"
+          }`}
+        >
+          <CurrentTrackDetails
+            track={current}
+            row={mobile}
+            artSize={mobile ? "h-12 w-12" : "w-full aspect-square"}
+            iconSize={mobile ? 22 : 64}
+            onNavigate={onClose}
+          />
+        </div>
+      )}
+
+      {!collapsed && (
+        <>
+          <div className="flex items-center gap-3 border-b border-border px-4 py-2">
+            <h2 className="text-sm font-semibold text-fg">Queue</h2>
+            <span className="text-xs text-fg-muted">
+              {queue.length} track{queue.length === 1 ? "" : "s"}
+            </span>
+            <div className="flex-1" />
+            {upcoming > 0 && (
+              <button
+                onClick={clearUpcoming}
+                className="text-xs text-fg-muted hover:text-white"
+              >
+                Clear upcoming
+              </button>
+            )}
+          </div>
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestVertical}
+            modifiers={[restrictToVerticalAxis]}
+            measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+            onDragStart={(e) => setActiveId(e.active.id)}
+            onDragCancel={() => setActiveId(null)}
+            onDragEnd={onDragEnd}
           >
-            Clear upcoming
+            <SortableContext
+              items={items}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul
+                ref={scrollRef}
+                onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+                className={
+                  mobile
+                    ? "min-h-0 flex-1 overflow-y-auto py-1"
+                    : "max-h-[calc(100dvh-40rem)] overflow-y-auto py-1"
+                }
+              >
+                {topPad > 0 && <li aria-hidden style={{ height: topPad }} />}
+                {queue.slice(first, last).map((item, i) => {
+                  const idx = first + i;
+                  return (
+                    <QueueRow
+                      key={item.uid}
+                      item={item}
+                      isCurrent={idx === index}
+                      isPlaying={idx === index && isPlaying}
+                      measureRef={i === 0 ? measureRow : undefined}
+                    />
+                  );
+                })}
+                {bottomPad > 0 && (
+                  <li aria-hidden style={{ height: bottomPad }} />
+                )}
+              </ul>
+            </SortableContext>
+
+            <DragOverlay>
+              {activeItem ? (
+                <QueueRowOverlay
+                  item={activeItem}
+                  isCurrent={activeIndex === index}
+                  isPlaying={activeIndex === index && isPlaying}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </>
+      )}
+
+      <div
+        className={`flex shrink-0 items-center border-t border-border px-4 ${
+          mobile
+            ? "justify-center pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-3"
+            : "justify-between py-2"
+        }`}
+      >
+        {!mobile && (
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? "Expand queue" : "Collapse queue"}
+            title={collapsed ? "Expand queue" : "Collapse queue"}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-white"
+          >
+            {collapsed ? (
+              <ChevronUpIcon size={16} />
+            ) : (
+              <ChevronDownIcon size={16} />
+            )}
+            {collapsed ? "Expand" : "Collapse"}
           </button>
         )}
         <button
           onClick={onClose}
-          aria-label="Close queue"
-          className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
+          aria-label={mobile ? "Back to now playing" : "Close queue"}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-white"
         >
-          <XIcon size={16} />
+          {mobile ? (
+            <>
+              <ChevronDownIcon size={18} />
+              Back
+            </>
+          ) : (
+            <>
+              <XIcon size={16} />
+              Close
+            </>
+          )}
         </button>
       </div>
+    </>
+  );
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestVertical}
-        modifiers={[restrictToVerticalAxis]}
-        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-        onDragStart={(e) => setActiveId(e.active.id)}
-        onDragCancel={() => setActiveId(null)}
-        onDragEnd={onDragEnd}
-      >
-        <SortableContext items={items} strategy={verticalListSortingStrategy}>
-          <ul
-            ref={scrollRef}
-            onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-            className="overflow-y-auto py-1"
-          >
-            {topPad > 0 && <li aria-hidden style={{ height: topPad }} />}
-            {queue.slice(first, last).map((item, i) => {
-              const idx = first + i;
-              return (
-                <QueueRow
-                  key={item.uid}
-                  item={item}
-                  isCurrent={idx === index}
-                  isPlaying={idx === index && isPlaying}
-                  measureRef={i === 0 ? measureRow : undefined}
-                />
-              );
-            })}
-            {bottomPad > 0 && <li aria-hidden style={{ height: bottomPad }} />}
-          </ul>
-        </SortableContext>
-
-        <DragOverlay>
-          {activeItem ? (
-            <QueueRowOverlay
-              item={activeItem}
-              isCurrent={activeIndex === index}
-              isPlaying={activeIndex === index && isPlaying}
-            />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+  return (
+    <div
+      className={rootChrome}
+      style={
+        mobile
+          ? undefined
+          : {
+              height: animHeight,
+              transition: animReady ? "height 200ms ease" : undefined,
+            }
+      }
+    >
+      {mobile ? (
+        body
+      ) : (
+        <div ref={contentRef} className="flex flex-col">
+          {body}
+        </div>
+      )}
     </div>
   );
 });
