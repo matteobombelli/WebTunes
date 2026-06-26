@@ -11,7 +11,7 @@ Production target: https://matteob.dev/projects/webtunes
 - Next.js (App Router, TypeScript) with basePath `/projects/webtunes`
 - PostgreSQL via Drizzle ORM (full-text search with a generated tsvector + GIN index)
 - Auth.js (NextAuth v5) credentials login with database sessions
-- S3-compatible object storage (MinIO in dev, AWS S3 in prod), presigned URLs for streaming
+- S3-compatible object storage (MinIO in dev, Cloudflare R2 in prod), presigned URLs for streaming
 - Lyrics from embedded ID3/Vorbis tags, falling back to the free LRCLIB API
 - zustand for player state, Tailwind for styling
 
