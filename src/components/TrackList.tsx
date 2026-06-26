@@ -979,6 +979,25 @@ export default function TrackList({
     }
   };
 
+  // Bulk variant of the per-row `onRemove` (e.g. remove-from-playlist). Runs
+  // sequentially, not Promise.all: the playlist remove endpoint re-compacts
+  // positions in a transaction, so concurrent removes would race on the
+  // overlapping position updates.
+  const bulkRemove = async () => {
+    if (!onRemove) return;
+    const targets = view.filter((t) => validSelected.has(t.id));
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const t of targets) await onRemove(t);
+      setSelected(new Set());
+      router.refresh();
+      onMutated?.();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   if (tracks.length === 0) {
     return <p className="py-8 text-center text-sm text-fg-subtle">No tracks here yet.</p>;
   }
@@ -1049,7 +1068,20 @@ export default function TrackList({
             <DownloadIcon size={18} />
             <span className="hidden md:inline">Download</span>
           </button>
-          {canDelete && (
+          {onRemove ? (
+            <button
+              onClick={bulkRemove}
+              disabled={bulkBusy || validSelected.size === 0}
+              aria-label={removeLabel ?? "Remove"}
+              title={removeLabel ?? "Remove"}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              <TrashIcon size={18} />
+              <span className="hidden md:inline">
+                {bulkBusy ? "Removing…" : "Remove"}
+              </span>
+            </button>
+          ) : canDelete ? (
             <button
               onClick={bulkDelete}
               disabled={bulkBusy || deletableSelectedIds.length === 0}
@@ -1062,7 +1094,7 @@ export default function TrackList({
                 {bulkBusy ? "Deleting…" : "Delete"}
               </span>
             </button>
-          )}
+          ) : null}
           <button
             onClick={exitSelectMode}
             aria-label="Clear selection"

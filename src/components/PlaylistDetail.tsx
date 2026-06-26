@@ -244,12 +244,13 @@ export default function PlaylistDetail({
           tracks={tracks}
           showOwner
           canEdit
+          selectable
           onRemove={removeTrack}
           removeLabel="Remove from playlist"
           onMove={moveTrack}
         />
       ) : (
-        <TrackList tracks={tracks} showOwner />
+        <TrackList tracks={tracks} showOwner selectable />
       )}
 
       {isOwner && (
