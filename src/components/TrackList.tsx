@@ -604,21 +604,23 @@ const TrackRow = memo(function TrackRow({
           />
         </td>
       )}
-      <td className="py-2">
+      <td className="py-2.5 sm:py-2">
         <button
           onClick={() => playQueue(view, index)}
           title={`Play ${track.title}`}
           className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
         >
           <span className="relative shrink-0">
-            <TrackArt track={track} size="h-9 w-9" iconSize={18} />
+            <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} />
             {isCurrent && (
               <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
                 <NowPlayingBars playing={isPlaying} />
               </span>
             )}
           </span>
-          <span className="truncate hover:underline">{track.title}</span>
+          <span className="truncate text-base hover:underline sm:text-sm">
+            {track.title}
+          </span>
           {track.isPrivate && !track.ownerName && (
             <LockIcon size={12} className="shrink-0 text-fg-subtle" />
           )}
@@ -653,7 +655,7 @@ const TrackRow = memo(function TrackRow({
           {track.ownerName ?? "You"}
         </td>
       )}
-      <td className="py-2 text-center tabular-nums text-fg-muted">
+      <td className="py-2.5 text-center tabular-nums text-fg-muted sm:py-2">
         {formatDuration(track.durationSec)}
       </td>
       {showPlays && (

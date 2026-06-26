@@ -6,7 +6,7 @@ import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
-import { SearchIcon } from "@/components/icons";
+import { SearchIcon, XIcon } from "@/components/icons";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
@@ -92,8 +92,18 @@ export default function LibraryBrowser({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search title, artist, album, or lyrics…"
-            className="w-full pl-9"
+            className="w-full pl-9 pr-9"
           />
+          {q && (
+            <button
+              onClick={() => setQ("")}
+              aria-label="Clear search"
+              title="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white"
+            >
+              <XIcon size={16} />
+            </button>
+          )}
         </div>
         <SegmentedControl options={SCOPES} value={scope} onChange={setScope} />
       </div>
