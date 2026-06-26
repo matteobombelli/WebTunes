@@ -5,7 +5,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import { useDownloadsStore } from "@/stores/downloads";
 
 // Must match SHELL_CACHE in public/sw.js.
-const SHELL_CACHE = "wt-shell-v1";
+const SHELL_CACHE = "wt-shell-v2";
 
 export default function ServiceWorkerRegistrar() {
   useEffect(() => {
