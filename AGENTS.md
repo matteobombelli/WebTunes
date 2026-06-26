@@ -90,6 +90,17 @@ setup, and architecture rationale.
   loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:
   failure stores NULL and skips normalization for that track, never fails the
   upload. `scripts/analyze-loudness.mjs` backfills pre-feature rows.
+- Opus re-mux: iOS Safari can't play Opus-in-Ogg (it truncates playback partway
+  and auto-skips), so on upload `lib/remux.ts` losslessly re-muxes Opus to MP4
+  (`ffmpeg -c:a copy` — no re-encode; verified bit-identical via a decode-free
+  hash of the copied audio stream, which tolerates the benign trailing-frame
+  padding MP4 carries vs Ogg) and stores `audio/mp4`. Best-effort like loudness:
+  any non-Opus input or failure falls back to storing the original.
+  `scripts/remux-ogg-to-mp4.mjs` backfilled the existing library (originals then
+  deleted). The upload route runs metadata/loudness/CLAP/remux concurrently, and
+  every ffmpeg subprocess (loudness, CLAP decode, remux) goes through the shared
+  `lib/ffmpeg-gate.ts` semaphore (~cores-1) so parallel steps within an upload —
+  and across concurrent uploads — can't oversubscribe CPU/RAM.
 - "Play similar" radio: on upload `lib/clap-embedding.ts` decodes audio with
   ffmpeg and runs the CLAP audio encoder (`@huggingface/transformers`, ONNX,
   marked `serverExternalPackages`; weights cached in gitignored
