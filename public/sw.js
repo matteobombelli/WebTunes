@@ -14,13 +14,13 @@
 //                 it holds user downloads that must outlive SW updates.
 //   wt-art      — downloaded track cover art, keyed by the stable art URL
 //                 (/api/tracks/:id/art). Same lifecycle as wt-audio.
-//   wt-prefetch — the next upcoming track's audio, pre-cached (keyed by the
-//                 stable stream URL) while the current track plays so a
-//                 background auto-advance is served from here instead of a live
+//   wt-prefetch — the next few upcoming tracks' audio, pre-cached (keyed by the
+//                 stable stream URL) while the current track plays so consecutive
+//                 background auto-advances are served from here instead of a live
 //                 fetch — iOS throttles network for a backgrounded PWA, which
 //                 otherwise leaves a streamed next track silently stuck. Holds
-//                 only the next track (pruned client-side); ephemeral and safe
-//                 to drop. Written by src/lib/offline/prefetch.ts, read here.
+//                 only the next few tracks (pruned client-side); ephemeral and
+//                 safe to drop. Written by src/lib/offline/prefetch.ts, read here.
 
 const BASE_PATH = "/projects/webtunes";
 const SHELL_CACHE = "wt-shell-v2";

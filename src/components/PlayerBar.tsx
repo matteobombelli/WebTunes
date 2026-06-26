@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
-import { prefetchUpcoming } from "@/lib/offline/prefetch";
+import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import QueuePanel from "@/components/QueuePanel";
@@ -34,6 +34,27 @@ const TARGET_LUFS = -18;
 /** localStorage key for the persisted master volume (client-only preference). */
 const VOLUME_KEY = "wt-volume";
 
+/** Bounded retry/reload budget per track load, for background play() recovery. */
+const MAX_ATTEMPTS = 4;
+
+/**
+ * Gated, removable audio instrumentation. Off by default; enable on-device with
+ * localStorage.setItem("wt-audio-debug","1") then reload, and read the rolling
+ * window.__wtAudioLog in Safari Web Inspector. iOS audio failures are otherwise
+ * silent, so this makes the before/after of a track transition observable.
+ */
+function logAudio(event: string, detail?: string) {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem("wt-audio-debug") !== "1") return;
+  const line = `[wt-audio] ${event}${detail ? " " + detail : ""}`;
+  console.info(line);
+  const w = window as unknown as { __wtAudioLog?: string[] };
+  (w.__wtAudioLog ??= []).push(
+    `${new Date().toISOString().slice(11, 23)} ${line}`
+  );
+  if (w.__wtAudioLog.length > 200) w.__wtAudioLog.shift();
+}
+
 /**
  * Always-mounted, render-nothing helper that warms the browser image cache for
  * the queue art the user is about to see (head, tail, and around the current
@@ -61,19 +82,22 @@ function QueueArtPreloader() {
 }
 
 /**
- * Render-nothing helper that pre-caches the *next* track's audio while the
+ * Render-nothing helper that pre-caches the next few tracks' audio while the
  * current one plays. iOS throttles live network for a backgrounded PWA, so a
  * streamed next track can't load when one ends in the background and sits
- * silently stuck; warming it here (in the foreground) lets the service worker
- * serve the auto-advance from cache. Its own narrow subscription keeps this off
- * the PlayerBar's render path.
+ * silently stuck; warming several ahead here (in the foreground) lets the
+ * service worker serve consecutive background auto-advances from cache. Its own
+ * narrow subscription keeps this off the PlayerBar's render path.
  */
 function NextTrackPrefetcher() {
   const queue = usePlayerStore((s) => s.queue);
   const index = usePlayerStore((s) => s.index);
   useEffect(() => {
     if (index < 0) return;
-    prefetchUpcoming(queue[index]?.track.id, queue[index + 1]?.track.id);
+    const nextIds = queue
+      .slice(index + 1, index + 1 + PREFETCH_AHEAD)
+      .map((q) => q.track.id);
+    prefetchUpcoming(queue[index]?.track.id, nextIds);
   }, [queue, index]);
   return null;
 }
@@ -104,6 +128,15 @@ export default function PlayerBar({
   // track's ~178 ms still in the Bluetooth buffer as an audible glitch; wired
   // output has a tiny buffer and never sleeps. See ensureOutputAwake.
   const keepAliveRef = useRef<AudioContext | null>(null);
+  // True while the *next* load is an automatic advance (track-end or hard-error
+  // skip) rather than a user action, so a background play() rejection on an
+  // auto-advance can hold the session and retry instead of tearing it down.
+  const autoAdvanceRef = useRef(false);
+  // We owe a play() that a background autoplay policy blocked; retry triggers
+  // (canplay/stalled/visibility) re-attempt it while the session stays held.
+  const pendingPlayRef = useRef(false);
+  // Bounded recovery budget per track load (reset on load and on foreground).
+  const recoverAttemptsRef = useRef(0);
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
@@ -171,12 +204,23 @@ export default function PlayerBar({
     : duration || serverDuration || 0;
   const playedSeconds = currentTime;
 
-  // play() rejects with AbortError when a newer src load or a pause()
-  // supersedes it (e.g. skipping tracks faster than they start) — that's
-  // benign and the new action already owns the playing state, so only a real
-  // failure (autoplay blocked, bad source) should flip the UI to paused.
-  const onPlayError = (err: unknown) => {
-    if ((err as { name?: string })?.name !== "AbortError") _setPlaying(false);
+  // play() rejects with AbortError when a newer src load or a pause() supersedes
+  // it (e.g. skipping faster than tracks start) — benign, ignore. On an automatic
+  // advance (track end) iOS rejects the play() of a freshly-loaded source in the
+  // background with NotAllowedError; the old code flipped isPlaying to false here,
+  // which paused the element and suspended the keep-alive context — tearing down
+  // the audio session and detaching the lock-screen controls. Instead, on an
+  // auto-advance, hold the session and mark the play() as owed so a retry trigger
+  // can resume it. Only a genuine user-initiated failure flips the UI to paused.
+  const onPlayError = (err: unknown, autoAdvance: boolean) => {
+    const name = (err as { name?: string })?.name;
+    logAudio("play-reject", name);
+    if (name === "AbortError") return;
+    if (autoAdvance) {
+      pendingPlayRef.current = true;
+      return;
+    }
+    _setPlaying(false);
   };
 
   // Keep the audio output device awake across the gap between tracks so a
@@ -205,6 +249,54 @@ export default function PlayerBar({
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
   };
 
+  // Start (or resume) playback, routing rejections through onPlayError with the
+  // auto-advance context so a background transition holds the session and retries
+  // rather than tearing down. Resolves clear any owed retry.
+  const attemptPlay = (autoAdvance: boolean) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    ensureOutputAwake();
+    audio
+      .play()
+      .then(() => {
+        pendingPlayRef.current = false;
+      })
+      .catch((err) => onPlayError(err, autoAdvance));
+  };
+
+  // Re-attempt an owed (background-blocked) play(), bounded per track load. A
+  // no-op unless a transition play() was actually rejected, so the media-event
+  // triggers that call it are inert on a normal successful advance.
+  const retryPendingPlay = () => {
+    if (!pendingPlayRef.current) return;
+    if (recoverAttemptsRef.current >= MAX_ATTEMPTS) return;
+    recoverAttemptsRef.current += 1;
+    logAudio("play-retry", String(recoverAttemptsRef.current));
+    attemptPlay(true);
+  };
+
+  // Media-element error recovery. A hard error (bad codec/source, incl. an
+  // expired presigned URL) skips on; a transient network error gets a bounded
+  // same-src reload (canplay then retries play), then skips once the budget's up.
+  const onAudioError = () => {
+    const audio = audioRef.current;
+    const mediaErr = audio?.error;
+    logAudio("error", mediaErr ? `code=${mediaErr.code}` : "");
+    if (!usePlayerStore.getState().isPlaying) return;
+    const hard =
+      mediaErr &&
+      (mediaErr.code === mediaErr.MEDIA_ERR_DECODE ||
+        mediaErr.code === mediaErr.MEDIA_ERR_SRC_NOT_SUPPORTED);
+    if (hard || recoverAttemptsRef.current >= MAX_ATTEMPTS) {
+      autoAdvanceRef.current = true; // the skip is itself an automatic advance
+      next();
+      return;
+    }
+    recoverAttemptsRef.current += 1;
+    pendingPlayRef.current = true;
+    audio?.load(); // fresh load of the current src; onCanPlay retries play()
+  };
+
   // Point the audio element at the track's stable stream URL (302s to a
   // presigned S3 URL online; served from the offline cache by the SW).
   useEffect(() => {
@@ -212,19 +304,22 @@ export default function PlayerBar({
     if (!audio || !track) return;
     audio.src = streamSrc(track.id);
     freshLoadRef.current = true;
-    if (usePlayerStore.getState().isPlaying) {
-      ensureOutputAwake();
-      audio.play().catch(onPlayError);
-    }
+    pendingPlayRef.current = false; // a new track supersedes any owed retry
+    recoverAttemptsRef.current = 0; // fresh recovery budget per track
+    const autoAdvance = autoAdvanceRef.current;
+    autoAdvanceRef.current = false; // consume the flag
+    if (usePlayerStore.getState().isPlaying) attemptPlay(autoAdvance);
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
     if (isPlaying) {
-      ensureOutputAwake();
-      audio.play().catch(onPlayError);
+      attemptPlay(false);
     } else {
+      // A genuine stop (user pause or end-of-queue) neutralizes any stale
+      // auto-advance arm and releases the keep-alive session.
+      autoAdvanceRef.current = false;
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
     }
@@ -237,6 +332,19 @@ export default function PlayerBar({
       keepAliveRef.current = null;
     };
   }, []);
+
+  // Back in the foreground, play() is permitted again: reset the recovery budget
+  // and re-attempt any play() a background autoplay block left owed, so simply
+  // returning to the app auto-resumes a stuck transition with no tap.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      recoverAttemptsRef.current = 0;
+      retryPendingPlay();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hydrate the persisted "Normalize volume" setting from the server once, so
   // the player and the library toggle share one source of truth without a flash.
@@ -301,24 +409,29 @@ export default function PlayerBar({
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     const session = navigator.mediaSession;
-    const { toggle, next, prev, seekTo } = usePlayerStore.getState();
+    const { toggle, next, prev } = usePlayerStore.getState();
     session.setActionHandler("play", () => {
-      if (!usePlayerStore.getState().isPlaying) toggle();
+      if (!usePlayerStore.getState().isPlaying) {
+        toggle();
+        return;
+      }
+      // Store already intends to play but a blocked background auto-advance left
+      // the element paused; this runs inside the lock-screen gesture, and the
+      // session was held, so resume the element directly.
+      audioRef.current?.play().catch(() => {});
     });
     session.setActionHandler("pause", () => {
       if (usePlayerStore.getState().isPlaying) toggle();
     });
+    // Only previoustrack/nexttrack are registered (and seekto/position-state are
+    // deliberately omitted): on iOS, a registered "seekto" + setPositionState
+    // make the lock screen treat the audio as scrubbable long-form and show
+    // ±10s skip buttons instead of previous/next-track arrows. We want the
+    // track arrows, at the cost of the lock-screen scrubber/elapsed readout.
     session.setActionHandler("previoustrack", prev);
     session.setActionHandler("nexttrack", next);
-    try {
-      session.setActionHandler("seekto", (details) => {
-        if (details.seekTime !== undefined) seekTo(details.seekTime);
-      });
-    } catch {
-      // Older browsers don't know "seekto".
-    }
     return () => {
-      for (const action of ["play", "pause", "previoustrack", "nexttrack", "seekto"] as const) {
+      for (const action of ["play", "pause", "previoustrack", "nexttrack"] as const) {
         try {
           session.setActionHandler(action, null);
         } catch {
@@ -344,20 +457,6 @@ export default function PlayerBar({
     if (!("mediaSession" in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }, [isPlaying]);
-
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    if (!Number.isFinite(totalDuration) || totalDuration <= 0) return;
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: totalDuration,
-        position: Math.min(playedSeconds, totalDuration),
-        playbackRate: 1,
-      });
-    } catch {
-      // Invalid state mid-track-change; the next tick fixes it.
-    }
-  }, [playedSeconds, totalDuration]);
 
   if (!track) return null;
 
@@ -432,6 +531,8 @@ export default function PlayerBar({
       <audio
         ref={audioRef}
         onPlaying={(e) => {
+          logAudio("playing");
+          pendingPlayRef.current = false; // playback truly began: nothing owed
           // First real playback after a load: if the clock drifted ahead while
           // the cold stream stalled (and the user didn't ask to resume/seek),
           // restart from the top so the intro isn't skipped.
@@ -454,7 +555,21 @@ export default function PlayerBar({
             api(`/tracks/${track.id}/play`, { method: "POST" }).catch(() => {});
           }
         }}
-        onEnded={next}
+        // Primary background-resume trigger: a prefetched next track reaches
+        // canplay fast, and retryPendingPlay re-attempts the owed play() while the
+        // session is held. Self-guards to a no-op on a normal successful advance.
+        onCanPlay={retryPendingPlay}
+        onWaiting={() => logAudio("waiting")}
+        onStalled={() => {
+          logAudio("stalled");
+          retryPendingPlay();
+        }}
+        onError={onAudioError}
+        onEnded={() => {
+          logAudio("ended");
+          autoAdvanceRef.current = true; // mark the upcoming load as automatic
+          next();
+        }}
       />
 
       {/* Mobile (below md, matching MobileNav): the desktop single row has no
