@@ -43,3 +43,6 @@ next-env.d.ts
 
 # CLAP model weights cache (downloaded on first embed; see lib/clap-embedding.ts)
 /.transformers-cache
+
+# Revert map written by scripts/remux-ogg-to-mp4.mjs (runtime artifact)
+/remux-revert.jsonl

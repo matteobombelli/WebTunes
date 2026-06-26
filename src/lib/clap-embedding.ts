@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { withFfmpeg } from "@/lib/ffmpeg-gate";
 
 // Encode a track's audio into a CLAP embedding for similarity search ("play
 // similar"). We decode to PCM with the same ffmpeg we already depend on for
@@ -113,7 +114,9 @@ async function decodeToPcm(buffer: Buffer, ext: string): Promise<Float32Array> {
     const file = join(dir, `${randomUUID()}.${safeExt}`);
     await writeFile(file, buffer);
 
-    const raw = await runFfmpegDecode(file);
+    // Gate the decode (not just the ONNX inference below) so parallel uploads
+    // can't stack unbounded ffmpeg decodes and exhaust CPU/RAM.
+    const raw = await withFfmpeg(() => runFfmpegDecode(file));
     // .slice copies into a fresh, 4-byte-aligned ArrayBuffer (Buffer.concat's
     // offset isn't guaranteed aligned for a Float32Array view).
     const n = Math.floor(raw.length / 4);

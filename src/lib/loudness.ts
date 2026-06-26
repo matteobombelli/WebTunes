@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { withFfmpeg } from "@/lib/ffmpeg-gate";
 
 // Measure a track's integrated loudness (EBU R128, in LUFS) with ffmpeg's
 // ebur128 filter. Used to normalize playback volume across tracks.
@@ -34,7 +35,7 @@ export async function analyzeLoudnessLufs(
     const file = join(dir, `${randomUUID()}.${safeExt}`);
     await writeFile(file, buffer);
 
-    const stderr = await runFfmpeg(file);
+    const stderr = await withFfmpeg(() => runFfmpeg(file));
     return parseIntegratedLufs(stderr);
   } catch {
     return null;

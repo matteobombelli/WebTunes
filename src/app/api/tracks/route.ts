@@ -8,6 +8,7 @@ import { embedTrack } from "@/lib/clap-embedding";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
+import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
@@ -83,37 +84,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const meta = await extractTrackMetadata(buffer, file.type, file.name);
-  // Best-effort loudness measurement for playback normalization; null on any
-  // failure, exactly like art/lyrics — it must never fail an upload.
-  const loudnessLufs = await analyzeLoudnessLufs(buffer, ext);
-  // Best-effort CLAP audio embedding for "play similar"; null on any failure.
-  const embedding = await embedTrack(buffer, ext);
+  // These four are independent — run them concurrently so the I/O-bound lrclib
+  // lookup inside metadata extraction overlaps the CPU-bound ffmpeg/ONNX work
+  // instead of running in series. Loudness and the CLAP embedding are best-effort
+  // (null on any failure, like art/lyrics); the re-mux returns null for anything
+  // that isn't Opus or that fails.
+  const [meta, loudnessLufs, embedding, remuxed] = await Promise.all([
+    extractTrackMetadata(buffer, file.type, file.name),
+    analyzeLoudnessLufs(buffer, ext),
+    embedTrack(buffer, ext),
+    // iOS Safari can't play Opus-in-Ogg; losslessly re-mux Opus to MP4.
+    remuxOpusToMp4(buffer, ext, file.type),
+  ]);
 
   const trackId = randomUUID();
-  // The client-supplied filename is untrusted; only allowlisted extensions
-  // make it into the S3 key.
-  const s3Key = `audio/${user.id}/${trackId}.${
-    AUDIO_EXTENSIONS.has(ext) ? ext : "bin"
-  }`;
-  // file.type is browser-supplied and untrusted; only store it when it's an
-  // audio/* type. Anything else (e.g. a crafted text/html) gets a neutral
-  // Content-Type so it can never be served as active content — the offline
-  // service worker replays this from a same-origin cache.
-  const audioType = file.type.startsWith("audio/") ? file.type : null;
-  await uploadObject(s3Key, buffer, audioType ?? undefined);
+  // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
+  // client-supplied filename is untrusted, so only allowlisted extensions reach
+  // the key; file.type is untrusted too, so we only keep it when it's audio/*
+  // (anything else gets a neutral Content-Type so it can't be served as active
+  // content — the offline service worker replays this from a same-origin cache).
+  const originalExt = AUDIO_EXTENSIONS.has(ext) ? ext : "bin";
+  const originalType = file.type.startsWith("audio/") ? file.type : null;
+  const audioBody = remuxed ? remuxed.body : buffer;
+  const audioExt = remuxed ? remuxed.ext : originalExt;
+  const storedType = remuxed ? remuxed.contentType : originalType;
+  const s3Key = `audio/${user.id}/${trackId}.${audioExt}`;
 
-  // Cover art is best-effort: a failed art upload must not fail the track.
+  // Upload audio and cover art together. Art is best-effort and must never fail
+  // the track — swallow its errors and drop the key so the row isn't orphaned.
   let artS3Key: string | null = null;
+  const uploads: Promise<unknown>[] = [
+    uploadObject(s3Key, audioBody, storedType ?? undefined),
+  ];
   if (meta.artBuffer) {
-    try {
-      const art = imageKindFromMime(meta.artMime);
-      artS3Key = `art/${user.id}/${trackId}.${art.ext}`;
-      await uploadObject(artS3Key, meta.artBuffer, art.contentType);
-    } catch {
-      artS3Key = null; // leave the track artless rather than orphan a row
-    }
+    const art = imageKindFromMime(meta.artMime);
+    artS3Key = `art/${user.id}/${trackId}.${art.ext}`;
+    uploads.push(
+      uploadObject(artS3Key, meta.artBuffer, art.contentType).catch(() => {
+        artS3Key = null; // leave the track artless rather than orphan a row
+      })
+    );
   }
+  await Promise.all(uploads);
 
   try {
     const [track] = await db
@@ -128,8 +140,8 @@ export async function POST(req: NextRequest) {
         loudnessLufs,
         s3Key,
         artS3Key,
-        mimeType: audioType,
-        fileSize: file.size,
+        mimeType: storedType,
+        fileSize: audioBody.length,
         contentHash,
         lyrics: meta.lyrics,
         lyricsSource: meta.lyricsSource,
