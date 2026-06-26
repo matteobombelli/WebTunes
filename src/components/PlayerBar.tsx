@@ -573,13 +573,14 @@ export default function PlayerBar({
 
   useEffect(() => {
     if (!("mediaSession" in navigator) || !track) return;
+    const artwork = track.artS3Key
+      ? [{ src: artSrc(track.id), sizes: "512x512" }]
+      : [{ src: `${BASE_PATH}/icon-512.png`, sizes: "512x512", type: "image/png" }];
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist ?? undefined,
       album: track.album ?? undefined,
-      artwork: [
-        { src: `${BASE_PATH}/icon-512.png`, sizes: "512x512", type: "image/png" },
-      ],
+      artwork,
     });
   }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
