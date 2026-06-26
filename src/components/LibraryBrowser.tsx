@@ -52,12 +52,12 @@ export default function LibraryBrowser({
             { signal: controller.signal }
           );
         } else {
-          // Browsing without a query: friends-only is the accessible set
-          // minus own tracks (own tracks carry no ownerName).
-          const all = await api<TrackDTO[]>("/tracks?scope=all", {
+          // Browsing without a query: let the server return exactly this scope
+          // (scope is "all" or "friends" here — "own" renders initialTracks),
+          // so friends-only doesn't download own tracks just to discard them.
+          tracks = await api<TrackDTO[]>(`/tracks?scope=${scope}`, {
             signal: controller.signal,
           });
-          tracks = scope === "friends" ? all.filter((t) => t.ownerName) : all;
         }
         setResults(tracks);
         setSearching(false);

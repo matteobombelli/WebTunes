@@ -10,7 +10,12 @@ import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
-import { listAccessibleTracks, listOwnTracks, toTrackDTO } from "@/lib/tracks";
+import {
+  listAccessibleTracks,
+  listFriendsTracks,
+  listOwnTracks,
+  toTrackDTO,
+} from "@/lib/tracks";
 import { getUserSettings } from "@/lib/users";
 
 // Matches proxyClientMaxBodySize in next.config.ts: the proxy truncates bodies
@@ -32,11 +37,15 @@ export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  // scope=all additionally includes friends' non-private tracks.
-  if (req.nextUrl.searchParams.get("scope") === "all") {
+  // scope=all adds friends' non-private tracks to the viewer's own; scope=friends
+  // returns only friends' (own excluded) so that view doesn't over-fetch.
+  const scope = req.nextUrl.searchParams.get("scope");
+  if (scope === "all" || scope === "friends") {
     const { hideFriendDuplicates } = await getUserSettings(user.id);
     return NextResponse.json(
-      await listAccessibleTracks(user.id, hideFriendDuplicates)
+      scope === "friends"
+        ? await listFriendsTracks(user.id, hideFriendDuplicates)
+        : await listAccessibleTracks(user.id, hideFriendDuplicates)
     );
   }
   return NextResponse.json(await listOwnTracks(user.id));

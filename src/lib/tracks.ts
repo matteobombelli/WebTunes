@@ -140,6 +140,34 @@ export async function listAccessibleTracks(
 }
 
 /**
+ * Friends' non-private tracks only (the viewer's own excluded), newest first —
+ * the friends-scope library view. Same dedup rule as listAccessibleTracks, so
+ * the server returns exactly this scope instead of the client filtering the
+ * full accessible set down to it.
+ */
+export async function listFriendsTracks(
+  userId: string,
+  hideFriendDuplicates: boolean
+): Promise<TrackDTO[]> {
+  const friendIds = await friendIdsOf(userId);
+  if (!friendIds.length) return [];
+  const rows = await db
+    .select({ track: trackDtoColumns, ownerName: users.name })
+    .from(tracks)
+    .innerJoin(users, eq(tracks.ownerId, users.id))
+    .where(
+      and(
+        inArray(tracks.ownerId, friendIds),
+        eq(tracks.isPrivate, false),
+        hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+        hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
+      )
+    )
+    .orderBy(desc(tracks.createdAt));
+  return rows.map((r) => toTrackDTO(r.track, r.ownerName));
+}
+
+/**
  * Accessible tracks (own + friends' non-private) whose `field` matches `value`
  * case- and whitespace-insensitively, ordered by title. Honors
  * hideFriendDuplicates like listAccessibleTracks. Backs the album/artist pages.
