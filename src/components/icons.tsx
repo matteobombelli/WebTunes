@@ -224,6 +224,13 @@ export const SettingsIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Trash can — destructive delete. */
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3a1 1 0 0 0-1 1v1H4a1 1 0 1 0 0 2h16a1 1 0 1 0 0-2h-4V4a1 1 0 0 0-1-1H9zm1 2h4v0h-4V5zM6 9a1 1 0 0 1 1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8a1 1 0 1 1 2 0v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-8a1 1 0 0 1 1-1zm4 1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1z" />
+  </Svg>
+);
+
 /** Vertical kebab menu (more actions). */
 export const EllipsisIcon = (p: IconProps) => (
   <Svg {...p}>

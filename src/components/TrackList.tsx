@@ -12,6 +12,7 @@ import {
   ChevronUpIcon,
   ClockIcon,
   DownIcon,
+  DownloadIcon,
   EllipsisIcon,
   HeadphonesIcon,
   LockIcon,
@@ -20,6 +21,7 @@ import {
   PlayNextIcon,
   PlusIcon,
   QueueIcon,
+  TrashIcon,
   UpIcon,
   XIcon,
 } from "@/components/icons";
@@ -259,9 +261,12 @@ export function AddToPlaylistMenu({
         <button
           ref={triggerRef}
           onClick={load}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+          aria-label="Add to playlist"
+          title="Add to playlist"
+          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
         >
-          Add to playlist
+          <PlusIcon size={18} />
+          <span className="hidden md:inline">Add to playlist</span>
         </button>
       ) : (
         <button
@@ -437,7 +442,7 @@ function TrackActions({
           className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
         >
           <span>{removeLabel ?? "Delete"}</span>
-          <XIcon size={16} />
+          <TrashIcon size={16} />
         </button>
       )}
     </div>
@@ -915,9 +920,12 @@ export default function TrackList({
               .addToQueue(view.filter((t) => validSelected.has(t.id)));
             setSelected(new Set());
           }}
-          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+          aria-label="Add to queue"
+          title="Add to queue"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
         >
-          Add to queue
+          <QueueIcon size={18} />
+          <span className="hidden md:inline">Add to queue</span>
         </button>
         <button
           onClick={() => {
@@ -926,24 +934,35 @@ export default function TrackList({
               .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
             setSelected(new Set());
           }}
-          className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+          aria-label="Download"
+          title="Download"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
         >
-          Download
+          <DownloadIcon size={18} />
+          <span className="hidden md:inline">Download</span>
         </button>
         {showDelete && (
           <button
             onClick={bulkDelete}
             disabled={bulkBusy}
-            className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+            aria-label="Delete"
+            title="Delete"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"
           >
-            {bulkBusy ? "Deleting…" : "Delete"}
+            <TrashIcon size={18} />
+            <span className="hidden md:inline">
+              {bulkBusy ? "Deleting…" : "Delete"}
+            </span>
           </button>
         )}
         <button
           onClick={() => setSelected(new Set())}
-          className="shrink-0 whitespace-nowrap text-xs text-fg-muted hover:text-white"
+          aria-label="Clear selection"
+          title="Clear selection"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted hover:text-white"
         >
-          Clear
+          <XIcon size={18} />
+          <span className="hidden md:inline">Clear</span>
         </button>
       </div>
     )}
