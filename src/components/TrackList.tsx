@@ -560,7 +560,6 @@ type TrackRowProps = {
   selectable: boolean;
   selected: boolean;
   showOwner: boolean;
-  showPlays: boolean;
   canEdit: boolean;
   canDelete: boolean;
   playQueue: (tracks: TrackDTO[], startIndex: number) => void;
@@ -583,7 +582,6 @@ const TrackRow = memo(function TrackRow({
   selectable,
   selected,
   showOwner,
-  showPlays,
   canEdit,
   canDelete,
   playQueue,
@@ -666,11 +664,9 @@ const TrackRow = memo(function TrackRow({
       <td className="py-2.5 text-center tabular-nums text-fg-muted sm:py-2">
         {formatDuration(track.durationSec)}
       </td>
-      {showPlays && (
-        <td className="hidden py-2 text-center tabular-nums text-fg-muted md:table-cell">
-          {track.friendPlayCount}
-        </td>
-      )}
+      <td className="hidden py-2 text-center tabular-nums text-fg-muted md:table-cell">
+        {track.friendPlayCount}
+      </td>
       <td className="py-2">
         <div className="flex items-center justify-end gap-0.5">
           {/* Desktop: single-click queue actions, revealed on row hover. */}
@@ -713,7 +709,6 @@ const TrackRow = memo(function TrackRow({
 export default function TrackList({
   tracks,
   showOwner = false,
-  showPlays = false,
   canDelete = false,
   canEdit = false,
   selectable = false,
@@ -725,8 +720,6 @@ export default function TrackList({
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
-  /** Shows the sortable friend-play-count ("Plays") column (library view). */
-  showPlays?: boolean;
   /** Shows the delete action on the viewer's own tracks. */
   canDelete?: boolean;
   /** Shows the edit (pencil) action on the viewer's own tracks. */
@@ -1004,21 +997,25 @@ export default function TrackList({
           <th className="w-14 py-2 text-center">
             {sortHeader(
               "duration",
-              <span className="inline-flex items-center justify-center align-middle">
+              <span
+                title="Duration"
+                className="inline-flex items-center justify-center align-middle"
+              >
                 <ClockIcon size={16} />
               </span>
             )}
           </th>
-          {showPlays && (
-            <th className="hidden w-14 py-2 text-center md:table-cell">
-              {sortHeader(
-                "plays",
-                <span className="inline-flex items-center justify-center align-middle">
-                  <HeadphonesIcon size={16} />
-                </span>
-              )}
-            </th>
-          )}
+          <th className="hidden w-14 py-2 text-center md:table-cell">
+            {sortHeader(
+              "plays",
+              <span
+                title="Listen count"
+                className="inline-flex items-center justify-center align-middle"
+              >
+                <HeadphonesIcon size={16} />
+              </span>
+            )}
+          </th>
           {/* Mobile shows just the kebab; desktop adds Play next + Add to
               queue icons, so reserve more width there. */}
           <th className="w-10 py-2 md:w-28"></th>
@@ -1036,7 +1033,6 @@ export default function TrackList({
             selectable={selectable}
             selected={validSelected.has(track.id)}
             showOwner={showOwner}
-            showPlays={showPlays}
             canEdit={canEdit}
             canDelete={canDelete}
             playQueue={playQueue}
