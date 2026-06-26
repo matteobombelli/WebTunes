@@ -5,7 +5,7 @@
 import { api } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { deleteArt, hasArt, putArt } from "./art-cache";
-import { deleteAudio, hasAudio, putAudio } from "./audio-cache";
+import { deleteAudio, hasAudio, hasManyAudio, putAudio } from "./audio-cache";
 import {
   deleteDownloadedPlaylist,
   deleteDownloadedTrack,
@@ -103,10 +103,8 @@ export async function downloadPlaylist(
     syncedAt: new Date().toISOString(),
   };
   await putDownloadedPlaylist(playlist);
-  const toDownload: TrackDTO[] = [];
-  for (const track of tracks) {
-    if (!(await hasAudio(track.id))) toDownload.push(track);
-  }
+  const present = await hasManyAudio(tracks.map((t) => t.id));
+  const toDownload = tracks.filter((t) => !present.has(t.id));
   return { playlist, toDownload };
 }
 
@@ -194,8 +192,9 @@ export async function syncPlaylists(): Promise<TrackDTO[]> {
       local.trackIds.filter((id) => !remoteIds.has(id)),
       local.id
     );
+    const present = await hasManyAudio(tracks.map((t) => t.id));
     for (const track of tracks) {
-      if (!(await hasAudio(track.id))) toDownload.set(track.id, track);
+      if (!present.has(track.id)) toDownload.set(track.id, track);
     }
   }
   return [...toDownload.values()];

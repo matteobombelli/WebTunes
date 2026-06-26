@@ -27,6 +27,19 @@ export async function hasAudio(trackId: string): Promise<boolean> {
   return (await cache.match(streamSrc(trackId))) !== undefined;
 }
 
+/**
+ * Batched hasAudio: one cache.keys() pass instead of a match() per id, for the
+ * playlist download/sync paths that check many tracks at once. Returns the
+ * subset of ids whose audio is cached.
+ */
+export async function hasManyAudio(trackIds: string[]): Promise<Set<string>> {
+  const cache = await caches.open(AUDIO_CACHE);
+  const cachedPaths = new Set(
+    (await cache.keys()).map((req) => new URL(req.url).pathname)
+  );
+  return new Set(trackIds.filter((id) => cachedPaths.has(streamSrc(id))));
+}
+
 export async function deleteAudio(trackId: string) {
   const cache = await caches.open(AUDIO_CACHE);
   await cache.delete(streamSrc(trackId));

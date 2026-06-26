@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { memo, useCallback, useEffect, useMemo } from "react";
 import type { DownloadedPlaylist, DownloadedTrack } from "@/lib/offline/db";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -17,7 +17,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-function TrackRows({
+const TrackRows = memo(function TrackRows({
   tracks,
   onRemove,
 }: {
@@ -65,9 +65,13 @@ function TrackRows({
       ))}
     </ul>
   );
-}
+});
 
-function PlaylistSection({ playlist }: { playlist: DownloadedPlaylist }) {
+const PlaylistSection = memo(function PlaylistSection({
+  playlist,
+}: {
+  playlist: DownloadedPlaylist;
+}) {
   const tracksById = useDownloadsStore((s) => s.tracks);
   const removePlaylist = useDownloadsStore((s) => s.removePlaylist);
   // Only members whose audio is on the device; the rest are still queued or
@@ -96,7 +100,7 @@ function PlaylistSection({ playlist }: { playlist: DownloadedPlaylist }) {
       <TrackRows tracks={tracks} />
     </section>
   );
-}
+});
 
 export default function DownloadsBrowser() {
   const ready = useDownloadsStore((s) => s.ready);
@@ -114,14 +118,31 @@ export default function DownloadsBrowser() {
     void useDownloadsStore.getState().init();
   }, []);
 
+  // Stable derived lists + remove handler so the memoized sections don't
+  // re-render on every download-progress tick (only on actual data changes).
+  const pinned = useMemo(
+    () =>
+      Object.values(tracksById)
+        .filter((t) => t.pinned)
+        .sort((a, b) =>
+          a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+        ),
+    [tracksById]
+  );
+  const playlists = useMemo(
+    () =>
+      Object.values(playlistsById).sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      ),
+    [playlistsById]
+  );
+  const onRemovePinned = useCallback(
+    (t: DownloadedTrack) => void removeTrack(t.id),
+    [removeTrack]
+  );
+
   if (!ready) return null;
 
-  const pinned = Object.values(tracksById)
-    .filter((t) => t.pinned)
-    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
-  const playlists = Object.values(playlistsById).sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-  );
   const currentTrackTitle = current
     ? (tracksById[current.trackId]?.title ?? "track")
     : null;
@@ -170,10 +191,7 @@ export default function DownloadsBrowser() {
           {pinned.length > 0 && (
             <section className="mb-8">
               <h2 className="mb-1 font-display text-lg font-semibold">Songs</h2>
-              <TrackRows
-                tracks={pinned}
-                onRemove={(t) => void removeTrack(t.id)}
-              />
+              <TrackRows tracks={pinned} onRemove={onRemovePinned} />
             </section>
           )}
         </>

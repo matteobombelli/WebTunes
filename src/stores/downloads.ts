@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { TrackDTO } from "@/lib/types";
 import {
   getDownloadedPlaylists,
+  getDownloadedTrack,
   getDownloadedTracks,
   type DownloadedPlaylist,
   type DownloadedTrack,
@@ -46,23 +47,28 @@ async function requestPersistentStorage() {
 }
 
 export const useDownloadsStore = create<DownloadsState>((set, get) => {
+  // Refresh the storage-usage line out of band: it's display-only and
+  // navigator.storage.estimate() can be slow, so it never blocks the metadata
+  // update (or a user action waiting on refresh()).
+  const updateStorage = async () => {
+    try {
+      const { usage, quota } = await navigator.storage.estimate();
+      set({ storage: { usage: usage ?? 0, quota: quota ?? 0 } });
+    } catch {
+      // Estimation unsupported; UI hides the usage line.
+    }
+  };
+
   const refresh = async () => {
     const [tracks, playlists] = await Promise.all([
       getDownloadedTracks(),
       getDownloadedPlaylists(),
     ]);
-    let storage: DownloadsState["storage"] = null;
-    try {
-      const { usage, quota } = await navigator.storage.estimate();
-      storage = { usage: usage ?? 0, quota: quota ?? 0 };
-    } catch {
-      // Estimation unsupported; UI hides the usage line.
-    }
     set({
       tracks: Object.fromEntries(tracks.map((t) => [t.id, t])),
       playlists: Object.fromEntries(playlists.map((p) => [p.id, p])),
-      storage,
     });
+    void updateStorage();
   };
 
   const processQueue = async () => {
@@ -84,15 +90,20 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
             lastReported = loaded;
             set({ current: { trackId: next.track.id, loaded, total } });
           });
+          // Delta-merge just this track instead of re-reading all of IndexedDB
+          // after every item (a 50-track playlist would otherwise do 50 full
+          // scans). Playlists don't change here; storage updates once at drain.
+          const rec = await getDownloadedTrack(next.track.id);
+          if (rec) set((s) => ({ tracks: { ...s.tracks, [rec.id]: rec } }));
         } catch {
           // Skip the failed track and keep draining; it stays undownloaded
           // and the button returns to its download state.
         }
-        await refresh();
       }
     } finally {
       processing = false;
       set({ current: null });
+      void updateStorage();
     }
   };
 
