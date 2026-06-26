@@ -105,6 +105,17 @@ export const UsersIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Globe (circle + meridian + equator) — the "Everything" scope. */
+export const GlobeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9" />
+      <ellipse cx="12" cy="12" rx="4" ry="9" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+    </g>
+  </Svg>
+);
+
 export const DownloadIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1z" />

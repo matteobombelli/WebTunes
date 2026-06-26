@@ -91,6 +91,12 @@ type PlayerState = {
   setNormalizeVolume: (normalizeVolume: boolean) => void;
   setSimilarDrift: (similarDrift: boolean) => void;
   setHideFriendDuplicates: (hideFriendDuplicates: boolean) => void;
+  /** Restore a persisted session after an iOS page discard (always paused). */
+  hydrateSession: (
+    tracks: TrackDTO[],
+    index: number,
+    currentTime: number
+  ) => void;
 
   // Setters owned by PlayerBar (the single <audio> element).
   _setProgress: (currentTime: number, duration: number) => void;
@@ -370,6 +376,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setSimilarDrift: (similarDrift) => set({ similarDrift }),
   setHideFriendDuplicates: (hideFriendDuplicates) =>
     set({ hideFriendDuplicates }),
+
+  hydrateSession: (tracks, index, currentTime) =>
+    // isPlaying MUST stay false: there is no user gesture at mount, and a
+    // gesture-less play() would recreate the keep-alive AudioContext off-gesture
+    // (BT-held-open/battery regression) and reject on iOS. The first tap resumes
+    // via PlayerBar's in-gesture play path. Position is restored by PlayerBar's
+    // onLoadedMetadata (not seekRequest, which the seek effect clears too early).
+    set({ queue: wrap(tracks), index, isPlaying: false, currentTime }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),

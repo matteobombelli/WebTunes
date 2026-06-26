@@ -1,10 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
 import { usePlayerStore } from "@/stores/player";
 import Dialog from "@/components/Dialog";
+
+// Audio diagnostics: keys must match PlayerBar's logAudio (wt-audio-debug gate
+// + wt-audio-log buffer). Surfaced here so iOS playback events can be read on
+// the device (no console/Web Inspector on an installed PWA).
+const AUDIO_DEBUG_KEY = "wt-audio-debug";
+const AUDIO_LOG_KEY = "wt-audio-log";
+
+function readAudioLog(): string {
+  try {
+    const arr = JSON.parse(
+      localStorage.getItem(AUDIO_LOG_KEY) ?? "[]"
+    ) as string[];
+    return arr.join("\n");
+  } catch {
+    return "";
+  }
+}
 
 // Indexed by users.similar_variation (0..4); must match SIGMA_BY_VARIATION in
 // lib/similar.ts (0 = most random … 4 = deterministic cosine).
@@ -37,8 +54,46 @@ export default function SettingsModal({
   const [emailInput, setEmailInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [audioDebug, setAudioDebug] = useState(false);
+  const [audioLog, setAudioLog] = useState("");
+  const [logCopied, setLogCopied] = useState(false);
+
+  // Sync the diagnostics UI from localStorage when the modal opens. localStorage
+  // can't be read during SSR or in a lazy initializer (hydration mismatch), so a
+  // one-time sync-on-open is the right place; the extra render is negligible.
+  useEffect(() => {
+    if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setAudioDebug(localStorage.getItem(AUDIO_DEBUG_KEY) === "1");
+    setAudioLog(readAudioLog());
+    setLogCopied(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [open]);
 
   const close = () => usePlayerStore.getState().setSettingsOpen(false);
+
+  const toggleAudioDebug = (value: boolean) => {
+    localStorage.setItem(AUDIO_DEBUG_KEY, value ? "1" : "0");
+    setAudioDebug(value);
+    if (value) setAudioLog(readAudioLog());
+  };
+
+  const copyAudioLog = async () => {
+    const text = readAudioLog();
+    setAudioLog(text);
+    try {
+      await navigator.clipboard.writeText(text);
+      setLogCopied(true);
+      setTimeout(() => setLogCopied(false), 1500);
+    } catch {
+      // Clipboard blocked — the log is still on screen to copy manually.
+    }
+  };
+
+  const clearAudioLog = () => {
+    localStorage.removeItem(AUDIO_LOG_KEY);
+    setAudioLog("");
+  };
 
   const toggleNormalize = async (value: boolean) => {
     usePlayerStore.getState().setNormalizeVolume(value);
@@ -180,6 +235,50 @@ export default function SettingsModal({
           Hides friends&apos; tracks that match one already in your library when
           browsing everything or friends.
         </p>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <h3 className="text-sm font-semibold text-fg">Diagnostics</h3>
+          <label className="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
+            <input
+              type="checkbox"
+              checked={audioDebug}
+              onChange={(e) => toggleAudioDebug(e.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            Audio debug logging
+          </label>
+          <p className="mt-1 text-xs text-fg-muted">
+            Records lock-screen / background playback events (survives the app
+            being closed). Reproduce the issue, then copy the log and send it.
+          </p>
+          {audioDebug && (
+            <div className="mt-2">
+              <div className="mb-1 flex gap-2">
+                <button
+                  onClick={copyAudioLog}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2 hover:text-white"
+                >
+                  {logCopied ? "Copied!" : "Copy"}
+                </button>
+                <button
+                  onClick={() => setAudioLog(readAudioLog())}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2 hover:text-white"
+                >
+                  Refresh
+                </button>
+                <button
+                  onClick={clearAudioLog}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2 hover:text-white"
+                >
+                  Clear
+                </button>
+              </div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-surface-2 p-2 text-[10px] leading-relaxed text-fg-muted">
+                {audioLog || "No events logged yet."}
+              </pre>
+            </div>
+          )}
+        </div>
 
         <div className="mt-6 border-t border-border pt-4">
           <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>

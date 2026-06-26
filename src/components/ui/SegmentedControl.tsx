@@ -3,7 +3,11 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "./cn";
 
-type Option<T extends string> = { value: T; label: string };
+type Option<T extends string> = {
+  value: T;
+  label: string;
+  icon?: React.ReactNode;
+};
 
 /**
  * Segmented control with a single accent pill that slides between options.
@@ -58,12 +62,18 @@ export function SegmentedControl<T extends string>({
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
+          aria-label={o.label}
+          title={o.label}
           className={cn(
-            "relative z-10 px-3 py-2 first:rounded-l-md last:rounded-r-md",
+            "relative z-10 flex items-center gap-1.5 px-3 py-2 first:rounded-l-md last:rounded-r-md",
             o.value === value ? "text-white" : "text-fg-muted hover:text-fg",
           )}
         >
-          {o.label}
+          {o.icon}
+          {/* Label hides below sm: icon-only on mobile, icon + text on desktop. */}
+          <span className={cn(o.icon ? "hidden sm:inline" : undefined)}>
+            {o.label}
+          </span>
         </button>
       ))}
     </div>

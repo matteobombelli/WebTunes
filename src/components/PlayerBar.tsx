@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
+import type { TrackDTO } from "@/lib/types";
 import { BASE_PATH } from "@/lib/base-path";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -28,25 +29,45 @@ const TARGET_LUFS = -18;
 /** localStorage key for the persisted master volume (client-only preference). */
 const VOLUME_KEY = "wt-volume";
 
+/** localStorage key for the persisted player session (queue/track/position),
+ *  restored after an iOS page-lifecycle discard wipes the in-memory store. */
+const SESSION_KEY = "wt-player-session";
+
 /** Bounded retry/reload budget per track load, for background play() recovery. */
 const MAX_ATTEMPTS = 4;
 
 /**
- * Gated, removable audio instrumentation. Off by default; enable on-device with
- * localStorage.setItem("wt-audio-debug","1") then reload, and read the rolling
- * window.__wtAudioLog in Safari Web Inspector. iOS audio failures are otherwise
- * silent, so this makes the before/after of a track transition observable.
+ * Gated, removable audio instrumentation. Off by default; enable from the
+ * Settings → Diagnostics toggle (or localStorage.setItem("wt-audio-debug","1")).
+ * iOS audio failures are otherwise silent, so this makes the before/after of a
+ * track transition observable. Lines are mirrored to localStorage under
+ * `wt-audio-log` (capped) so they survive an iOS page discard and can be read
+ * on-device in the Diagnostics panel without a Mac/Web Inspector; the in-memory
+ * window.__wtAudioLog stays for live Web Inspector reads. Key must match
+ * SettingsModal's reader.
  */
+const AUDIO_LOG_KEY = "wt-audio-log";
 function logAudio(event: string, detail?: string) {
   if (typeof window === "undefined") return;
   if (localStorage.getItem("wt-audio-debug") !== "1") return;
-  const line = `[wt-audio] ${event}${detail ? " " + detail : ""}`;
+  const line = `${new Date().toISOString().slice(11, 23)} [wt-audio] ${event}${
+    detail ? " " + detail : ""
+  }`;
   console.info(line);
   const w = window as unknown as { __wtAudioLog?: string[] };
-  (w.__wtAudioLog ??= []).push(
-    `${new Date().toISOString().slice(11, 23)} ${line}`
-  );
+  (w.__wtAudioLog ??= []).push(line);
   if (w.__wtAudioLog.length > 200) w.__wtAudioLog.shift();
+  // Persist so lines survive an iOS page discard and are readable in-app.
+  try {
+    const arr = JSON.parse(
+      localStorage.getItem(AUDIO_LOG_KEY) ?? "[]"
+    ) as string[];
+    arr.push(line);
+    while (arr.length > 200) arr.shift();
+    localStorage.setItem(AUDIO_LOG_KEY, JSON.stringify(arr));
+  } catch {
+    // localStorage full/unavailable — in-memory buffer still holds the line.
+  }
 }
 
 /**
@@ -131,6 +152,15 @@ export default function PlayerBar({
   const pendingPlayRef = useRef(false);
   // Bounded recovery budget per track load (reset on load and on foreground).
   const recoverAttemptsRef = useRef(0);
+  // Set true right before a pause WE cause (deliberate pause, end-of-queue, or a
+  // src swap on a playing element) so onPause can tell our own pause from an
+  // involuntary one (iOS handing the shared audio session to another PWA). Only
+  // set when a 'pause' event will actually fire (element currently playing), so
+  // the flag can't go stale; also cleared in onPlaying.
+  const expectedPauseRef = useRef(false);
+  // One-shot playhead to restore for a session rehydrated after a page discard,
+  // applied in onLoadedMetadata when the element is seekable.
+  const restoredPositionRef = useRef<number | null>(null);
   // Last currentTime pushed to the store, so onTimeUpdate can throttle the
   // 4-30 Hz timeupdate down to ~4 Hz of store writes (see onTimeUpdate).
   const lastProgressRef = useRef(0);
@@ -225,7 +255,11 @@ export default function PlayerBar({
       osc.start();
       keepAliveRef.current = ctx;
     }
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    // iOS can escalate a backgrounded context past "suspended" to the
+    // non-standard "interrupted" state; resume anything that isn't running
+    // (but not a closed context, whose resume() would reject).
+    if (ctx.state !== "running" && ctx.state !== "closed")
+      ctx.resume().catch(() => {});
   };
 
   // Start (or resume) playback, routing rejections through onPlayError with the
@@ -238,6 +272,7 @@ export default function PlayerBar({
     audio
       .play()
       .then(() => {
+        logAudio("play-ok");
         pendingPlayRef.current = false;
       })
       .catch((err) => onPlayError(err, autoAdvance));
@@ -281,6 +316,9 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
+    // A src swap on a still-playing element queues a 'pause' event; tag it as
+    // expected so onPause doesn't mistake it for an involuntary interruption.
+    if (!audio.paused) expectedPauseRef.current = true;
     audio.src = streamSrc(track.id);
     freshLoadRef.current = true;
     pendingPlayRef.current = false; // a new track supersedes any owed retry
@@ -294,11 +332,22 @@ export default function PlayerBar({
     const audio = audioRef.current;
     if (!audio || !track) return;
     if (isPlaying) {
-      attemptPlay(false);
+      // Only attempt when the element is actually paused: the lock-screen
+      // 'play' handler resumes in-gesture and then flips intent, so this effect
+      // would otherwise fire a redundant play() whose rejection path
+      // (onPlayError(false)) could tear the freshly-resumed session back down.
+      if (audio.paused) attemptPlay(false);
     } else {
       // A genuine stop (user pause or end-of-queue) neutralizes any stale
-      // auto-advance arm and releases the keep-alive session.
+      // auto-advance arm and releases the keep-alive session. NOTE: isPlaying is
+      // set false BEFORE this runs, and we tag the pause as expected — both are
+      // load-bearing so onPause never treats a deliberate pause as involuntary.
+      // (Keeping the keep-alive tone running through the pause was tried as a way
+      // to enable a locked-screen resume — it did NOT help: a backgrounded iOS
+      // PWA cannot restart <audio> regardless. So we suspend it to save the idle
+      // Bluetooth cost.)
       autoAdvanceRef.current = false;
+      if (!audio.paused) expectedPauseRef.current = true;
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
     }
@@ -317,6 +366,7 @@ export default function PlayerBar({
   // returning to the app auto-resumes a stuck transition with no tap.
   useEffect(() => {
     const onVisible = () => {
+      logAudio("vis", document.visibilityState);
       if (document.visibilityState !== "visible") return;
       recoverAttemptsRef.current = 0;
       retryPendingPlay();
@@ -361,6 +411,76 @@ export default function PlayerBar({
     localStorage.setItem(VOLUME_KEY, String(volume));
   }, [volume]);
 
+  // Persist a minimal session snapshot when the tab is backgrounded/hidden — the
+  // last reliable signals before iOS freezes then discards a paused PWA. Not a
+  // per-tick writer; SPA navigation keeps PlayerBar mounted and fires neither
+  // event, so a live session is never clobbered.
+  useEffect(() => {
+    const save = () => {
+      const s = usePlayerStore.getState();
+      logAudio("save", `idx=${s.index}`);
+      if (s.index < 0) {
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          tracks: s.queue.map((q) => q.track),
+          index: s.index,
+          currentTime: audioRef.current?.currentTime ?? s.currentTime,
+          savedAt: Date.now(),
+        })
+      );
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    const onPageHide = () => {
+      logAudio("pagehide");
+      save();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, []);
+
+  // On a cold mount (a real page load — e.g. iOS discarded and reloaded the app),
+  // restore the snapshot PAUSED. The index<0 guard means this never runs on an
+  // in-app remount where the in-memory store survived. The first tap resumes
+  // (no gesture-less autoplay); the playhead is applied in onLoadedMetadata.
+  useEffect(() => {
+    const cold = usePlayerStore.getState().index < 0;
+    const raw = localStorage.getItem(SESSION_KEY);
+    logAudio("mount", `cold=${cold} snap=${raw ? "yes" : "no"}`);
+    if (!cold) return; // store survived (in-app remount / thaw) — nothing to restore
+    if (!raw) return;
+    try {
+      const s = JSON.parse(raw) as {
+        tracks: TrackDTO[];
+        index: number;
+        currentTime: number;
+        savedAt?: number;
+      };
+      // Resume-on-launch, not resurrect-forever: ignore stale snapshots.
+      if (s.savedAt && Date.now() - s.savedAt > 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      if (s.tracks?.length && s.index >= 0 && s.index < s.tracks.length) {
+        restoredPositionRef.current = s.currentTime > 0 ? s.currentTime : null;
+        usePlayerStore
+          .getState()
+          .hydrateSession(s.tracks, s.index, s.currentTime);
+      }
+    } catch {
+      // Corrupt snapshot — ignore.
+    }
+  }, []);
+
   // Effective volume = master slider × per-track normalization factor. The
   // factor only ever attenuates (≤ 1): loud tracks are pulled down toward
   // TARGET_LUFS, tracks already quieter than the target are left untouched.
@@ -397,16 +517,19 @@ export default function PlayerBar({
     const session = navigator.mediaSession;
     const { toggle, next, prev } = usePlayerStore.getState();
     session.setActionHandler("play", () => {
-      if (!usePlayerStore.getState().isPlaying) {
-        toggle();
-        return;
-      }
-      // Store already intends to play but a blocked background auto-advance left
-      // the element paused; this runs inside the lock-screen gesture, and the
-      // session was held, so resume the element directly.
-      audioRef.current?.play().catch(() => {});
+      logAudio("mediasession:play");
+      // Resume INSIDE the lock-screen gesture: iOS only honors the transient
+      // user activation synchronously, so deferring play()/AudioContext.resume()
+      // to the [isPlaying] effect loses it (NotAllowedError -> onPlayError(false)
+      // -> _setPlaying(false), tearing the session down). attemptPlay(true) wakes
+      // the output and plays here; a still-blocked resume is held as an owed play
+      // (onPlayError(true)) rather than torn down. Then sync intent — the effect's
+      // own attempt no-ops because the element is already (being) played.
+      attemptPlay(true);
+      if (!usePlayerStore.getState().isPlaying) _setPlaying(true);
     });
     session.setActionHandler("pause", () => {
+      logAudio("mediasession:pause");
       if (usePlayerStore.getState().isPlaying) toggle();
     });
     session.setActionHandler("previoustrack", prev);
@@ -418,7 +541,11 @@ export default function PlayerBar({
         // Unsupported action on this browser.
       }
     }
-  }, []);
+    // Deps intentionally []: stable identity matters (this is a dep of the mount
+    // effect and is called from onPlaying). The captured attemptPlay/_setPlaying
+    // first-render copies only touch refs and a stable zustand setter, so they
+    // operate on live values — no stale-closure hazard.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     applyMediaSessionHandlers();
@@ -513,6 +640,7 @@ export default function PlayerBar({
         onPlaying={(e) => {
           logAudio("playing");
           pendingPlayRef.current = false; // playback truly began: nothing owed
+          expectedPauseRef.current = false; // ...and no deliberate pause is pending
           // Re-assert media-session handlers now that the element is seekable,
           // so WebKit's playback-time auto-enable of the ±10/15s seek commands
           // gets overridden and the previous/next-track arrows show instead.
@@ -565,6 +693,54 @@ export default function PlayerBar({
           logAudio("ended");
           autoAdvanceRef.current = true; // mark the upcoming load as automatic
           next();
+        }}
+        onPause={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          const playing = usePlayerStore.getState().isPlaying;
+          // Log every pause with its inputs so we can see, on-device, whether a
+          // lock-screen pause even reaches here (vs the MediaSession 'pause'
+          // handler) and how it gets classified.
+          logAudio(
+            "pause",
+            `exp=${expectedPauseRef.current} ended=${audio.ended} playing=${playing} vis=${document.visibilityState}`
+          );
+          // Our own pauses (user/lock-screen pause, end-of-queue, src swap) are
+          // pre-tagged — consume the tag and ignore them.
+          if (expectedPauseRef.current) {
+            expectedPauseRef.current = false;
+            return;
+          }
+          if (audio.ended) return; // natural track end → onEnded advances
+          if (!playing) return; // intent already paused
+          // Reality (paused) diverged from intent (playing) with no deliberate
+          // cause: an involuntary/system pause.
+          if (document.visibilityState === "visible") {
+            // Foreground interruption (headphone unplug, call, audio-focus loss):
+            // the user/OS meant it — reconcile UI to reality, don't fight the OS.
+            logAudio("pause:fg-reconcile");
+            _setPlaying(false);
+            return;
+          }
+          // Backgrounded (the iOS shared-session handoff when another PWA closes):
+          // reclaim playback. Arm the owed play and retry; a still-blocked
+          // background play() re-arms via onPlayError(true) and the existing
+          // visibilitychange path resumes on return to the foreground.
+          logAudio("pause:bg-reclaim");
+          pendingPlayRef.current = true;
+          retryPendingPlay();
+        }}
+        onLoadedMetadata={() => {
+          // Restore the playhead for a discarded-and-reloaded session once the
+          // element is seekable. Done here (not via seekRequest, which the seek
+          // effect clears before first play); clearing freshLoadRef stops
+          // onPlaying's cold-start reset-to-0 from throwing the position away.
+          const audio = audioRef.current;
+          if (audio && restoredPositionRef.current != null) {
+            audio.currentTime = restoredPositionRef.current;
+            restoredPositionRef.current = null;
+            freshLoadRef.current = false;
+          }
         }}
       />
 

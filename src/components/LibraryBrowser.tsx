@@ -6,14 +6,20 @@ import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
-import { SearchIcon, XIcon } from "@/components/icons";
+import {
+  GlobeIcon,
+  MusicIcon,
+  SearchIcon,
+  UsersIcon,
+  XIcon,
+} from "@/components/icons";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 const SCOPES = [
-  { value: "own", label: "My library" },
-  { value: "all", label: "Everything" },
-  { value: "friends", label: "Friends" },
+  { value: "own", label: "My library", icon: <MusicIcon size={17} /> },
+  { value: "all", label: "Everything", icon: <GlobeIcon size={17} /> },
+  { value: "friends", label: "Friends", icon: <UsersIcon size={17} /> },
 ] as const;
 
 // Default view is the server-rendered own library (initialTracks, kept fresh
