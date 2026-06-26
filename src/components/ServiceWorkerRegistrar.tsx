@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { BASE_PATH } from "@/lib/base-path";
 import { useDownloadsStore } from "@/stores/downloads";
+import { useExclusionsStore } from "@/stores/exclusions";
 
 // Must match SHELL_CACHE in public/sw.js.
 const SHELL_CACHE = "wt-shell-v2";
@@ -12,6 +13,8 @@ export default function ServiceWorkerRegistrar() {
     // Hydrate the downloads store (and kick playlist auto-sync when online)
     // once per app load, wherever the user lands.
     void useDownloadsStore.getState().init();
+    // Load the Play Similar exclusion list so kebab labels are correct.
+    void useExclusionsStore.getState().init();
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker
       .register(`${BASE_PATH}/sw.js`, {

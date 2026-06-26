@@ -33,3 +33,16 @@ export function isUniqueViolation(err: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * True when an error is (or wraps) a Postgres foreign-key violation (23503),
+ * so an insert referencing a row that doesn't exist (e.g. a stale track id)
+ * can return a 404 instead of a 500.
+ */
+export function isForeignKeyViolation(err: unknown): boolean {
+  while (typeof err === "object" && err !== null) {
+    if ((err as { code?: unknown }).code === "23503") return true;
+    err = (err as { cause?: unknown }).cause;
+  }
+  return false;
+}

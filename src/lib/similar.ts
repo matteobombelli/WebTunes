@@ -9,7 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { db } from "@/db";
-import { trackEmbeddings, tracks, users } from "@/db/schema";
+import { similarExclusions, trackEmbeddings, tracks, users } from "@/db/schema";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
@@ -87,6 +87,16 @@ export async function findSimilarTracks(
       and(
         ne(tracks.id, seedTrackId),
         excludeIds.length ? notInArray(tracks.id, excludeIds) : undefined,
+        // Drop tracks the viewer has excluded from their Play Similar feed. A
+        // subselect (unlike an empty array) is always safe — no length guard —
+        // and trackId is NOT NULL so NOT IN can't collapse to "no rows pass".
+        notInArray(
+          tracks.id,
+          db
+            .select({ id: similarExclusions.trackId })
+            .from(similarExclusions)
+            .where(eq(similarExclusions.userId, userId))
+        ),
         or(
           eq(tracks.ownerId, userId),
           friendIds.length

@@ -148,6 +148,25 @@ export const trackEmbeddings = pgTable("track_embeddings", {
   embedding: vector("embedding", { dimensions: 512 }).notNull(),
 });
 
+// Per-listener "exclude from Play Similar" list. A (user, track) row hides that
+// track from this user's OWN "play similar" radio results only — it stays
+// visible to the track's owner and to friends. Filtered in lib/similar.ts.
+// Cascades away when either the user or the track is deleted. Leading userId in
+// the composite PK makes the per-user lookup index-backed.
+export const similarExclusions = pgTable(
+  "similar_exclusions",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (se) => [primaryKey({ columns: [se.userId, se.trackId] })]
+);
+
 export const friendships = pgTable(
   "friendships",
   {

@@ -22,6 +22,7 @@ import {
   PlayNextIcon,
   PlusIcon,
   QueueIcon,
+  SimilarIcon,
   TrashIcon,
   UpIcon,
   XIcon,
@@ -31,6 +32,7 @@ import EditTrackDialog from "@/components/EditTrackDialog";
 import TrackArt from "@/components/TrackArt";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import { useDownloadsStore } from "@/stores/downloads";
+import { useExclusionsStore, useIsExcluded } from "@/stores/exclusions";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -356,6 +358,7 @@ function TrackActions({
   playerContext = false,
   onClose,
 }: TrackActionsProps) {
+  const excluded = useIsExcluded(track.id);
   return (
     <div className="flex flex-col gap-2 text-sm">
       {track.artist && (
@@ -411,6 +414,21 @@ function TrackActions({
       </div>
       <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
       <DownloadButton track={track} label="Download" />
+      <button
+        onClick={() => {
+          const s = useExclusionsStore.getState();
+          if (excluded) s.include(track.id);
+          else s.exclude(track);
+          onClose();
+        }}
+        className={MENU_ROW}
+      >
+        <span>
+          {excluded ? "Include in Play Similar" : "Exclude from Play Similar"}
+        </span>
+        <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
+      </button>
+      {/* Edit is desktop-only: no edit affordance in the mobile kebab. */}
       {canEdit && !track.ownerName && (
         <button
           onClick={() => {
@@ -418,7 +436,7 @@ function TrackActions({
             onClose();
           }}
           aria-label="Edit track"
-          className={`${MENU_ROW}${playerContext ? " hidden md:flex" : ""}`}
+          className={`${MENU_ROW} hidden md:flex`}
         >
           <span>Edit details</span>
           <PencilIcon size={16} className="shrink-0 text-fg-muted" />
