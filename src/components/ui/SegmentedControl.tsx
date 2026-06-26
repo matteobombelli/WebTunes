@@ -35,7 +35,7 @@ export function SegmentedControl<T extends string>({
     };
     measure();
     setReady(true);
-    window.addEventListener("resize", measure);
+    window.addEventListener("resize", measure, { passive: true });
     return () => window.removeEventListener("resize", measure);
   }, [activeIndex]);
 

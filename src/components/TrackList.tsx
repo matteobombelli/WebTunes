@@ -162,8 +162,8 @@ export function AddToPlaylistMenu({
       close();
     };
     document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, { passive: true, capture: true });
+    window.addEventListener("resize", close, { passive: true });
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", close, true);
@@ -503,8 +503,8 @@ function TrackActionsMenu(props: Omit<TrackActionsProps, "onClose">) {
       close();
     };
     document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, { passive: true, capture: true });
+    window.addEventListener("resize", close, { passive: true });
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("scroll", close, true);

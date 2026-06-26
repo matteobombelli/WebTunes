@@ -40,6 +40,14 @@ body {
   scrollbar-color: var(--color-surface-3) transparent;
 }
 
+/* Momentum scrolling on the app's scroll regions (main content, queue/menu
+   popovers) so touch flings feel native on iOS. */
+main,
+.overflow-y-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Subtle motion: smooth colour changes and press feedback on anything clickable */
 button,
 a,

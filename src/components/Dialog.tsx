@@ -44,7 +44,19 @@ export default function Dialog({
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Lock body scroll so the page doesn't scroll under the modal (notably on
+    // mobile). Pad for the removed scrollbar width to avoid a desktop reflow.
+    const { body } = document;
+    const prevOverflow = body.style.overflow;
+    const prevPad = body.style.paddingRight;
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    body.style.overflow = "hidden";
+    if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPad;
+    };
   }, [open, onClose]);
 
   if (!open && !closing) return null;
