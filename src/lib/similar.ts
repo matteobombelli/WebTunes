@@ -3,7 +3,6 @@ import {
   cosineDistance,
   eq,
   inArray,
-  ne,
   notInArray,
   or,
   sql,
@@ -49,7 +48,11 @@ const POOL_SIZE = 200;
 export async function findSimilarTracks(
   userId: string,
   seedTrackId: string,
-  { limit, excludeIds }: { limit: number; excludeIds: string[] }
+  {
+    limit,
+    excludeIds,
+    withinIds,
+  }: { limit: number; excludeIds: string[]; withinIds?: string[] }
 ): Promise<TrackDTO[]> {
   // All independent reads — including the viewer's friend ids, needed both for
   // the access check and the candidate query — run together, so the access
@@ -73,11 +76,88 @@ export async function findSimilarTracks(
   const seed = seedRows[0];
   if (!seed || !seed.embedding) return [];
   if (!canAccessTrackWithFriends(userId, seed, friendIds)) return [];
-  const seedVec = seed.embedding;
-  const sigma = SIGMA_BY_VARIATION[similarVariation] ?? 0;
+
+  // The seed itself is just another excluded id — folds into the same NOT IN.
+  // `withinIds` (when given) limits ranking to a candidate set — used by
+  // Discover to keep a tapped song's mix inside the section it came from.
+  return rankAccessibleByVector(userId, seed.embedding, {
+    limit,
+    excludeIds: [seedTrackId, ...excludeIds],
+    sigma: SIGMA_BY_VARIATION[similarVariation] ?? 0,
+    friendIds,
+    hideFriendDuplicates,
+    withinIds,
+  });
+}
+
+/**
+ * "Recommended": rank accessible tracks against the centroid (mean) of the seed
+ * tracks' embeddings — used to blend the viewer's top-100 into one taste vector.
+ * The seeds (and any extra `excludeIds`) are excluded from the results. Returns
+ * [] when none of the seeds has an embedding yet.
+ */
+export async function findSimilarToCentroid(
+  userId: string,
+  seedTrackIds: string[],
+  { limit, excludeIds = [] }: { limit: number; excludeIds?: string[] }
+): Promise<TrackDTO[]> {
+  if (seedTrackIds.length === 0) return [];
+
+  const [seedRows, { hideFriendDuplicates, similarVariation }, friendIds] =
+    await Promise.all([
+      db
+        .select({ embedding: trackEmbeddings.embedding })
+        .from(trackEmbeddings)
+        .where(inArray(trackEmbeddings.trackId, seedTrackIds)),
+      getUserSettings(userId),
+      friendIdsOf(userId),
+    ]);
+  if (seedRows.length === 0) return []; // none analyzed yet
+
+  // Mean of the seed embeddings. cosineDistance normalizes both operands, so the
+  // centroid's magnitude is irrelevant to ranking — no re-normalization needed.
+  const dim = seedRows[0].embedding.length; // 512
+  const centroid = new Array<number>(dim).fill(0);
+  for (const { embedding } of seedRows) {
+    for (let i = 0; i < dim; i++) centroid[i] += embedding[i];
+  }
+  for (let i = 0; i < dim; i++) centroid[i] /= seedRows.length;
+
+  return rankAccessibleByVector(userId, centroid, {
+    limit,
+    excludeIds: [...seedTrackIds, ...excludeIds],
+    sigma: SIGMA_BY_VARIATION[similarVariation] ?? 0,
+    friendIds,
+    hideFriendDuplicates,
+  });
+}
+
+/**
+ * Shared candidate query for vector-based discovery: rank accessible tracks by
+ * cosine similarity to `queryVec`, honoring the same access rule as the library
+ * (own + friends' non-private minus hidden duplicates) AND the viewer's
+ * "exclude from Play Similar" list, then Gumbel-top-k sample by `sigma`. Both
+ * the single-seed radio and the centroid "Recommended" feed go through here, so
+ * the exclusion/access rules can never diverge between them.
+ */
+async function rankAccessibleByVector(
+  userId: string,
+  queryVec: number[],
+  opts: {
+    limit: number;
+    excludeIds: string[];
+    sigma: number;
+    friendIds: string[];
+    hideFriendDuplicates: boolean;
+    /** When set, restrict ranking to this candidate set (limited-context). */
+    withinIds?: string[];
+  }
+): Promise<TrackDTO[]> {
+  const { limit, excludeIds, sigma, friendIds, hideFriendDuplicates, withinIds } =
+    opts;
 
   // Cosine distance computed in-DB; ascending = most similar first.
-  const distance = cosineDistance(trackEmbeddings.embedding, seedVec);
+  const distance = cosineDistance(trackEmbeddings.embedding, queryVec);
   const rows = await db
     .select({ track: trackDtoColumns, ownerName: users.name, distance })
     .from(tracks)
@@ -85,7 +165,9 @@ export async function findSimilarTracks(
     .innerJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))
     .where(
       and(
-        ne(tracks.id, seedTrackId),
+        withinIds && withinIds.length
+          ? inArray(tracks.id, withinIds)
+          : undefined,
         excludeIds.length ? notInArray(tracks.id, excludeIds) : undefined,
         // Drop tracks the viewer has excluded from their Play Similar feed. A
         // subselect (unlike an empty array) is always safe — no length guard —

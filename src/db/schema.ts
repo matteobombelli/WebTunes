@@ -167,6 +167,32 @@ export const similarExclusions = pgTable(
   (se) => [primaryKey({ columns: [se.userId, se.trackId] })]
 );
 
+// Per-user, owner-inclusive play log: one row per track played to >=30s
+// (recorded by POST /api/tracks/[id]/play). Powers Discover's "Your top 100"
+// (your most-played in the last 7 days) and "Friends" (what friends played
+// recently). friend_play_count on tracks stays the global, owner-excluded
+// counter behind the "listen count" column — this table is the timestamped,
+// owner-inclusive signal that counter can't express.
+export const listens = pgTable(
+  "listens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    playedAt: timestamp("played_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (l) => [
+    // Top-100 (user_id=? AND played_at > now()-7d) and friends-recent
+    // (user_id IN (friends) AND played_at > ...) both range-scan this.
+    index("listens_user_played_idx").on(l.userId, l.playedAt),
+    index("listens_track_idx").on(l.trackId),
+  ]
+);
+
 export const friendships = pgTable(
   "friendships",
   {
@@ -222,3 +248,4 @@ export type Track = typeof tracks.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type Listen = typeof listens.$inferSelect;

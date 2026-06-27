@@ -12,6 +12,9 @@ import { isUuid } from "@/lib/validate";
 const bodySchema = z.object({
   limit: z.number().int().min(1).max(50).default(10),
   excludeIds: z.array(z.string()).max(10_000).default([]),
+  // When given, ranking is limited to this candidate set — Discover uses it so a
+  // tapped song's similar mix stays inside the section it came from.
+  withinIds: z.array(z.string()).max(500).optional(),
 });
 
 export async function POST(

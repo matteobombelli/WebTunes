@@ -5,18 +5,18 @@ import { usePathname } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { usePlayerStore } from "@/stores/player";
 import {
+  CompassIcon,
   DownloadIcon,
   ListIcon,
   LogoutIcon,
   MusicIcon,
   SettingsIcon,
-  UsersIcon,
 } from "@/components/icons";
 
 const NAV = [
   { href: "/library", label: "Library", Icon: MusicIcon },
   { href: "/playlists", label: "Playlists", Icon: ListIcon },
-  { href: "/friends", label: "Friends", Icon: UsersIcon },
+  { href: "/discover", label: "Discover", Icon: CompassIcon },
   { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
 

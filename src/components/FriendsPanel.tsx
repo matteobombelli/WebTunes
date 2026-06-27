@@ -182,7 +182,7 @@ export default function FriendsPanel({
                 </div>
                 <div className="min-w-0 flex-1">
                   <Link
-                    href={`/friends/${f.id}`}
+                    href={`/discover/${f.id}`}
                     className="block truncate text-sm font-medium hover:underline"
                   >
                     {f.name ?? f.email}

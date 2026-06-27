@@ -105,6 +105,13 @@ export const UsersIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Compass — the Discover nav item. */
+export const CompassIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm3.5 4.5-5 2-2 5 5-2 2-5zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+  </Svg>
+);
+
 /** Globe (circle + meridian + equator) — the "Everything" scope. */
 export const GlobeIcon = (p: IconProps) => (
   <Svg {...p}>

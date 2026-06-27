@@ -26,18 +26,20 @@ export async function api<T = unknown>(
 // Tracks similar to a seed track, for the "play similar" radio. Pass the
 // already-served ids in `excludeIds` to avoid repeats (sampling isn't
 // deterministic); fewer than `limit` results means the similar pool is
-// exhausted.
+// exhausted. `withinIds` limits ranking to a candidate set (Discover uses it to
+// keep a tapped song's mix inside its section).
 export async function fetchSimilarTracks(
   seedId: string,
   excludeIds: string[],
-  limit: number
+  limit: number,
+  withinIds?: string[]
 ): Promise<TrackDTO[]> {
   const { tracks } = await api<{ tracks: TrackDTO[] }>(
     `/tracks/${seedId}/similar`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ excludeIds, limit }),
+      body: JSON.stringify({ excludeIds, limit, withinIds }),
     }
   );
   return tracks;
