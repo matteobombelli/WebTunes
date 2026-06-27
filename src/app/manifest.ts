@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "WebTunes",
     short_name: "WebTunes",
     description: "Your personal music library, anywhere",
-    start_url: `${BASE_PATH}/library`,
+    start_url: `${BASE_PATH}/discover`,
     scope: `${BASE_PATH}/`,
     display: "standalone",
     background_color: "#09090b",
