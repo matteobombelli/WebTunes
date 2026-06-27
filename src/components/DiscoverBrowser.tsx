@@ -10,8 +10,8 @@ import type { FriendDTO, FriendRequestDTO, TrackDTO } from "@/lib/types";
 type Sections = {
   top: TrackDTO[];
   recommended: TrackDTO[];
-  random: TrackDTO | null;
-  friendsPlayed: TrackDTO[];
+  random: TrackDTO[];
+  friendsTop: TrackDTO[];
   newTracks: TrackDTO[];
 };
 
@@ -33,52 +33,48 @@ export default function DiscoverBrowser({
   return (
     <>
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-bold tracking-tight">
+        <h1 className="font-display text-4xl font-bold tracking-tight">
           {tab === "discover" ? "Discover" : "Friends"}
         </h1>
         <SegmentedControl
           value={tab}
           onChange={setTab}
+          size="lg"
           options={[
             {
               value: "discover",
               label: "Discover",
-              icon: <CompassIcon size={16} />,
+              icon: <CompassIcon className="h-6 w-6 sm:h-4 sm:w-4" />,
             },
-            { value: "friends", label: "Friends", icon: <UsersIcon size={16} /> },
+            {
+              value: "friends",
+              label: "Friends",
+              icon: <UsersIcon className="h-6 w-6 sm:h-4 sm:w-4" />,
+            },
           ]}
         />
       </div>
 
       {tab === "discover" ? (
         <div className="flex flex-col gap-4 sm:gap-5">
-          <DiscoverSection
-            title="Random"
-            description="A completely random track from your library, with play similar enabled."
-            radioSeed={sections.random}
-            emptyHint="No tracks yet."
-          />
+          <DiscoverSection title="Random" radioSeeds={sections.random} />
           <DiscoverSection
             title="Your top 100"
-            description="Shuffle your top 100 tracks from the past 7 days."
             tracks={sections.top}
-            emptyHint="No plays in the last 7 days."
+            emptyHint="No plays yet."
           />
           <DiscoverSection
             title="Recommended"
-            description="Shuffle a play-similar mix of your top 100."
             tracks={sections.recommended}
             emptyHint="Builds from your top 100."
           />
           <DiscoverSection
-            title="Friends"
-            description="Shuffle tracks your friends have played recently."
-            tracks={sections.friendsPlayed}
-            emptyHint="No recent plays from friends."
+            title="Friends Top 100"
+            tracks={sections.friendsTop}
+            emptyHint="No friend activity yet."
           />
           <DiscoverSection
             title="New tracks"
-            description="Shuffle recent uploads from you and your friends."
             tracks={sections.newTracks}
             emptyHint="No tracks yet."
           />

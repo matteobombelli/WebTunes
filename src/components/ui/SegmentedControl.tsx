@@ -19,10 +19,13 @@ export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
+  size = "default",
 }: {
   options: readonly Option<T>[];
   value: T;
   onChange: (value: T) => void;
+  /** "lg" enlarges the control on mobile (used by the Discover/Friends tab). */
+  size?: "default" | "lg";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
@@ -46,7 +49,10 @@ export function SegmentedControl<T extends string>({
   return (
     <div
       ref={containerRef}
-      className="relative flex rounded-md border border-border text-sm"
+      className={cn(
+        "relative flex rounded-md border border-border",
+        size === "lg" ? "text-base sm:text-sm" : "text-sm",
+      )}
     >
       {pill && (
         <span
@@ -65,7 +71,8 @@ export function SegmentedControl<T extends string>({
           aria-label={o.label}
           title={o.label}
           className={cn(
-            "relative z-10 flex items-center gap-1.5 px-3 py-2 first:rounded-l-md last:rounded-r-md",
+            "relative z-10 flex items-center gap-1.5 first:rounded-l-md last:rounded-r-md",
+            size === "lg" ? "px-4 py-2.5 sm:px-3 sm:py-2" : "px-3 py-2",
             o.value === value ? "text-white" : "text-fg-muted hover:text-fg",
           )}
         >

@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  CheckIcon,
-  PlayIcon,
-  PlusIcon,
-  ShuffleIcon,
-  SimilarIcon,
-} from "@/components/icons";
+import { CheckIcon, PlayIcon, PlusIcon, ShuffleIcon } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import { Button } from "@/components/ui/Button";
 import { api, fetchSimilarTracks } from "@/lib/api";
@@ -16,13 +10,11 @@ import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 
 type SaveState = "idle" | "saving" | "done" | "error";
 
-/** Number of tappable rows shown; the rest of the pool stays the context. */
-const PREVIEW = 3;
-
-const CARD = "rounded-xl border border-border-subtle bg-surface-1 p-4 sm:p-5";
+/** Album-art tiles: a 2x2 grid on mobile; up to two rows of six on desktop. */
+const PREVIEW = 12;
 
 /** Action-button glyph: larger on mobile (label hidden), smaller with text on >=sm. */
-const ICON = "h-5 w-5 sm:h-3.5 sm:w-3.5";
+const ICON = "h-6 w-6 sm:h-4 sm:w-4";
 
 /** Fisher-Yates copy, used when a tapped seed has no embedding to rank by. */
 function shuffled<T>(items: T[]): T[] {
@@ -34,89 +26,41 @@ function shuffled<T>(items: T[]): T[] {
   return copy;
 }
 
-function Row({
-  track,
-  isCurrent,
-  onPlay,
-}: {
-  track: TrackDTO;
-  isCurrent: boolean;
-  onPlay: () => void;
-}) {
-  return (
-    <li>
-      <button
-        onClick={onPlay}
-        title={`Play ${track.title}`}
-        className={`group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface-2/60 ${
-          isCurrent ? "text-accent-bright" : "text-fg"
-        }`}
-      >
-        <TrackArt track={track} size="h-10 w-10" iconSize={18} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium group-hover:text-accent-bright">
-            {track.title}
-          </span>
-          <span className="block truncate text-xs text-fg-muted">
-            {track.artist ?? "Unknown artist"}
-            {track.ownerName ? ` · ${track.ownerName}` : ""}
-          </span>
-        </span>
-        {/* Marks that a tap starts a similar mix from this list. */}
-        <SimilarIcon size={15} className="shrink-0 text-fg-subtle" />
-      </button>
-    </li>
-  );
-}
-
 /**
- * One Discover section as a card. The buttons act on the whole pool; tapping a
- * row plays that song then continues with a similarity mix drawn only from this
- * section, so the pick carries past the first track. The Random variant
- * (radioSeed) launches the whole-library radio without revealing the track.
+ * One Discover section. Sections blend into the page (no card chrome); spacing
+ * between them comes from the parent. The buttons act on the whole pool; tapping
+ * an album-art tile plays that song then continues with a similarity mix drawn
+ * only from this section, so the pick carries past the first track. The Random
+ * variant (radioSeeds) renders as a single large "Play Radio" button.
  *
  * Display order is the server order (no render-time shuffle, which would desync
  * SSR from hydration); Shuffle randomizes playback.
  */
 export default function DiscoverSection({
   title,
-  description,
   tracks,
-  radioSeed,
+  radioSeeds,
   emptyHint,
 }: {
   title: string;
-  /** One-line tagline under the title. */
-  description?: string;
   tracks?: TrackDTO[];
-  /** When set, this is the Random section: a hidden seed whose play starts the
-   *  whole-library radio. */
-  radioSeed?: TrackDTO | null;
-  /** Shown below the description when the section has no tracks. */
+  /** When set, this is the Random section: a pool of hidden seeds; each "Play
+   *  Radio" tap picks one at random to start the whole-library radio. */
+  radioSeeds?: TrackDTO[];
+  /** Shown when the section has no tracks. */
   emptyHint?: string;
 }) {
   const current = useCurrentTrack();
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
-  const Description = description ? (
-    <p className="text-xs text-fg-muted">{description}</p>
-  ) : null;
-
-  // Random: a hidden seed; play starts the whole-library radio.
-  if (radioSeed !== undefined) {
-    if (!radioSeed) {
-      return (
-        <section className={CARD}>
-          <h2 className="font-display text-lg font-semibold">{title}</h2>
-          {Description}
-          {emptyHint && (
-            <p className="mt-1 text-xs text-fg-subtle">{emptyHint}</p>
-          )}
-        </section>
-      );
-    }
-    const seed = radioSeed;
+  // Random: the whole section is one big, easy-to-press button.
+  if (radioSeeds !== undefined) {
+    if (radioSeeds.length === 0) return null;
+    const seeds = radioSeeds;
     const playRadio = async () => {
+      // Pick a fresh seed per tap so the radio varies even when the page
+      // payload is served from the router cache.
+      const seed = seeds[Math.floor(Math.random() * seeds.length)];
       usePlayerStore.getState().playQueue([seed], 0);
       try {
         const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
@@ -128,27 +72,25 @@ export default function DiscoverSection({
       }
     };
     return (
-      <section className={CARD}>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-auto font-display text-lg font-semibold">{title}</h2>
-          <Button size="sm" pill onClick={playRadio}>
-            <PlayIcon className={ICON} />
-            Play radio
-          </Button>
-        </div>
-        {Description}
+      <section>
+        <h2 className="mb-3 font-display text-lg font-semibold sm:text-[1.6875rem]">{title}</h2>
+        <button
+          onClick={playRadio}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-4 font-display text-base font-semibold text-accent-fg transition hover:bg-accent-hover"
+        >
+          <PlayIcon size={20} />
+          Play Radio
+        </button>
       </section>
     );
   }
 
   const pool = tracks ?? [];
 
-  // Empty list section: keep the card visible with the tagline and a short note.
   if (pool.length === 0) {
     return (
-      <section className={CARD}>
-        <h2 className="font-display text-lg font-semibold">{title}</h2>
-        {Description}
+      <section>
+        <h2 className="font-display text-lg font-semibold sm:text-[1.6875rem]">{title}</h2>
         {emptyHint && <p className="mt-1 text-xs text-fg-subtle">{emptyHint}</p>}
       </section>
     );
@@ -213,20 +155,20 @@ export default function DiscoverSection({
   };
 
   return (
-    <section className={CARD}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto font-display text-lg font-semibold">
+    <section>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h2 className="mr-auto font-display text-lg font-semibold sm:text-[1.6875rem]">
           {title}
           <span className="ml-2 text-xs font-normal text-fg-subtle">
             {pool.length}
           </span>
         </h2>
-        <Button size="sm" pill onClick={play} aria-label="Play">
+        <Button size="md" pill onClick={play} aria-label="Play">
           <PlayIcon className={ICON} />
           <span className="hidden sm:inline">Play</span>
         </Button>
         <Button
-          size="sm"
+          size="md"
           variant="secondary"
           pill
           onClick={shuffle}
@@ -236,7 +178,7 @@ export default function DiscoverSection({
           <span className="hidden sm:inline">Shuffle</span>
         </Button>
         <Button
-          size="sm"
+          size="md"
           variant="outline"
           pill
           onClick={save}
@@ -260,30 +202,26 @@ export default function DiscoverSection({
         </Button>
       </div>
 
-      {description && (
-        <p className="mt-0.5 text-xs text-fg-muted">{description}</p>
-      )}
-      <p className="mb-2 mt-1 flex items-center gap-1.5 text-xs text-fg-subtle">
-        <SimilarIcon size={13} />
-        Tap a song to play it, then a similar mix from this list.
-      </p>
-
-      <ul>
-        {preview.map((track) => (
-          <Row
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+        {preview.map((track, i) => (
+          <button
             key={track.id}
-            track={track}
-            isCurrent={current?.id === track.id}
-            onPlay={() => playFromSong(track)}
-          />
+            onClick={() => playFromSong(track)}
+            title={track.title}
+            className={`relative aspect-square w-full overflow-hidden rounded-lg bg-surface-2 transition duration-200 ease-out hover:z-10 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/40 ${
+              i >= 4 ? "hidden sm:block" : ""
+            } ${current?.id === track.id ? "ring-2 ring-accent" : ""}`}
+          >
+            <TrackArt track={track} size="h-full w-full" iconSize={32} />
+            {/* Darken the bottom third and label it with the song name only. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/3 items-end bg-[linear-gradient(to_top,rgba(0,0,0,0.8),rgba(0,0,0,0.65)_30%,rgba(0,0,0,0.45)_55%,rgba(0,0,0,0.2)_80%,transparent)] px-2 pb-2">
+              <span className="w-full truncate text-left text-[1.2rem] font-medium text-white sm:text-[1.05rem]">
+                {track.title}
+              </span>
+            </div>
+          </button>
         ))}
-      </ul>
-
-      {pool.length > preview.length && (
-        <p className="mt-1 px-2 text-xs text-fg-subtle">
-          +{pool.length - preview.length} more
-        </p>
-      )}
+      </div>
     </section>
   );
 }

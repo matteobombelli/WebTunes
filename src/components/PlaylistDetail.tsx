@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, playlistCoverSrc } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
-import { LockIcon, MusicIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
+import CoverImage from "@/components/CoverImage";
+import { LockIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
 
@@ -103,17 +104,12 @@ export default function PlaylistDetail({
     router.refresh();
   };
 
-  const cover = playlist.coverUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={playlist.coverUrl}
-      alt=""
-      className="h-28 w-28 rounded-lg object-cover sm:h-36 sm:w-36"
+  const cover = (
+    <CoverImage
+      src={playlist.coverS3Key ? playlistCoverSrc(playlist.id) : null}
+      iconSize={56}
+      className="h-28 w-28 rounded-lg bg-surface-2 sm:h-36 sm:w-36"
     />
-  ) : (
-    <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-surface-2 text-fg-subtle sm:h-36 sm:w-36">
-      <MusicIcon size={56} />
-    </div>
   );
 
   return (

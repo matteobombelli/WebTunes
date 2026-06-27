@@ -148,9 +148,9 @@ export default function DownloadsBrowser() {
     : null;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-wrap items-baseline gap-3">
-        <h1 className="font-display text-2xl font-bold tracking-tight">Downloads</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight">Downloads</h1>
         {storage && storage.usage > 0 && (
           <span className="text-xs text-fg-subtle">
             {formatBytes(storage.usage)} used

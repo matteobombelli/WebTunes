@@ -10,7 +10,7 @@ export default async function AuthLayout({
   // at the edge): a real session bounces to the app, a stale cookie renders the
   // auth page instead of looping. See src/proxy.ts.
   const session = await auth();
-  if (session?.user?.id) redirect("/library");
+  if (session?.user?.id) redirect("/discover");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-0 text-fg">

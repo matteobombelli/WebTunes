@@ -8,7 +8,6 @@ import {
   type Playlist,
 } from "@/db/schema";
 import { areFriends, friendIdsOf } from "@/lib/friends";
-import { getPresignedGetUrl } from "@/lib/s3";
 import { toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
@@ -19,16 +18,14 @@ export async function toPlaylistDTO(
   trackCount?: number,
   ownerName: string | null = null
 ): Promise<PlaylistDTO> {
-  let coverUrl: string | null = null;
-  if (playlist.coverS3Key) {
-    coverUrl = (await getPresignedGetUrl(playlist.coverS3Key)).url;
-  }
+  // The cover is served through the stable /api/playlists/:id/cover redirect
+  // (clients build it from coverS3Key via playlistCoverSrc); we no longer embed
+  // a presigned URL here that would expire mid-session.
   return {
     id: playlist.id,
     ownerId: playlist.ownerId,
     name: playlist.name,
     coverS3Key: playlist.coverS3Key,
-    coverUrl,
     isPrivate: playlist.isPrivate,
     trackCount,
     createdAt: playlist.createdAt.toISOString(),

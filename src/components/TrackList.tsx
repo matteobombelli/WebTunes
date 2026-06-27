@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api } from "@/lib/api";
+import { api, playlistCoverSrc } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
@@ -17,7 +17,6 @@ import {
   EllipsisIcon,
   HeadphonesIcon,
   LockIcon,
-  MusicIcon,
   PencilIcon,
   PlayNextIcon,
   PlusIcon,
@@ -27,6 +26,7 @@ import {
   UpIcon,
   XIcon,
 } from "@/components/icons";
+import CoverImage from "@/components/CoverImage";
 import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
 import TrackArt from "@/components/TrackArt";
@@ -241,20 +241,11 @@ export function AddToPlaylistMenu({
           onClick={() => add(p.id)}
           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-fg hover:bg-surface-3"
         >
-          {p.coverUrl ? (
-            // Presigned S3 URL; next/image cannot optimize short-lived URLs.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={p.coverUrl}
-              alt=""
-              loading="lazy"
-              className="h-8 w-8 shrink-0 rounded object-cover"
-            />
-          ) : (
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-surface-3 text-fg-subtle">
-              <MusicIcon size={16} />
-            </span>
-          )}
+          <CoverImage
+            src={p.coverS3Key ? playlistCoverSrc(p.id) : null}
+            iconSize={16}
+            className="h-8 w-8 shrink-0 rounded bg-surface-3"
+          />
           <span className="truncate">{p.name}</span>
         </button>
       ))}

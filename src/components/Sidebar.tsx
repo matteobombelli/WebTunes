@@ -14,9 +14,9 @@ import {
 } from "@/components/icons";
 
 const NAV = [
-  { href: "/library", label: "Library", Icon: MusicIcon },
-  { href: "/playlists", label: "Playlists", Icon: FolderIcon },
   { href: "/discover", label: "Discover", Icon: CompassIcon },
+  { href: "/playlists", label: "Playlists", Icon: FolderIcon },
+  { href: "/library", label: "Library", Icon: MusicIcon },
   { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
 
@@ -32,7 +32,7 @@ export default function Sidebar({
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-border-subtle bg-surface-1 md:flex">
       <Link
-        href="/library"
+        href="/discover"
         className="px-5 py-5 font-display text-xl font-bold tracking-tight"
       >
         <span className="text-accent-bright">Web</span>Tunes
@@ -44,6 +44,7 @@ export default function Sidebar({
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 active
                   ? "bg-accent/10 text-accent-bright"

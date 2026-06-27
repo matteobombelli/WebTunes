@@ -108,7 +108,20 @@ export async function findSimilarToCentroid(
       db
         .select({ embedding: trackEmbeddings.embedding })
         .from(trackEmbeddings)
-        .where(inArray(trackEmbeddings.trackId, seedTrackIds)),
+        .where(
+          and(
+            inArray(trackEmbeddings.trackId, seedTrackIds),
+            // Excluded "play similar" tracks don't seed the recommendation
+            // either (the result query already drops them); mirrors Random.
+            notInArray(
+              trackEmbeddings.trackId,
+              db
+                .select({ id: similarExclusions.trackId })
+                .from(similarExclusions)
+                .where(eq(similarExclusions.userId, userId))
+            )
+          )
+        ),
       getUserSettings(userId),
       friendIdsOf(userId),
     ]);

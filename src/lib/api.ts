@@ -56,3 +56,9 @@ export function streamSrc(trackId: string): string {
 export function artSrc(trackId: string): string {
   return `${BASE_PATH}/api/tracks/${trackId}/art`;
 }
+
+// Stable cover URL for a playlist (302s to a presigned S3 URL), mirroring
+// artSrc so covers re-sign per request instead of expiring mid-session.
+export function playlistCoverSrc(playlistId: string): string {
+  return `${BASE_PATH}/api/playlists/${playlistId}/cover`;
+}

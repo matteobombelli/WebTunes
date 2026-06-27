@@ -30,7 +30,7 @@ export async function loginAction(
     await signIn("credentials", {
       email,
       password: formData.get("password"),
-      redirectTo: "/library",
+      redirectTo: "/discover",
     });
     return { error: null };
   } catch (err) {

@@ -14,9 +14,9 @@ import {
 } from "@/components/icons";
 
 const NAV = [
-  { href: "/library", label: "Library", Icon: MusicIcon },
-  { href: "/playlists", label: "Playlists", Icon: ListIcon },
   { href: "/discover", label: "Discover", Icon: CompassIcon },
+  { href: "/playlists", label: "Playlists", Icon: ListIcon },
+  { href: "/library", label: "Library", Icon: MusicIcon },
   { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
 
@@ -31,6 +31,7 @@ export function MobileNav() {
           <Link
             key={href}
             href={href}
+            prefetch
             aria-label={label}
             className={`flex flex-1 items-center justify-center py-3 ${
               active ? "text-accent-bright" : "text-fg-muted"
@@ -49,7 +50,7 @@ export function MobileTopBar() {
   return (
     <header className="flex items-center justify-between border-b border-border-subtle bg-surface-1 px-4 py-4 md:hidden">
       <Link
-        href="/library"
+        href="/discover"
         className="font-display text-xl font-bold tracking-tight"
       >
         <span className="text-accent-bright">Web</span>Tunes

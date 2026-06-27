@@ -1,9 +1,9 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import {
-  listFriendsRecentlyPlayed,
+  listFriendsTop,
   listNewTracks,
   listTopTracks,
-  randomSeedTrack,
+  randomSeedTracks,
 } from "@/lib/discover";
 import { friendsOf, pendingRequestsFor } from "@/lib/friends";
 import { findSimilarToCentroid } from "@/lib/similar";
@@ -20,11 +20,11 @@ export default async function DiscoverPage() {
   const top = await listTopTracks(user.id);
   const topIds = top.map((t) => t.id);
 
-  const [recommended, random, friendsPlayed, newTracks, friends, requests] =
+  const [recommended, random, friendsTop, newTracks, friends, requests] =
     await Promise.all([
       findSimilarToCentroid(user.id, topIds, { limit: 50, excludeIds: topIds }),
-      randomSeedTrack(user.id, hideFriendDuplicates),
-      listFriendsRecentlyPlayed(user.id, hideFriendDuplicates),
+      randomSeedTracks(user.id, hideFriendDuplicates),
+      listFriendsTop(user.id, hideFriendDuplicates),
       listNewTracks(user.id, hideFriendDuplicates),
       friendsOf(user.id),
       pendingRequestsFor(user.id),
@@ -33,7 +33,7 @@ export default async function DiscoverPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <DiscoverBrowser
-        sections={{ top, recommended, random, friendsPlayed, newTracks }}
+        sections={{ top, recommended, random, friendsTop, newTracks }}
         friends={friends}
         requests={requests}
       />

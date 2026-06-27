@@ -298,6 +298,28 @@ export default function PlayerBar({
     attemptPlay(true);
   };
 
+  // Re-assert a pending restore target (set by the cold-mount discard restore, or
+  // by a warm same-track reload that lost its position) until the element really
+  // reaches it, then clear. A single seek at loadedmetadata is NOT enough on iOS:
+  // a freshly-loaded streamed element usually isn't seekable yet (seekable is
+  // empty), so the seek silently no-ops and the track plays from 0. We retry on
+  // each readiness event (loadedmetadata/canplay/playing/seeked) until it sticks.
+  const tryRestorePosition = () => {
+    const audio = audioRef.current;
+    const target = restoredPositionRef.current;
+    if (!audio || target == null || audio.readyState < 1) return;
+    // Clamp so a value past the end can't strand us seeking forever (or fire
+    // 'ended' → auto-advance).
+    const clamped = Math.min(target, audio.duration || target);
+    if (Math.abs(audio.currentTime - clamped) <= 0.5) {
+      restoredPositionRef.current = null; // arrived — stop re-asserting
+      return;
+    }
+    audio.currentTime = clamped;
+    freshLoadRef.current = false; // stop onPlaying's cold-start snap-to-0
+    logAudio("restore", String(clamped));
+  };
+
   // Media-element error recovery. A hard error (bad codec/source, incl. an
   // expired presigned URL) skips on; a transient network error gets a bounded
   // same-src reload (canplay then retries play), then skips once the budget's up.
@@ -508,6 +530,7 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (audio && seekRequest !== null) {
+      restoredPositionRef.current = null; // a deliberate seek cancels a pending restore
       audio.currentTime = seekRequest;
       _clearSeek();
     }
@@ -666,6 +689,10 @@ export default function PlayerBar({
           // so WebKit's playback-time auto-enable of the ±10/15s seek commands
           // gets overridden and the previous/next-track arrows show instead.
           applyMediaSessionHandlers();
+          // Last-chance re-assert of a pending restore (clears it once reached);
+          // when it fires it clears freshLoadRef, so the cold-start snap-to-0
+          // below is skipped and the restored position survives.
+          tryRestorePosition();
           // First real playback after a load: if the clock drifted ahead while
           // the cold stream stalled (and the user didn't ask to resume/seek),
           // restart from the top so the intro isn't skipped.
@@ -703,7 +730,13 @@ export default function PlayerBar({
         // Primary background-resume trigger: a prefetched next track reaches
         // canplay fast, and retryPendingPlay re-attempts the owed play() while the
         // session is held. Self-guards to a no-op on a normal successful advance.
-        onCanPlay={retryPendingPlay}
+        // Also the main re-assert point for a pending restore: by canplay the
+        // element is finally seekable, so the cold-mount/resume seek lands here
+        // even when it no-opped at loadedmetadata.
+        onCanPlay={() => {
+          tryRestorePosition();
+          retryPendingPlay();
+        }}
         onWaiting={() => logAudio("waiting")}
         onStalled={() => {
           logAudio("stalled");
@@ -752,17 +785,27 @@ export default function PlayerBar({
           retryPendingPlay();
         }}
         onLoadedMetadata={() => {
-          // Restore the playhead for a discarded-and-reloaded session once the
-          // element is seekable. Done here (not via seekRequest, which the seek
-          // effect clears before first play); clearing freshLoadRef stops
-          // onPlaying's cold-start reset-to-0 from throwing the position away.
+          // Restore the playhead once the element is seekable (done here, not via
+          // seekRequest, which the seek effect clears before first play). The seek
+          // is re-asserted across readiness events by tryRestorePosition because a
+          // single one rarely sticks on a freshly-loaded streamed element on iOS.
           const audio = audioRef.current;
-          if (audio && restoredPositionRef.current != null) {
-            audio.currentTime = restoredPositionRef.current;
-            restoredPositionRef.current = null;
-            freshLoadRef.current = false;
+          if (!audio) return;
+          // No explicit cold-mount target, but the element came back at ~0 while
+          // the store knows we were further into THIS track — a warm same-track
+          // reload that lost its position (iOS evicts a backgrounded PWA's media
+          // resource on resume; or an expired-presigned-URL re-buffer errors and
+          // onAudioError reload()s from the top). Adopt the store position as the
+          // restore target. Fresh tracks reset store.currentTime to 0 (playQueue/
+          // playAt/next/prev), so the `stored > 1` guard keeps this off for them.
+          if (restoredPositionRef.current == null) {
+            const stored = usePlayerStore.getState().currentTime;
+            if (stored > 1 && audio.currentTime < 0.5)
+              restoredPositionRef.current = stored;
           }
+          tryRestorePosition();
         }}
+        onSeeked={tryRestorePosition}
       />
 
       {/* Mobile (below md, matching MobileNav): a minimal mini-player — art +

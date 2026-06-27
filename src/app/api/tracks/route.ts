@@ -8,6 +8,7 @@ import { embedTrack } from "@/lib/clap-embedding";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
+import { fingerprintAndIdentify, findCoverArt } from "@/lib/metadata-lookup";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import {
@@ -106,6 +107,43 @@ export async function POST(req: NextRequest) {
     remuxOpusToMp4(buffer, ext, file.type),
   ]);
 
+  // Best-effort online enrichment for uploads missing tags/art — like
+  // loudness/CLAP/lyrics, it never delays or fails a normal, fully-tagged
+  // upload (only untagged/artless files reach a network call). Fingerprinting
+  // is skipped without ACOUSTID_API_KEY; iTunes art lookup needs no key.
+  let artist = meta.artist;
+  let album = meta.album;
+  let cover: { body: Buffer; contentType: string; ext: string } | null =
+    meta.artBuffer
+      ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
+      : null;
+  try {
+    if (!artist && !album) {
+      const id = await fingerprintAndIdentify(buffer, ext);
+      if (id) {
+        // Recover the genuinely-missing artist/album; keep the user's title.
+        artist = id.artist;
+        album = id.album;
+        if (!cover) {
+          const art = await findCoverArt({
+            artist,
+            album,
+            title: meta.title,
+            releaseGroupMbid: id.releaseGroupMbid,
+          });
+          if (art)
+            cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
+        }
+      }
+    } else if (!cover && (artist || album)) {
+      const art = await findCoverArt({ artist: artist ?? "", album, title: meta.title });
+      if (art)
+        cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
+    }
+  } catch {
+    // enrichment is best-effort; never block the upload
+  }
+
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
   // client-supplied filename is untrusted, so only allowlisted extensions reach
@@ -125,11 +163,10 @@ export async function POST(req: NextRequest) {
   const uploads: Promise<unknown>[] = [
     uploadObject(s3Key, audioBody, storedType ?? undefined),
   ];
-  if (meta.artBuffer) {
-    const art = imageKindFromMime(meta.artMime);
-    artS3Key = `art/${user.id}/${trackId}.${art.ext}`;
+  if (cover) {
+    artS3Key = `art/${user.id}/${trackId}.${cover.ext}`;
     uploads.push(
-      uploadObject(artS3Key, meta.artBuffer, art.contentType).catch(() => {
+      uploadObject(artS3Key, cover.body, cover.contentType).catch(() => {
         artS3Key = null; // leave the track artless rather than orphan a row
       })
     );
@@ -143,8 +180,8 @@ export async function POST(req: NextRequest) {
         id: trackId,
         ownerId: user.id,
         title: meta.title,
-        artist: meta.artist,
-        album: meta.album,
+        artist,
+        album,
         durationSec: meta.durationSec,
         loudnessLufs,
         s3Key,

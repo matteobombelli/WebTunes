@@ -46,3 +46,7 @@ next-env.d.ts
 
 # Revert map written by scripts/remux-ogg-to-mp4.mjs (runtime artifact)
 /remux-revert.jsonl
+
+# Review/revert logs written by scripts/backfill-online-metadata.mjs
+/backfill-online-review.jsonl
+/backfill-online-revert.jsonl

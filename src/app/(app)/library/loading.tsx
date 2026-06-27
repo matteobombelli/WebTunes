@@ -5,7 +5,7 @@ export default function Loading() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold tracking-tight">
+        <h1 className="font-display text-4xl font-bold tracking-tight">
           Your Library
         </h1>
         <div className="h-9 w-24 animate-pulse rounded-md bg-surface-2" />

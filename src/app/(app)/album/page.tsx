@@ -28,7 +28,7 @@ export default async function AlbumPage({
   return (
     <div className="mx-auto max-w-5xl">
       <p className="text-sm text-fg-muted">Album</p>
-      <h1 className={`font-display text-2xl font-bold tracking-tight ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
+      <h1 className={`font-display text-4xl font-bold tracking-tight ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
       {albumArtist && (
         <p className="mb-6 text-sm text-fg-muted">
           {albumArtist === "Various Artists" ? (

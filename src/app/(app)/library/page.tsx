@@ -10,7 +10,7 @@ export default async function LibraryPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold tracking-tight">Your Library</h1>
+        <h1 className="font-display text-4xl font-bold tracking-tight">Your Library</h1>
         <UploadDialog />
       </div>
       <LibraryBrowser initialTracks={trackDTOs} />

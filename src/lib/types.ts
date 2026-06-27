@@ -27,7 +27,6 @@ export type PlaylistDTO = {
   ownerId: string;
   name: string;
   coverS3Key: string | null;
-  coverUrl: string | null;
   isPrivate: boolean;
   trackCount?: number;
   createdAt: string;

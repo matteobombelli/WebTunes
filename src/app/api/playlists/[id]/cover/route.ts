@@ -4,10 +4,38 @@ import { db } from "@/db";
 import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
-import { getOwnPlaylist, toPlaylistDTO } from "@/lib/playlists";
-import { deleteObject, uploadObject } from "@/lib/s3";
+import {
+  getAccessiblePlaylist,
+  getOwnPlaylist,
+  toPlaylistDTO,
+} from "@/lib/playlists";
+import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// Stable per-playlist cover URL (mirrors the track /art route): the client keys
+// on this URL while the presigned redirect target rotates per request, so a
+// cover can't go stale mid-session the way an embedded presigned URL would.
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
+  const { id } = await params;
+  // getAccessiblePlaylist allows a friend's shared playlist and guards bad
+  // UUIDs (→ null); private/foreign/missing all collapse to 404.
+  const playlist = await getAccessiblePlaylist(id, user.id);
+  if (!playlist || !playlist.coverS3Key) {
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
+
+  const { url } = await getPresignedGetUrl(playlist.coverS3Key);
+  const res = NextResponse.redirect(url, 302);
+  res.headers.set("Cache-Control", "private, max-age=3000");
+  return res;
+}
 
 export async function POST(
   req: NextRequest,

@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requirePageUser } from "@/lib/auth-helpers";
+import { listUserTopTracks } from "@/lib/discover";
 import { areFriends } from "@/lib/friends";
 import { listFriendTracks } from "@/lib/tracks";
+import { getUserSettings } from "@/lib/users";
 import { isUuid } from "@/lib/validate";
+import DiscoverSection from "@/components/DiscoverSection";
 import TrackList from "@/components/TrackList";
 
 export default async function FriendLibraryPage({
@@ -25,19 +28,34 @@ export default async function FriendLibraryPage({
     .where(eq(users.id, userId));
   if (!friend) notFound();
 
-  const trackDTOs = await listFriendTracks(userId, friend.name ?? friend.email);
+  const displayName = friend.name ?? friend.email;
+  const { hideFriendDuplicates } = await getUserSettings(user.id);
+  const [topTracks, trackDTOs] = await Promise.all([
+    listUserTopTracks(userId, user.id, hideFriendDuplicates),
+    listFriendTracks(userId, displayName),
+  ]);
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight">
-          {friend.name ?? friend.email}&apos;s Library
-        </h1>
-        <p className="text-sm text-fg-muted">
+      <h1 className="mb-6 font-display text-4xl font-bold tracking-tight">
+        {displayName}
+      </h1>
+
+      <DiscoverSection
+        title={`${displayName}'s Top 100`}
+        tracks={topTracks}
+        emptyHint="No plays yet."
+      />
+
+      <div className="mt-8">
+        <h2 className="font-display text-lg font-semibold sm:text-[1.6875rem]">
+          {displayName}&apos;s Library
+        </h2>
+        <p className="mb-3 text-sm text-fg-muted">
           {trackDTOs.length} track{trackDTOs.length === 1 ? "" : "s"} shared with you
         </p>
+        <TrackList tracks={trackDTOs} />
       </div>
-      <TrackList tracks={trackDTOs} />
     </div>
   );
 }
