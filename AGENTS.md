@@ -237,7 +237,11 @@ setup, and architecture rationale.
 - Deploys are build-in-place (`npm run build` in the live repo): the running
   server keeps references into the old `.next` and throws "Element type is
   invalid" render errors once it's replaced — restart `webtunes.service`
-  immediately after building.
+  immediately after building. A restart can also leave the previous `next start`
+  children orphaned (reparented to init, outside the unit's cgroup, ~70 MB each
+  holding a stale `.next`); after restarting, check `pgrep -af next-server` and
+  reap stragglers whose cwd is this repo — the `v15` next-server is the separate
+  `matteob.dev` service, not WebTunes.
 - Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` logs the message (reset links,
