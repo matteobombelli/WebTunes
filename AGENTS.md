@@ -124,24 +124,20 @@ setup, and architecture rationale.
   `lib/image-upload.ts` allowlist — never echo the browser-supplied MIME type
   or filename extension back into the stored S3 Content-Type/key, since the
   offline SW replays Content-Type from a same-origin cache (stored-XSS risk).
-- Online metadata recovery: `lib/metadata-lookup.ts` fills tracks whose audio
-  file has no usable embedded tags/art. `findCoverArt` looks up cover art via
-  the iTunes Search API (no key; upscales `100x100bb.jpg`→`600x600bb.jpg`) with
-  a Cover Art Archive fallback by release-group MBID; `fingerprintAndIdentify`
-  runs Chromaprint `fpcalc` (under the `ffmpeg-gate` semaphore) + AcoustID to
-  identify fully-untagged files (artist/album/title). Both are best-effort like
-  loudness/lyrics — null on miss. The upload route calls them inline only when a
-  tag/art is missing. Remote art is untrusted, so the stored kind/Content-Type
-  comes from `imageKindFromBytes` (magic-number sniff through the same allowlist),
-  never the URL/response header — same stored-XSS reasoning as image uploads
-  above. `fpcalc` (Debian `libchromaprint-tools`) is a runtime dependency that
-  must be on `PATH` in dev and prod, like ffmpeg; without it, or without
-  `ACOUSTID_API_KEY`, fingerprinting is skipped (iTunes art still works).
-  `scripts/backfill-online-metadata.mjs` backfills the existing library in three
-  phases (`reextract`→`art`→`fingerprint`); it defaults to dry-run (proposals to
+- Online cover-art lookup: `lib/metadata-lookup.ts`'s `findCoverArt` fetches
+  cover art via the iTunes Search API (no key; searches by title then album;
+  upscales `100x100bb.jpg`→`600x600bb.jpg`) for tracks with an artist but no
+  embedded art. Best-effort like loudness/lyrics — null on miss; the upload
+  route calls it inline only when a track has an artist but no art. Remote art
+  is untrusted, so the stored kind/Content-Type comes from `imageKindFromBytes`
+  (magic-number sniff through the same allowlist), never the URL/response header
+  — same stored-XSS reasoning as image uploads above.
+  `scripts/backfill-online-metadata.mjs` backfills the existing library in two
+  phases (`reextract` recovers embedded art never pulled at upload → `art` looks
+  it up online); it defaults to dry-run (proposals to
   `backfill-online-review.jsonl`) and only writes with `--apply` (revert log to
   `backfill-online-revert.jsonl`). The script mirrors the lib + the
-  `image-upload.ts` allowlist (keep in sync) and rate-limits the external APIs.
+  `image-upload.ts` allowlist (keep in sync) and rate-limits iTunes.
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`

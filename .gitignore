@@ -50,3 +50,4 @@ next-env.d.ts
 # Review/revert logs written by scripts/backfill-online-metadata.mjs
 /backfill-online-review.jsonl
 /backfill-online-revert.jsonl
+/art-apply.log

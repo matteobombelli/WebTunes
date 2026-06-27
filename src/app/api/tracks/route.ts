@@ -8,7 +8,7 @@ import { embedTrack } from "@/lib/clap-embedding";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
-import { fingerprintAndIdentify, findCoverArt } from "@/lib/metadata-lookup";
+import { findCoverArt } from "@/lib/metadata-lookup";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import {
@@ -107,41 +107,25 @@ export async function POST(req: NextRequest) {
     remuxOpusToMp4(buffer, ext, file.type),
   ]);
 
-  // Best-effort online enrichment for uploads missing tags/art — like
-  // loudness/CLAP/lyrics, it never delays or fails a normal, fully-tagged
-  // upload (only untagged/artless files reach a network call). Fingerprinting
-  // is skipped without ACOUSTID_API_KEY; iTunes art lookup needs no key.
-  let artist = meta.artist;
-  let album = meta.album;
+  // Best-effort online cover art for uploads that have an artist but no embedded
+  // art — like loudness/CLAP/lyrics, it never delays or fails a normal, fully-
+  // arted upload (only artless files reach a network call) and needs no API key.
   let cover: { body: Buffer; contentType: string; ext: string } | null =
     meta.artBuffer
       ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
       : null;
-  try {
-    if (!artist && !album) {
-      const id = await fingerprintAndIdentify(buffer, ext);
-      if (id) {
-        // Recover the genuinely-missing artist/album; keep the user's title.
-        artist = id.artist;
-        album = id.album;
-        if (!cover) {
-          const art = await findCoverArt({
-            artist,
-            album,
-            title: meta.title,
-            releaseGroupMbid: id.releaseGroupMbid,
-          });
-          if (art)
-            cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
-        }
-      }
-    } else if (!cover && (artist || album)) {
-      const art = await findCoverArt({ artist: artist ?? "", album, title: meta.title });
+  if (!cover && meta.artist) {
+    try {
+      const art = await findCoverArt({
+        artist: meta.artist,
+        album: meta.album,
+        title: meta.title,
+      });
       if (art)
         cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
+    } catch {
+      // best-effort; never block the upload
     }
-  } catch {
-    // enrichment is best-effort; never block the upload
   }
 
   const trackId = randomUUID();
@@ -180,8 +164,8 @@ export async function POST(req: NextRequest) {
         id: trackId,
         ownerId: user.id,
         title: meta.title,
-        artist,
-        album,
+        artist: meta.artist,
+        album: meta.album,
         durationSec: meta.durationSec,
         loudnessLufs,
         s3Key,
