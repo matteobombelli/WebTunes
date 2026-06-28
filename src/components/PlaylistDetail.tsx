@@ -9,7 +9,7 @@ import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import CoverImage from "@/components/CoverImage";
-import { LockIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
+import { LockIcon, PencilIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
 
@@ -125,6 +125,11 @@ export default function PlaylistDetail({
               {cover}
               <span className="absolute inset-0 hidden items-center justify-center rounded-lg bg-black/60 text-sm text-white group-hover:flex">
                 Change cover
+              </span>
+              {/* Always-visible affordance for touch/mobile, where there's no
+                  hover to reveal the overlay above. */}
+              <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white shadow group-hover:hidden">
+                <PencilIcon size={14} />
               </span>
             </button>
             <input

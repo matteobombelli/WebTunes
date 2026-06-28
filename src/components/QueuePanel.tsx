@@ -34,6 +34,7 @@ import { CurrentTrackKebab } from "@/components/TrackList";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
+const DISMISS_PX = 90; // mobile: swipe-down past this (on release) closes the sheet
 
 // Rows above/below the visible window kept mounted so a fast scroll or a drag
 // near the edge doesn't flash blank. ~20 rows render regardless of queue size.
@@ -142,12 +143,30 @@ export default memo(function QueuePanel({
     if (from !== -1 && to !== -1) reorder(from, to);
   }, []);
 
+  // Mobile sheet: swipe-down-to-close, mirroring NowPlayingScreen. The sheet
+  // position is an inline transform so a drag can follow the finger and the
+  // open/close slide reuses the same transition. `atRest` => settled at the open
+  // position (translateY 0); false => off-screen (100%).
+  const [atRest, setAtRest] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragYRef = useRef(0);
+  const startYRef = useRef<number | null>(null);
+
   // Stay mounted briefly after close so the exit animation can play.
   const [closing, setClosing] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (!open) setClosing(true);
+    if (open) {
+      // Reopening: clear any in-flight close (so its stale unmount timer can't
+      // fire mid-slide) and start off-screen so the slide-up plays from the bottom.
+      setClosing(false);
+      setAtRest(false);
+      setDragY(0);
+    } else {
+      setClosing(true);
+    }
   }
   useEffect(() => {
     if (!closing) return;
@@ -156,6 +175,26 @@ export default memo(function QueuePanel({
     const t = setTimeout(() => setClosing(false), mobile ? 220 : EXIT_MS);
     return () => clearTimeout(t);
   }, [closing, mobile]);
+
+  // Mobile open/close slide: a frame after the sheet is shown, settle to the
+  // rest position (up); on close, drop the rest flag (down). The unmount itself
+  // is handled by the `closing` timeout above.
+  useEffect(() => {
+    if (!mobile) return;
+    if (open) {
+      dragYRef.current = 0;
+      let r2 = 0;
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setAtRest(true));
+      });
+      return () => {
+        cancelAnimationFrame(r1);
+        cancelAnimationFrame(r2);
+      };
+    }
+    const r = requestAnimationFrame(() => setAtRest(false));
+    return () => cancelAnimationFrame(r);
+  }, [open, mobile]);
 
   // Keep the viewport height current (open transition, viewport resize/rotate).
   useEffect(() => {
@@ -208,20 +247,62 @@ export default memo(function QueuePanel({
 
   const rootChrome = mobile
     ? `${
-        hidden ? "hidden" : open ? "animate-slide-up-in" : "animate-slide-up-out"
+        hidden ? "hidden" : ""
       } fixed inset-0 z-[60] flex flex-col bg-surface-1 md:hidden`
     : `${
         hidden ? "hidden" : open ? "animate-pop-in" : "animate-pop-out"
       } absolute bottom-full left-2 z-20 mb-2 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-border bg-surface-2 shadow-lg md:left-56`;
 
+  // Off-screen until settled; follows the finger while dragging down (mobile).
+  const offset = atRest ? `${dragY}px` : "100%";
+
+  // Swipe-to-close, attached only to the non-list header zones (the handle pill
+  // and current-track header) so it can never fight the @dnd-kit row reorder,
+  // which lives on the grips inside the scrollable list below.
+  const swipe = {
+    onTouchStart: (e: React.TouchEvent) => {
+      startYRef.current = e.touches[0].clientY;
+      setDragging(true);
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      if (startYRef.current == null) return;
+      const dy = Math.max(0, e.touches[0].clientY - startYRef.current);
+      dragYRef.current = dy;
+      setDragY(dy);
+    },
+    onTouchEnd: () => {
+      setDragging(false);
+      startYRef.current = null;
+      if (dragYRef.current > DISMISS_PX) onClose();
+      else setDragY(0);
+    },
+    // A system-interrupted swipe (iOS edge gesture, incoming call) fires
+    // touchcancel, not touchend — reset so it can't pin `dragging` (which would
+    // kill the next slide's transition) or strand a past-threshold dragY that a
+    // later tap would read as a dismiss.
+    onTouchCancel: () => {
+      setDragging(false);
+      startYRef.current = null;
+      dragYRef.current = 0;
+      setDragY(0);
+    },
+  };
+
   const body = (
     <>
+      {mobile && (
+        <div
+          {...swipe}
+          className="flex shrink-0 justify-center pb-1 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
+        >
+          <div className="h-1.5 w-10 rounded-full bg-white/30" />
+        </div>
+      )}
       {current && (
         <div
+          {...(mobile ? swipe : {})}
           className={`border-b border-border px-4 ${
-            mobile
-              ? "pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
-              : "pb-3 pt-4"
+            mobile ? "pb-3 pt-1" : "pb-3 pt-4"
           }`}
         >
           <CurrentTrackDetails
@@ -355,7 +436,10 @@ export default memo(function QueuePanel({
       className={rootChrome}
       style={
         mobile
-          ? undefined
+          ? {
+              transform: `translateY(${offset})`,
+              transition: dragging ? "none" : "transform 0.22s ease",
+            }
           : {
               height: animHeight,
               transition: animReady ? "height 200ms ease" : undefined,
