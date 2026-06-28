@@ -42,7 +42,6 @@ export default function NowPlayingScreen({
   const shuffled = usePlayerStore((s) => s.shuffled);
   const playSimilar = usePlayerStore((s) => s.playSimilar);
   const { toggle, next, prev, toggleShuffle } = usePlayerStore.getState();
-  const gradient = useArtGradient(track);
 
   // closing: kept in the DOM briefly after close for the slide-down.
   // atRest: at the open position (translateY 0); false => off-screen (100%).
@@ -69,6 +68,13 @@ export default function NowPlayingScreen({
   }
 
   const mounted = open || closing;
+
+  // Only derive the cover gradient while the sheet is on-screen. Otherwise this
+  // hook re-fetches /art-url and re-downloads the full-res cover (then re-runs a
+  // canvas decode) on every track change even when the sheet is closed — which
+  // is always, on desktop, where it's `md:hidden`. Gating on `mounted` (not
+  // `open`) keeps the gradient through the close slide so the bg doesn't flash.
+  const gradient = useArtGradient(mounted ? track : null);
 
   // Drive the slide via rAF/timeout callbacks (never a synchronous setState in
   // the effect body): a frame after mount, move to rest (up); on close, drop

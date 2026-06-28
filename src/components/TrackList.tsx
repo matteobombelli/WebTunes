@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { api, playlistCoverSrc } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
@@ -181,7 +189,9 @@ export function AddToPlaylistMenu({
 
   // Once mounted (and again when the playlist list loads and changes its
   // height), flip the menu above the trigger if it would overflow the bottom.
-  useEffect(() => {
+  // useLayoutEffect so the flip is applied before the browser paints — otherwise
+  // the provisional downward anchor flashes for a frame before snapping up.
+  useLayoutEffect(() => {
     if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPos({
@@ -522,7 +532,10 @@ export function TrackActionsMenu({
 
   // After the menu mounts, flip it above the trigger if it would overflow the
   // bottom of the viewport (OS-style). Scrolling/resizing dismisses it instead.
-  useEffect(() => {
+  // useLayoutEffect so the flip lands before paint — otherwise the provisional
+  // downward anchor flashes for a frame before snapping up (most visible on
+  // mobile, where the kebab usually sits low enough to need the flip).
+  useLayoutEffect(() => {
     if (!open || !menuRef.current || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPos({
