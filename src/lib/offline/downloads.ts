@@ -7,6 +7,7 @@ import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { deleteArt, hasArt, putArt } from "./art-cache";
 import { deleteAudio, hasAudio, hasManyAudio, putAudio } from "./audio-cache";
 import {
+  clearAll,
   deleteDownloadedPlaylist,
   deleteDownloadedTrack,
   getDownloadedPlaylists,
@@ -16,6 +17,11 @@ import {
   putDownloadedTrack,
   type DownloadedPlaylist,
 } from "./db";
+
+// Every Cache Storage bucket that may hold the signed-in user's audio/art/app
+// shell. KEEP IN SYNC with public/sw.js (AUDIO_CACHE / ART_CACHE / PREFETCH /
+// SHELL_CACHE) and audio-cache.ts / art-cache.ts.
+const OFFLINE_CACHES = ["wt-audio", "wt-art", "wt-prefetch", "wt-shell-v2"];
 
 type PlaylistWithTracks = PlaylistDTO & { tracks: TrackDTO[] };
 
@@ -151,6 +157,23 @@ export async function removePlaylist(playlistId: string): Promise<void> {
   if (!playlist) return;
   await deleteDownloadedPlaylist(playlistId);
   await collectRemoved(playlist.trackIds, playlistId);
+}
+
+/**
+ * Hard-purge ALL offline state — every cache bucket plus the IndexedDB metadata
+ * — in one pass. Used when a DIFFERENT account signs in on the same browser
+ * profile: the caches and DB are keyed only by track id with no access check, so
+ * the previous user's downloads (including private tracks) must not survive the
+ * switch. Heavier than removeAll(): it also drops the prefetch/shell caches and
+ * clears the stores wholesale instead of per-track.
+ */
+export async function purgeAllOfflineData(): Promise<void> {
+  if (typeof caches !== "undefined") {
+    await Promise.all(
+      OFFLINE_CACHES.map((c) => caches.delete(c).catch(() => false))
+    );
+  }
+  await clearAll().catch(() => {});
 }
 
 /** Wipes every download — playlists and tracks (audio, art, metadata) alike. */

@@ -13,8 +13,11 @@ import {
 } from "@/lib/shares";
 import { isUuid } from "@/lib/validate";
 
-// Owner-only management of a track's public share link. The matching public
-// (no-auth) endpoints that serve the audio/art live under /api/share/[token].
+// Manage a track's public share link. Anyone who can ACCESS the track may mint/
+// read the link (POST/GET, gated on canAccessTrack — minting is idempotent and
+// additive); only the track's OWNER may revoke it (DELETE), so a friend can't
+// kill or rotate the owner's distributed URL. The matching public (no-auth)
+// endpoints that serve the audio/art live under /api/share/[token].
 
 function shareBody(link: ShareLink, headers: Headers) {
   return {
@@ -38,6 +41,19 @@ async function requireShareableTrack(
     .from(tracks)
     .where(eq(tracks.id, id));
   return !!track && (await canAccessTrack(userId, track));
+}
+
+// Revocation is owner-only (see header). Same 404-for-inaccessible behaviour.
+async function requireOwnedTrack(
+  id: string,
+  userId: string
+): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  const [track] = await db
+    .select({ ownerId: tracks.ownerId })
+    .from(tracks)
+    .where(eq(tracks.id, id));
+  return !!track && track.ownerId === userId;
 }
 
 const notFound = () =>
@@ -78,7 +94,7 @@ export async function DELETE(
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id } = await params;
-  if (!(await requireShareableTrack(id, user.id))) return notFound();
+  if (!(await requireOwnedTrack(id, user.id))) return notFound();
   await deleteShare(id);
   return new NextResponse(null, { status: 204 });
 }

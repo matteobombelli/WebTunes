@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { passwordResetTokens, users } from "@/db/schema";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { getClientIp } from "@/lib/client-ip";
 import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -16,11 +17,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
   }
 
-  // Always 200 so the endpoint doesn't reveal which emails have accounts.
-  // Rate-limited per submitted address (account or not) so an attacker can't
-  // flood someone's inbox with reset emails; the silent 200 keeps the
-  // limiter itself from becoming an enumeration oracle.
-  if (!rateLimit(`forgot:${parsed.data.email}`, 3, 60 * 60 * 1000)) {
+  // Always 200 so the endpoint doesn't reveal which emails have accounts. Two
+  // silent caps: per-IP bounds mass enumeration across many addresses; per-email
+  // bounds inbox flooding for one address. Neither leaks existence.
+  const ip = getClientIp(req.headers);
+  if (
+    !rateLimit(`forgot-ip:${ip}`, 15, 60 * 60 * 1000) ||
+    !rateLimit(`forgot:${parsed.data.email}`, 3, 60 * 60 * 1000)
+  ) {
     return NextResponse.json({ ok: true });
   }
   const [user] = await db
@@ -37,15 +41,14 @@ export async function POST(req: NextRequest) {
     });
 
     const resetUrl = `${getAppBaseUrl(req.headers)}/reset-password?token=${token}`;
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "Reset your WebTunes password",
-        text: `Someone (hopefully you) requested a password reset for WebTunes.\n\nReset it here (link valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can ignore this email.`,
-      });
-    } catch (err) {
-      console.error("Password reset email failed:", err);
-    }
+    // Send out-of-band (don't await): the email-provider fetch is the dominant
+    // timing signal, so awaiting it only in the user-exists branch turns response
+    // time into an existence oracle. The reset token is already persisted above.
+    void sendEmail({
+      to: user.email,
+      subject: "Reset your WebTunes password",
+      text: `Someone (hopefully you) requested a password reset for WebTunes.\n\nReset it here (link valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can ignore this email.`,
+    }).catch((err) => console.error("Password reset email failed:", err));
   }
 
   return NextResponse.json({ ok: true });

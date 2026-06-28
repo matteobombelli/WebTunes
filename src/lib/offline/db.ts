@@ -86,3 +86,21 @@ export async function putDownloadedPlaylist(playlist: DownloadedPlaylist) {
 export async function deleteDownloadedPlaylist(id: string) {
   await asPromise((await store(PLAYLISTS, "readwrite")).delete(id));
 }
+
+/**
+ * Clears all downloaded metadata (both object stores). Used on account switch.
+ * Clears in place rather than deleting the database, so the cached open
+ * connection — which would otherwise block an indexedDB.deleteDatabase() with
+ * `onblocked` — stays valid for the next user's downloads.
+ */
+export async function clearAll(): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([TRACKS, PLAYLISTS], "readwrite");
+    tx.objectStore(TRACKS).clear();
+    tx.objectStore(PLAYLISTS).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}

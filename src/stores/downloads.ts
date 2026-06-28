@@ -31,6 +31,9 @@ type DownloadsState = {
   removePlaylist: (playlistId: string) => Promise<void>;
   /** Wipes every download and clears the pending queue. */
   removeAll: () => Promise<void>;
+  /** Account-switch purge: resets in-memory state and hard-clears all offline
+   *  storage so the next user can't read the previous user's downloads. */
+  purgeForAccountSwitch: () => Promise<void>;
 };
 
 export type DownloadStatus = "none" | "queued" | "downloading" | "downloaded";
@@ -162,6 +165,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
       set({ queue: [] });
       await offline.removeAll();
       await refresh();
+    },
+
+    purgeForAccountSwitch: async () => {
+      // Reset in-memory state synchronously so the UI can't flash the previous
+      // user's downloads while the async storage clear runs.
+      set({ tracks: {}, playlists: {}, queue: [], current: null, storage: null });
+      await offline.purgeAllOfflineData();
     },
   };
 });

@@ -6,7 +6,8 @@
 // installed — but it does require Docker + the compose project to be up, and
 // must run from the repo root (the systemd unit sets WorkingDirectory; `cwd:
 // root` covers manual runs). DATABASE_URL + S3_* come from the process
-// environment when set, otherwise from the first env file present. On prod a
+// environment when set, otherwise merged from the .env files (later files win).
+// On prod a
 // systemd timer runs this daily (see deploy/). Restore a dump with:
 //   docker compose exec -T postgres pg_restore -U webtunes -d webtunes \
 //     --clean --if-exists < webtunes-<ts>.dump
@@ -39,12 +40,16 @@ function parseEnvFile(path) {
 }
 
 function loadEnv() {
-  let env = { ...process.env };
+  // Merge the .env files in order (later files override earlier), then overlay
+  // process.env LAST so an explicitly exported value wins — matching the
+  // docstring and the apply-s3-*.mjs scripts. (The previous order let the
+  // on-disk files silently override an exported DATABASE_URL/S3_*.)
+  let fileEnv = {};
   for (const f of ENV_FILES) {
     const path = join(root, f);
-    if (existsSync(path)) env = { ...env, ...parseEnvFile(path) };
+    if (existsSync(path)) fileEnv = { ...fileEnv, ...parseEnvFile(path) };
   }
-  return env;
+  return { ...fileEnv, ...process.env };
 }
 
 const env = loadEnv();
@@ -86,11 +91,19 @@ function dumpToFile(outPath) {
     "docker",
     [
       "compose", "exec", "-T",
-      "-e", `PGPASSWORD=${DB_PASSWORD}`,
+      // Pass PGPASSWORD by NAME (no value) so the secret rides the child's
+      // environment (/proc/<pid>/environ, owner-only) instead of its argv
+      // (/proc/<pid>/cmdline, world-readable). `docker compose exec -e NAME`
+      // forwards the value from this process's environment into the container.
+      "-e", "PGPASSWORD",
       "postgres",
       "pg_dump", "-U", DB_USER, "-Fc", DB_NAME,
     ],
-    { cwd: root, stdio: ["ignore", "pipe", "pipe"] }
+    {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PGPASSWORD: DB_PASSWORD },
+    }
   );
   let stderr = "";
   proc.stderr.on("data", (c) => (stderr += c));

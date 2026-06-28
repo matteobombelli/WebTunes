@@ -27,6 +27,12 @@ const DTYPE = "fp32" as const;
 const CACHE_DIR = join(process.cwd(), ".transformers-cache");
 
 const DECODE_TIMEOUT_MS = 30_000;
+// Bound the decoded PCM so a crafted long / low-bitrate file can't balloon RAM:
+// 48 kHz mono f32 is 192 KB/s, so 1 GiB caps ~93 min of audio. The CLAP feature
+// extractor only consumes a random 10 s window, so truncating beyond this is
+// harmless for real music while it stops a decompression-style OOM. KEEP IN SYNC
+// with scripts/analyze-clap-embeddings.mjs.
+const MAX_DECODE_BYTES = 1024 * 1024 * 1024;
 // CLAP truncates to a fixed window, so inference time is roughly constant; only
 // a stuck onnxruntime call needs a backstop.
 const MAX_CONCURRENT = 2;
@@ -137,7 +143,18 @@ function runFfmpegDecode(inputPath: string): Promise<Buffer> {
     );
 
     const chunks: Buffer[] = [];
-    proc.stdout.on("data", (c: Buffer) => chunks.push(c));
+    let total = 0;
+    let capped = false;
+    proc.stdout.on("data", (c: Buffer) => {
+      chunks.push(c);
+      total += c.length;
+      if (!capped && total >= MAX_DECODE_BYTES) {
+        // Enough audio for the random window; stop before RAM balloons. The
+        // partial buffer is still valid PCM, so we resolve with it below.
+        capped = true;
+        proc.kill("SIGKILL");
+      }
+    });
 
     const timer = setTimeout(() => proc.kill("SIGKILL"), DECODE_TIMEOUT_MS);
 
@@ -147,7 +164,7 @@ function runFfmpegDecode(inputPath: string): Promise<Buffer> {
     });
     proc.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve(Buffer.concat(chunks));
+      if (capped || code === 0) resolve(Buffer.concat(chunks));
       else reject(new Error(`ffmpeg exited with code ${code}`));
     });
   });

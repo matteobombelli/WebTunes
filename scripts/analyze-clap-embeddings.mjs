@@ -23,6 +23,11 @@ const ENV_FILES = [".env.production", ".env", ".env.local"];
 
 const MODEL_ID = "Xenova/clap-htsat-unfused";
 const DTYPE = "fp32";
+// Cap the decoded PCM (48 kHz mono f32 = 192 KB/s, so 1 GiB ≈ 93 min) to bound
+// RAM on a pathological long / low-bitrate input — mirrors MAX_DECODE_BYTES in
+// src/lib/clap-embedding.ts; CLAP only uses a random 10 s window, so this never
+// affects real tracks.
+const MAX_DECODE_BYTES = 1024 * 1024 * 1024;
 
 function parseEnvFile(path) {
   return Object.fromEntries(
@@ -90,12 +95,21 @@ function runFfmpegDecode(inputPath) {
       { stdio: ["ignore", "pipe", "ignore"] }
     );
     const chunks = [];
-    proc.stdout.on("data", (c) => chunks.push(c));
+    let total = 0;
+    let capped = false;
+    proc.stdout.on("data", (c) => {
+      chunks.push(c);
+      total += c.length;
+      if (!capped && total >= MAX_DECODE_BYTES) {
+        capped = true; // enough audio for the random window; stop before RAM balloons
+        proc.kill("SIGKILL");
+      }
+    });
     const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
     proc.on("error", (err) => (clearTimeout(timer), reject(err)));
     proc.on("close", (code) => {
       clearTimeout(timer);
-      code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`ffmpeg exited ${code}`));
+      capped || code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`ffmpeg exited ${code}`));
     });
   });
 }

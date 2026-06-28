@@ -170,9 +170,13 @@ export const trackShares = pgTable(
       .notNull()
       .unique()
       .references(() => tracks.id, { onDelete: "cascade" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    // Nullable + SET NULL: a share is one row per track and is a capability bound
+    // to the TRACK, not to whoever first minted it (a friend may mint). So the
+    // minter deleting their account must NOT cascade-revoke the owner's still-
+    // valid link. (FK softened out-of-band — drizzle/0019_audit_indexes_and_share_fk.sql.)
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     token: text("token").notNull().unique(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),

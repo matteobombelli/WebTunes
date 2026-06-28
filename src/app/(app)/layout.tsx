@@ -25,7 +25,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex h-dvh flex-col">
-      <ServiceWorkerRegistrar />
+      <ServiceWorkerRegistrar userId={user.id} />
       <UploadProgressBar />
       <MobileTopBar />
       <div className="flex min-h-0 flex-1">

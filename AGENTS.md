@@ -303,3 +303,24 @@ setup, and architecture rationale.
   Resend domain `matteob.dev` verified; send-only key set locally and in prod.
   Without `RESEND_API_KEY`, `lib/email.ts` logs the message (reset links,
   verification links) to the server console instead of sending (dev behavior).
+- Hot-path performance indexes are **hand-applied out-of-band** (CREATE INDEX
+  CONCURRENTLY can't run inside drizzle's per-migration transaction): they live
+  in `drizzle/0015_perf_indexes.sql` + `drizzle/0019_audit_indexes_and_share_fk.sql`,
+  NOT in `src/db/schema.ts` or the journal. Apply each with
+  `docker compose exec -T postgres psql -U webtunes -d webtunes -f - < <file>`
+  and verify with `node scripts/check-perf-indexes.mjs` (fails loudly if any are
+  missing — run after provisioning a new DB). **PENDING APPLY:** `0019`
+  (FK-cascade indexes on `playlist_tracks.track_id` / `similar_exclusions.track_id`
+  + softens `track_shares.created_by` to `ON DELETE SET NULL`, matching the
+  updated `schema.ts`) is written but not yet applied to prod.
+- Origin firewall (audit M1): the OVH origin currently accepts direct
+  (non-Cloudflare) connections on 80/443 (ufw allows `0.0.0.0/0`; Caddy passes
+  `cf-connecting-ip` through), so the per-IP login/register rate limits keyed on
+  that header are bypassable by hitting the raw IP. Fix at the network layer:
+  restrict ufw 80/443 to Cloudflare's published ranges
+  (`https://www.cloudflare.com/ips/`) and deny others — for each CIDR
+  `sudo ufw allow proto tcp from <cidr> to any port 80,443`, then delete the open
+  `Anywhere` 80/443 rules. **Add/confirm the SSH (and any admin) rule FIRST** so
+  locking 443 can't lock you out of direct-IP access. No end-user impact (all
+  real traffic transits Cloudflare). `src/lib/client-ip.ts` is intentionally left
+  unchanged (no CF CIDR list baked into the app).

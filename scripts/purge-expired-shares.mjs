@@ -3,8 +3,8 @@
 // Expired rows are already inert (lib/shares.ts filters by expiry and the
 // upsert self-heals same-track collisions); this is the guarantee they're gone.
 //   node scripts/purge-expired-shares.mjs
-// DATABASE_URL comes from the process environment when set, otherwise the first
-// env file present.
+// DATABASE_URL comes from the process environment when set, otherwise merged
+// from the .env files (later files win).
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,12 +26,15 @@ function parseEnvFile(path) {
 }
 
 function loadEnv() {
-  let env = { ...process.env };
+  // Merge the .env files in order (later files override earlier), then overlay
+  // process.env LAST so an explicitly exported value wins (matches the docstring
+  // and the apply-s3-*.mjs scripts).
+  let fileEnv = {};
   for (const f of ENV_FILES) {
     const path = join(root, f);
-    if (existsSync(path)) env = { ...env, ...parseEnvFile(path) };
+    if (existsSync(path)) fileEnv = { ...fileEnv, ...parseEnvFile(path) };
   }
-  return env;
+  return { ...fileEnv, ...process.env };
 }
 
 const env = loadEnv();

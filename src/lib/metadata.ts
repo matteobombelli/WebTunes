@@ -1,5 +1,12 @@
 import { parseBuffer, type IAudioMetadata } from "music-metadata";
 
+// Cap embedded cover art before it can reach ffmpeg (lib/thumbnail.ts): a small,
+// highly-compressible image that declares huge pixel dimensions decodes to a
+// multi-GB frame (a decompression bomb → OOM). The remote-art path enforces the
+// same idea (MAX_ART_BYTES in lib/metadata-lookup.ts, 5MB); embedded art is
+// allowed a little more headroom for legitimate hi-res covers.
+const MAX_EMBEDDED_ART_BYTES = 10 * 1024 * 1024;
+
 export type TrackMetadata = {
   title: string;
   artist: string | null;
@@ -104,8 +111,13 @@ export async function extractTrackMetadata(
   }
 
   const picture = meta?.common.picture?.[0];
-  const artBuffer = picture?.data ? Buffer.from(picture.data) : null;
-  const artMime = picture?.format ?? null;
+  // Drop over-cap art like any other best-effort art failure — the upload still
+  // succeeds; it just stores no embedded cover.
+  const artBuffer =
+    picture?.data && picture.data.byteLength <= MAX_EMBEDDED_ART_BYTES
+      ? Buffer.from(picture.data)
+      : null;
+  const artMime = artBuffer ? (picture?.format ?? null) : null;
 
   return {
     title,

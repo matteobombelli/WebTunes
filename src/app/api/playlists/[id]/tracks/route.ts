@@ -89,7 +89,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json({ added: toAdd.length }, { status: 200 });
 }
 
-const reorderSchema = z.object({ trackIds: z.array(z.string().uuid()).min(1) });
+const reorderSchema = z.object({
+  // Cap the array so one request can't issue millions of sequential UPDATEs in a
+  // single transaction / block the event loop on the JSON+zod pass (the proxy
+  // buffers up to 100mb). Far above any real playlist; adds are capped at 500.
+  trackIds: z.array(z.string().uuid()).min(1).max(10_000),
+});
 
 export async function PUT(req: NextRequest, { params }: Params) {
   const user = await requireUser();
@@ -104,6 +109,27 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const parsed = reorderSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "trackIds array is required" }, { status: 400 });
+  }
+
+  // A reorder must be a permutation of the playlist's CURRENT members — reject a
+  // partial / padded / duplicated list so positions can't end up colliding or
+  // non-contiguous (the web client always sends the full ordered list).
+  const members = await db
+    .select({ trackId: playlistTracks.trackId })
+    .from(playlistTracks)
+    .where(eq(playlistTracks.playlistId, id));
+  const submitted = parsed.data.trackIds;
+  const submittedSet = new Set(submitted);
+  const memberSet = new Set(members.map((m) => m.trackId));
+  const isPermutation =
+    submitted.length === submittedSet.size && // no duplicates
+    submittedSet.size === memberSet.size &&
+    [...submittedSet].every((tid) => memberSet.has(tid));
+  if (!isPermutation) {
+    return NextResponse.json(
+      { error: "trackIds must be exactly the playlist's current tracks" },
+      { status: 400 }
+    );
   }
 
   await db.transaction(async (tx) => {

@@ -14,7 +14,10 @@ export const SHARE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export type ShareLink = { token: string; expiresAt: Date };
 
 // The track fields the public stream/art routes and listen page need. Built by
-// hand (NOT toTrackDTO, which would leak s3Key/ownerId/isPrivate into a DTO).
+// hand (NOT toTrackDTO, which would leak s3Key/isPrivate into the JSON DTO).
+// Note: the owner's id still appears in the presigned S3 URL the recipient is
+// 302'd to (keys are `audio/<ownerId>/…`) — opaque, unusable without a session,
+// and identical to the authed stream route (audit I22, accepted).
 export type ResolvedShare = {
   id: string;
   s3Key: string;

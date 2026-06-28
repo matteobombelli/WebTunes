@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
@@ -37,8 +37,11 @@ export default function LibraryBrowser({
   // Owned by the global Settings modal (player store); the server reads it per
   // request, so a change re-fires the fetch effect below to re-filter the list.
   const hideDuplicates = usePlayerStore((s) => s.hideFriendDuplicates);
-  // Bumped after an edit/delete so client-fetched views re-query.
+  // Bumped after an edit/delete so client-fetched views re-query. Stable
+  // identity ([] deps — setState is stable) so it doesn't defeat TrackRow's
+  // React.memo by changing TrackList's `remove` callback every render.
   const [refreshKey, setRefreshKey] = useState(0);
+  const onMutated = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
@@ -132,7 +135,7 @@ export default function LibraryBrowser({
             canDelete
             selectable
             sortable
-            onMutated={() => setRefreshKey((k) => k + 1)}
+            onMutated={onMutated}
           />
         </div>
       )}

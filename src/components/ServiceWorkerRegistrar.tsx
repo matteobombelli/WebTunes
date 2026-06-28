@@ -7,14 +7,38 @@ import { useExclusionsStore } from "@/stores/exclusions";
 
 // Must match SHELL_CACHE in public/sw.js.
 const SHELL_CACHE = "wt-shell-v2";
+// Tracks which account last used this browser profile, so we can purge offline
+// state (caches + IndexedDB are keyed only by track id, with no access check)
+// when a DIFFERENT user signs in on a shared device.
+const LAST_USER_KEY = "wt-last-user";
 
-export default function ServiceWorkerRegistrar() {
+export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
   useEffect(() => {
-    // Hydrate the downloads store (and kick playlist auto-sync when online)
-    // once per app load, wherever the user lands.
-    void useDownloadsStore.getState().init();
-    // Load the Play Similar exclusion list so kebab labels are correct.
-    void useExclusionsStore.getState().init();
+    void (async () => {
+      // Account-switch guard: if a different user signed in on this profile,
+      // hard-purge the previous user's downloads BEFORE hydrating the store, so
+      // they can't be listed or played. Same user (or first ever) → keep them,
+      // so a solo user's downloads survive their own logout/login (no UX change).
+      let lastUser: string | null = null;
+      try {
+        lastUser = localStorage.getItem(LAST_USER_KEY);
+      } catch {
+        // localStorage unavailable (private mode); can't track — skip the purge.
+      }
+      if (lastUser && lastUser !== userId) {
+        await useDownloadsStore.getState().purgeForAccountSwitch();
+      }
+      try {
+        localStorage.setItem(LAST_USER_KEY, userId);
+      } catch {
+        // ignore
+      }
+      // Hydrate the downloads store (and kick playlist auto-sync when online).
+      void useDownloadsStore.getState().init();
+      // Load the Play Similar exclusion list so kebab labels are correct.
+      void useExclusionsStore.getState().init();
+    })();
+
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker
       .register(`${BASE_PATH}/sw.js`, {
@@ -25,7 +49,7 @@ export default function ServiceWorkerRegistrar() {
       .catch(() => {
         // The SW is progressive enhancement; the app works without it.
       });
-  }, []);
+  }, [userId]);
   return null;
 }
 

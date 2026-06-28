@@ -1,7 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, isUniqueViolation } from "@/db";
 import { friendships, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { pendingRequestsFor } from "@/lib/friends";
@@ -67,9 +67,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [row] = await db
-    .insert(friendships)
-    .values({ requesterId: user.id, addresseeId: target.id })
-    .returning({ id: friendships.id });
-  return NextResponse.json({ id: row.id }, { status: 201 });
+  // Check-then-insert: two concurrent identical submissions can both pass the
+  // existence check above, so catch the friendships_pair_idx unique violation
+  // and return the normal 409 instead of a 500 (per the repo convention).
+  try {
+    const [row] = await db
+      .insert(friendships)
+      .values({ requesterId: user.id, addresseeId: target.id })
+      .returning({ id: friendships.id });
+    return NextResponse.json({ id: row.id }, { status: 201 });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      return NextResponse.json(
+        { error: "A request between you already exists" },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }

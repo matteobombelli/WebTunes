@@ -1,7 +1,7 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { playlistTracks } from "@/db/schema";
+import { playlists, playlistTracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { getOwnPlaylist } from "@/lib/playlists";
 import { isUuid } from "@/lib/validate";
@@ -38,6 +38,13 @@ export async function DELETE(
             gt(playlistTracks.position, removed.position)
           )
         );
+      // Removing a track changes the playlist's contents, so bump updatedAt
+      // (list ordering + DTO), like add/reorder/rename/cover do. Guarded on
+      // `removed` so a no-op delete (non-member) doesn't bump.
+      await tx
+        .update(playlists)
+        .set({ updatedAt: new Date() })
+        .where(eq(playlists.id, id));
     }
   });
   return new NextResponse(null, { status: 204 });
