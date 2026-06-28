@@ -127,6 +127,13 @@
       "when": 1782610336944,
       "tag": "0017_quick_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782622299342,
+      "tag": "0018_calm_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

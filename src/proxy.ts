@@ -21,8 +21,13 @@ export function proxy(req: NextRequest) {
     req.cookies.has("authjs.session-token") ||
     req.cookies.has("__Secure-authjs.session-token");
   const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
+  // Public track-share listen page: reachable logged-out. Exact prefix (not
+  // startsWith on "/share") so a future "/shared…" route isn't accidentally
+  // exempted.
+  const isPublicPage =
+    pathname === "/share" || pathname.startsWith("/share/");
 
-  if (!hasSessionCookie && !isAuthPage) {
+  if (!hasSessionCookie && !isAuthPage && !isPublicPage) {
     const url = nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

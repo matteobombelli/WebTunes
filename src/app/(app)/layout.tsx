@@ -5,6 +5,7 @@ import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import SettingsModal from "@/components/SettingsModal";
 import Sidebar from "@/components/Sidebar";
+import Toast from "@/components/Toast";
 import UploadProgressBar from "@/components/UploadProgressBar";
 
 export default async function AppLayout({
@@ -33,6 +34,7 @@ export default async function AppLayout({
         initialHideFriendDuplicates={hideFriendDuplicates}
       />
       <MobileNav />
+      <Toast />
       <SettingsModal
         initialSimilarVariation={similarVariation}
         userEmail={user.email}

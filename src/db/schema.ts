@@ -153,6 +153,33 @@ export const trackEmbeddings = pgTable("track_embeddings", {
   embedding: vector("embedding", { dimensions: 512 }).notNull(),
 });
 
+// Public "share link" for a single track: an unguessable capability token that
+// lets anyone (no account) stream the track via /share/[token], bypassing the
+// normal access check — the token IS the grant, so it overrides is_private.
+// One row per track (the UNIQUE track_id frees its slot when revoke/expiry
+// DELETE the row). The token is stored in plaintext on purpose so the owner can
+// re-display/copy it later — low sensitivity, it only grants playback of a track
+// the owner chose to expose (unlike the hashed auth tokens above). Auto-expires
+// after 7 days; scripts/purge-expired-shares.mjs (daily systemd timer) deletes
+// expired rows so they never accumulate. See lib/shares.ts.
+export const trackShares = pgTable(
+  "track_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    trackId: uuid("track_id")
+      .notNull()
+      .unique()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  },
+  (t) => [index("track_shares_expires_at_idx").on(t.expiresAt)]
+);
+
 // Per-listener "exclude from Play Similar" list. A (user, track) row hides that
 // track from this user's OWN "play similar" radio results only — it stays
 // visible to the track's owner and to friends. Filtered in lib/similar.ts.

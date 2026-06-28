@@ -29,6 +29,7 @@ import {
   PlayNextIcon,
   PlusIcon,
   QueueIcon,
+  ShareIcon,
   SimilarIcon,
   TrashIcon,
   UpIcon,
@@ -41,6 +42,7 @@ import TrackArt from "@/components/TrackArt";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useExclusionsStore, useIsExcluded } from "@/stores/exclusions";
+import { useToastStore } from "@/stores/toast";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -91,6 +93,33 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
 // the left, icon on the right, clickable across its whole width.
 const MENU_ROW =
   "flex w-full items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 text-left hover:bg-surface-3/60";
+
+// Create-or-fetch the track's public share link, copy it to the clipboard, then
+// flash a toast. Must be CALLED synchronously from the click gesture: Safari/iOS
+// only allow a clipboard write tied to a user gesture, so when ClipboardItem is
+// available we hand it a *promise* of the link — the async POST resolves without
+// losing the gesture's permission — and only fall back to writeText otherwise.
+function copyShareLink(trackId: string) {
+  const { show } = useToastStore.getState();
+  const fetchUrl = () =>
+    api<{ url: string }>(`/tracks/${trackId}/shares`, { method: "POST" }).then(
+      (r) => r.url
+    );
+  const copied =
+    typeof ClipboardItem !== "undefined" && navigator.clipboard?.write
+      ? navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": fetchUrl().then(
+              (url) => new Blob([url], { type: "text/plain" })
+            ),
+          }),
+        ])
+      : fetchUrl().then((url) => navigator.clipboard.writeText(url));
+  copied.then(
+    () => show("Copied link to clipboard!"),
+    () => show("Couldn’t copy link")
+  );
+}
 
 // Decide the vertical anchor for a portalled (position: fixed) menu of measured
 // height `menuH`: open downward from the trigger, but flip above it when it
@@ -428,6 +457,20 @@ function TrackActions({
           {excluded ? "Include in Play Similar" : "Exclude from Play Similar"}
         </span>
         <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
+      </button>
+      {/* Share any accessible track — your own OR a friend's (the server checks
+          canAccessTrack). Kept on mobile too (unlike Edit), since copying a link
+          matters there most. Click copies the public link straight to the
+          clipboard (no dialog). */}
+      <button
+        onClick={() => {
+          copyShareLink(track.id);
+          onClose();
+        }}
+        className={MENU_ROW}
+      >
+        <span>Share</span>
+        <ShareIcon size={16} className="shrink-0 text-fg-muted" />
       </button>
       {/* Edit is desktop-only: no edit affordance in the mobile kebab. */}
       {canEdit && !track.ownerName && (

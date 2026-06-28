@@ -65,3 +65,14 @@ export function artSrc(trackId: string, opts?: { thumb?: boolean }): string {
 export function playlistCoverSrc(playlistId: string): string {
   return `${BASE_PATH}/api/playlists/${playlistId}/cover`;
 }
+
+// Public (no-auth) stream/art URLs for a shared track. Plain <audio>/<img> src
+// don't get the basePath the way next/link does, so prepend it here. Used by the
+// public /share/[token] listen page.
+export function shareStreamSrc(token: string): string {
+  return `${BASE_PATH}/api/share/${token}/stream`;
+}
+
+export function shareArtSrc(token: string): string {
+  return `${BASE_PATH}/api/share/${token}/art`;
+}

@@ -130,6 +130,13 @@ export const DownloadIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Chain link — "share" (copy a public link to a track). */
+export const ShareIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.9 12A3.1 3.1 0 0 1 7 8.9h3a1 1 0 1 1 0 2H7a1.1 1.1 0 0 0 0 2.2h3a1 1 0 1 1 0 2H7A3.1 3.1 0 0 1 3.9 12zm10.1-3.1h3a3.1 3.1 0 0 1 0 6.2h-3a1 1 0 1 1 0-2h3a1.1 1.1 0 0 0 0-2.2h-3a1 1 0 1 1 0-2zM8 12a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1z" />
+  </Svg>
+);
+
 export const LogoutIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10 4a1 1 0 0 1 0 2H7v12h3a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4zm5.3 3.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4-1.4L17.58 13H11a1 1 0 1 1 0-2h6.59l-2.3-2.3a1 1 0 0 1 0-1.4z" />

@@ -88,6 +88,27 @@ setup, and architecture rationale.
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
 - Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
+- Public track sharing: anyone who can ACCESS a track (its owner, or a friend
+  for a non-private track — the `POST /api/tracks/[id]/shares` route gates on
+  `canAccessTrack`) mints a capability link anyone can open at `/share/[token]`
+  to listen with no account. The kebab "Share" action (in `TrackActions`, shown
+  on every track) copies the link straight to the clipboard via a transient
+  `useToastStore` toast — no dialog. `lib/shares.ts` owns the `track_shares`
+  table (one row per track via `UNIQUE(track_id)`, so two sharers of the same
+  track get the same link; **plaintext** token on purpose, re-displayable — low
+  sensitivity, unlike the hashed auth tokens). The token IS the authorization:
+  the public `/api/share/[token]/stream` and `/art` routes skip
+  `requireUser`/`canAccessTrack` and **override `is_private`** (`resolveShareToken`
+  only checks expiry), so a link stays an ABSOLUTE capability even if the track
+  later goes private or the friendship ends (until the 7-day expiry).
+  `createOrGetShare` is an atomic upsert (returns an active link unchanged —
+  re-sharing does NOT extend the 7d TTL; replaces an expired one). Links
+  auto-expire after 7 days and are deleted by `scripts/purge-expired-shares.mjs`
+  (daily `deploy/webtunes-purge-shares` timer) so they don't accumulate. The
+  `/share/[token]` page is outside the `(app)`/`(auth)` groups (bare root layout,
+  no auth bounce) and exempted in `src/proxy.ts`; its `<audio>`/`<img>` use
+  `shareStreamSrc`/`shareArtSrc` (basePath-aware). The presigned target is
+  downloadable (can't enforce stream-only).
 - Loudness normalization: on upload `lib/loudness.ts` shells out to **ffmpeg**
   (a runtime dependency — must be on `PATH` in dev and prod) to measure EBU R128
   loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:
