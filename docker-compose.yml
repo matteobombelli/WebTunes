@@ -3,6 +3,9 @@ services:
     # postgres:16 + the pgvector extension (for "play similar" similarity
     # search); same PG major, so the existing pgdata volume is unchanged.
     image: pgvector/pgvector:pg16
+    # Survive host reboots: without this, a VPS reset leaves the app (systemd)
+    # up but the DB container down, flooding logs with auth ECONNREFUSED.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: webtunes
       # Real deployments set POSTGRES_PASSWORD in .env (gitignored) next to
@@ -22,6 +25,7 @@ services:
 
   minio:
     image: minio/minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
