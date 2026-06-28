@@ -43,7 +43,11 @@ export async function DELETE(req: NextRequest) {
   }
 
   const ownedTracks = await db
-    .select({ s3Key: tracks.s3Key, artS3Key: tracks.artS3Key })
+    .select({
+      s3Key: tracks.s3Key,
+      artS3Key: tracks.artS3Key,
+      artThumbS3Key: tracks.artThumbS3Key,
+    })
     .from(tracks)
     .where(eq(tracks.ownerId, user.id));
   const ownedPlaylists = await db
@@ -54,7 +58,7 @@ export async function DELETE(req: NextRequest) {
   await db.delete(users).where(eq(users.id, user.id));
 
   const s3Keys = [
-    ...ownedTracks.flatMap((t) => [t.s3Key, t.artS3Key]),
+    ...ownedTracks.flatMap((t) => [t.s3Key, t.artS3Key, t.artThumbS3Key]),
     ...ownedPlaylists.map((p) => p.coverS3Key),
   ].filter((k): k is string => k !== null);
   for (const key of s3Keys) {

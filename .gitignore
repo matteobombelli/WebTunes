@@ -51,3 +51,7 @@ next-env.d.ts
 /backfill-online-review.jsonl
 /backfill-online-revert.jsonl
 /art-apply.log
+
+# Snapshot/audit logs written by scripts/reconcile-r2.mjs (runtime artifacts)
+/reconcile-r2-review.jsonl
+/reconcile-r2-revert.jsonl

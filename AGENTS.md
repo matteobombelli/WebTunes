@@ -79,7 +79,10 @@ setup, and architecture rationale.
   live in gitignored `.env*` files — never hardcode them in committed files.
 - When deleting a row that owns an S3 object, delete the DB row first, then
   the object (a leaked S3 object is harmless; a row pointing at deleted audio
-  is not). Swallow S3 delete errors.
+  is not). Swallow S3 delete errors. `scripts/reconcile-r2.mjs` is the backstop
+  that sweeps any objects leaked by a swallowed delete (dry-run by default;
+  lists the bucket, diffs against the four key columns, deletes only unreferenced
+  objects older than a grace window).
 - Mutations that change a playlist's contents bump `playlists.updatedAt`.
 - **Auth gotcha**: credentials provider + database sessions requires the
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
@@ -96,8 +99,11 @@ setup, and architecture rationale.
   hash of the copied audio stream, which tolerates the benign trailing-frame
   padding MP4 carries vs Ogg) and stores `audio/mp4`. Best-effort like loudness:
   any non-Opus input or failure falls back to storing the original.
-  `scripts/remux-ogg-to-mp4.mjs` backfilled the existing library (originals then
-  deleted). The upload route runs metadata/loudness/CLAP/remux concurrently, and
+  `scripts/remux-ogg-to-mp4.mjs` backfilled the existing library — the script
+  itself KEEPS each original (revert map in `remux-revert.jsonl`); the originals
+  were then deleted out-of-band, so none remain in the bucket (verified via
+  `scripts/reconcile-r2.mjs`, which finds zero of the 1468 mapped originals).
+  The upload route runs metadata/loudness/CLAP/remux concurrently, and
   every ffmpeg subprocess (loudness, CLAP decode, remux) goes through the shared
   `lib/ffmpeg-gate.ts` semaphore (~cores-1) so parallel steps within an upload —
   and across concurrent uploads — can't oversubscribe CPU/RAM.
