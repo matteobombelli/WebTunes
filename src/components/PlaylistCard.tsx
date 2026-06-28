@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { playlistCoverSrc } from "@/lib/api";
 import type { PlaylistDTO } from "@/lib/types";
-import CoverImage from "@/components/CoverImage";
+import PlaylistCover from "@/components/PlaylistCover";
 import { LockIcon } from "@/components/icons";
 
 export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
@@ -11,8 +10,10 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
       className="group relative block transition duration-200 ease-out hover:z-10 hover:scale-105"
     >
       <div className="overflow-hidden rounded-md">
-        <CoverImage
-          src={playlist.coverS3Key ? playlistCoverSrc(playlist.id) : null}
+        <PlaylistCover
+          playlistId={playlist.id}
+          coverS3Key={playlist.coverS3Key}
+          artTrackIds={playlist.coverTrackIds}
           iconSize={48}
           className="aspect-square w-full bg-surface-2"
         />

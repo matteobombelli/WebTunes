@@ -33,6 +33,8 @@ export type PlaylistDTO = {
   updatedAt: string;
   /** Present when the playlist belongs to a friend (non-own scope views). */
   ownerName?: string | null;
+  /** Up to 4 art-bearing track ids, in position order, for the no-cover mosaic. */
+  coverTrackIds?: string[];
 };
 
 export type FriendDTO = {

@@ -2,13 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { api, playlistCoverSrc } from "@/lib/api";
+import { api } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
-import CoverImage from "@/components/CoverImage";
+import PlaylistCover from "@/components/PlaylistCover";
 import { LockIcon, PencilIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
@@ -90,23 +90,24 @@ export default function PlaylistDetail({
     await api(`/playlists/${playlist.id}/tracks/${track.id}`, { method: "DELETE" });
   };
 
-  const moveTrack = async (track: TrackDTO, direction: -1 | 1) => {
-    const ids = tracks.map((t) => t.id);
-    const from = ids.indexOf(track.id);
-    const to = from + direction;
-    if (to < 0 || to >= ids.length) return;
-    [ids[from], ids[to]] = [ids[to], ids[from]];
-    await api(`/playlists/${playlist.id}/tracks`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trackIds: ids }),
-    });
-    router.refresh();
+  const reorderTracks = async (trackIds: string[]) => {
+    try {
+      await api(`/playlists/${playlist.id}/tracks`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackIds }),
+      });
+    } finally {
+      // Resync even on failure so a rejected reorder reverts the optimistic order.
+      router.refresh();
+    }
   };
 
   const cover = (
-    <CoverImage
-      src={playlist.coverS3Key ? playlistCoverSrc(playlist.id) : null}
+    <PlaylistCover
+      playlistId={playlist.id}
+      coverS3Key={playlist.coverS3Key}
+      artTrackIds={tracks.filter((t) => t.artS3Key).slice(0, 4).map((t) => t.id)}
       iconSize={56}
       className="h-28 w-28 rounded-lg bg-surface-2 sm:h-36 sm:w-36"
     />
@@ -248,7 +249,7 @@ export default function PlaylistDetail({
           selectable
           onRemove={removeTrack}
           removeLabel="Remove from playlist"
-          onMove={moveTrack}
+          onReorder={reorderTracks}
         />
       ) : (
         <TrackList tracks={tracks} showOwner selectable />

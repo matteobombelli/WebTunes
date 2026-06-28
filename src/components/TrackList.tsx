@@ -12,6 +12,25 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { api, playlistCoverSrc } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -20,9 +39,9 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
-  DownIcon,
   DownloadIcon,
   EllipsisIcon,
+  GripIcon,
   HeadphonesIcon,
   LockIcon,
   PencilIcon,
@@ -32,7 +51,6 @@ import {
   ShareIcon,
   SimilarIcon,
   TrashIcon,
-  UpIcon,
   XIcon,
 } from "@/components/icons";
 import CoverImage from "@/components/CoverImage";
@@ -352,11 +370,8 @@ export function AddToPlaylistMenu({
 
 type TrackActionsProps = {
   track: TrackDTO;
-  index: number;
-  viewLength: number;
   canEdit: boolean;
   canDelete: boolean;
-  onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
@@ -375,11 +390,8 @@ type TrackActionsProps = {
 // and the desktop three-dot dropdown.
 function TrackActions({
   track,
-  index,
-  viewLength,
   canEdit,
   canDelete,
-  onMove,
   onRemove,
   removeLabel,
   onEdit,
@@ -485,35 +497,6 @@ function TrackActions({
           <span>Edit details</span>
           <PencilIcon size={16} className="shrink-0 text-fg-muted" />
         </button>
-      )}
-      {onMove && (
-        <div className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5">
-          <span>Reorder</span>
-          <div className="flex gap-1">
-            <button
-              onClick={() => {
-                onMove(track, -1);
-                onClose();
-              }}
-              disabled={index <= 0}
-              aria-label="Move up"
-              className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white disabled:opacity-30"
-            >
-              <UpIcon size={16} />
-            </button>
-            <button
-              onClick={() => {
-                onMove(track, 1);
-                onClose();
-              }}
-              disabled={index === viewLength - 1}
-              aria-label="Move down"
-              className="rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white disabled:opacity-30"
-            >
-              <DownIcon size={16} />
-            </button>
-          </div>
-        </div>
       )}
       {(onRemove || (canDelete && !track.ownerName)) && (
         <button
@@ -661,8 +644,6 @@ export function CurrentTrackKebab({
     <>
       <TrackActionsMenu
         track={track}
-        index={0}
-        viewLength={1}
         canEdit
         canDelete
         playerContext
@@ -704,7 +685,6 @@ type TrackRowProps = {
   canDelete: boolean;
   playQueue: (tracks: TrackDTO[], startIndex: number) => void;
   onToggleSelect: (id: string) => void;
-  onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
@@ -727,7 +707,6 @@ const TrackRow = memo(function TrackRow({
   canDelete,
   playQueue,
   onToggleSelect,
-  onMove,
   onRemove,
   removeLabel,
   onEdit,
@@ -836,11 +815,8 @@ const TrackRow = memo(function TrackRow({
               shown on mobile (where it also hosts Play next / Add to queue). */}
           <TrackActionsMenu
             track={track}
-            index={index}
-            viewLength={view.length}
             canEdit={canEdit}
             canDelete={canDelete}
-            onMove={onMove}
             onRemove={onRemove}
             removeLabel={removeLabel}
             onEdit={onEdit}
@@ -852,6 +828,105 @@ const TrackRow = memo(function TrackRow({
   );
 });
 
+// A stripped sortable row for reorder mode (grip + art + title/artist only),
+// mirroring the player queue's QueueRow. The whole table's row chrome (play,
+// checkbox, kebab) is intentionally dropped here — reordering is the one job.
+const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: track.id });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0 : undefined,
+      }}
+      className="flex items-center gap-3 border-b border-border-subtle/60 py-2 pr-1"
+    >
+      <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-base font-medium sm:text-sm">{track.title}</p>
+        <p className="truncate text-xs text-fg-muted">{track.artist ?? "—"}</p>
+      </div>
+      <button
+        {...attributes}
+        {...listeners}
+        aria-label={`Reorder ${track.title}`}
+        title="Drag to reorder"
+        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white active:cursor-grabbing"
+      >
+        <GripIcon size={18} />
+      </button>
+    </li>
+  );
+});
+
+// The drag-and-drop list shown in reorder mode. Self-contained @dnd-kit context
+// (like QueuePanel) so the normal table stays untouched; all rows are mounted
+// (no windowing — playlists are small) so SortableContext can measure them.
+function ReorderableTrackList({
+  tracks,
+  onDragEnd,
+}: {
+  tracks: TrackDTO[];
+  onDragEnd: (e: DragEndEvent) => void;
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(
+    // A small activation distance keeps a tap distinct from a drag (and lets the
+    // page still scroll from a touch that starts on the grip).
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+  const items = useMemo(() => tracks.map((t) => t.id), [tracks]);
+  const active = activeId ? tracks.find((t) => t.id === activeId) ?? null : null;
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis]}
+      onDragStart={(e) => setActiveId(String(e.active.id))}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={(e) => {
+        setActiveId(null);
+        onDragEnd(e);
+      }}
+    >
+      <SortableContext items={items} strategy={verticalListSortingStrategy}>
+        <ul>
+          {tracks.map((t) => (
+            <ReorderRow key={t.id} track={t} />
+          ))}
+        </ul>
+      </SortableContext>
+      <DragOverlay>
+        {active ? (
+          <div className="flex items-center gap-3 rounded-md border border-border bg-surface-2 py-2 pl-1 pr-1 shadow-lg">
+            <TrackArt
+              track={active}
+              size="h-11 w-11 sm:h-9 sm:w-9"
+              iconSize={18}
+              thumb
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-base font-medium sm:text-sm">
+                {active.title}
+              </p>
+              <p className="truncate text-xs text-fg-muted">
+                {active.artist ?? "—"}
+              </p>
+            </div>
+            <span className="shrink-0 p-1 text-fg-subtle">
+              <GripIcon size={18} />
+            </span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
 export default function TrackList({
   tracks,
   showOwner = false,
@@ -861,7 +936,7 @@ export default function TrackList({
   sortable = false,
   onRemove,
   removeLabel,
-  onMove,
+  onReorder,
   onMutated,
 }: {
   tracks: TrackDTO[];
@@ -877,8 +952,8 @@ export default function TrackList({
   /** Custom remove handler (e.g. remove from playlist instead of deleting). */
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
-  /** Enables reorder arrows (playlist view). */
-  onMove?: (track: TrackDTO, direction: -1 | 1) => Promise<void>;
+  /** Enables a drag-to-reorder mode (playlist view); persists the new order. */
+  onReorder?: (trackIds: string[]) => Promise<void>;
   /** Called after a track is deleted or edited (for client-state parents). */
   onMutated?: () => void;
 }) {
@@ -892,6 +967,20 @@ export default function TrackList({
   // "Select…" button until the user turns this on (Clear turns it back off).
   const [selectMode, setSelectMode] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
+
+  // Drag-to-reorder is opt-in like select, and mutually exclusive with it. Only
+  // offered when a persist handler is wired and the list isn't user-sorted, so
+  // the visual order is the true server order the reorder PUT permutation wants.
+  const reorderable = !!onReorder && !sortable && tracks.length > 1;
+  const [reorderMode, setReorderMode] = useState(false);
+  // Optimistic order during a drag; re-synced whenever the parent passes a fresh
+  // `tracks` array (e.g. after router.refresh). Render-phase reset, like prevView.
+  const [order, setOrder] = useState(tracks);
+  const [prevTracks, setPrevTracks] = useState(tracks);
+  if (tracks !== prevTracks) {
+    setPrevTracks(tracks);
+    setOrder(tracks);
+  }
 
   // Display order; the play queue and bulk-add follow it.
   const view = useMemo(
@@ -983,6 +1072,22 @@ export default function TrackList({
     setSelected(new Set());
   }, []);
 
+  // Apply a drag reorder optimistically, then persist; the parent's
+  // router.refresh reconciles (and reverts the order on a rejected PUT).
+  const handleReorder = useCallback(
+    (e: DragEndEvent) => {
+      const { active, over } = e;
+      if (!over || active.id === over.id) return;
+      const from = order.findIndex((t) => t.id === active.id);
+      const to = order.findIndex((t) => t.id === over.id);
+      if (from === -1 || to === -1) return;
+      const next = arrayMove(order, from, to);
+      setOrder(next);
+      onReorder?.(next.map((t) => t.id));
+    },
+    [order, onReorder]
+  );
+
   const remove = useCallback(
     async (track: TrackDTO) => {
       if (
@@ -1051,23 +1156,43 @@ export default function TrackList({
 
   return (
     <>
-    {/* The h-11 slot is always reserved so toggling selection never shifts the
-        table; it cross-fades between the "Select…" toggle (default) and the
-        bulk-actions bar (select mode). */}
-    {selectable && (
+    {/* The h-11 slot is always reserved so toggling never shifts the table; it
+        cross-fades between three mutually-exclusive layers: the default toggles
+        (Select… / Reorder), the bulk-actions bar (select mode), and the reorder
+        bar (reorder mode). */}
+    {(selectable || reorderable) && (
       <div className="relative mb-3 h-11">
         <div
-          className={`absolute inset-0 flex items-center transition-opacity duration-150 ${
-            selectMode ? "pointer-events-none opacity-0" : "opacity-100"
+          className={`absolute inset-0 flex items-center gap-2 transition-opacity duration-150 ${
+            !selectMode && !reorderMode
+              ? "opacity-100"
+              : "pointer-events-none opacity-0"
           }`}
         >
-          <button
-            onClick={() => setSelectMode(true)}
-            className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
-          >
-            <CheckIcon size={16} />
-            Select…
-          </button>
+          {selectable && (
+            <button
+              onClick={() => {
+                setSelectMode(true);
+                setReorderMode(false);
+              }}
+              className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
+            >
+              <CheckIcon size={16} />
+              Select…
+            </button>
+          )}
+          {reorderable && (
+            <button
+              onClick={() => {
+                setReorderMode(true);
+                exitSelectMode();
+              }}
+              className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
+            >
+              <GripIcon size={16} />
+              Reorder
+            </button>
+          )}
         </div>
         <div
           className={`absolute inset-0 flex items-center gap-3 overflow-x-auto rounded-md border px-4 transition-opacity duration-150 ${
@@ -1152,8 +1277,29 @@ export default function TrackList({
             <span className="hidden md:inline">Clear</span>
           </button>
         </div>
+        <div
+          className={`absolute inset-0 flex items-center gap-3 rounded-md border px-4 transition-opacity duration-150 ${
+            reorderMode
+              ? "border-border bg-surface-2/60 opacity-100"
+              : "pointer-events-none border-transparent opacity-0"
+          }`}
+        >
+          <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
+            Drag to reorder
+          </span>
+          <button
+            onClick={() => setReorderMode(false)}
+            className="ml-auto flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-accent px-4 text-xs font-semibold text-white hover:bg-accent-hover"
+          >
+            Done
+          </button>
+        </div>
       </div>
     )}
+    {reorderMode ? (
+      <ReorderableTrackList tracks={order} onDragEnd={handleReorder} />
+    ) : (
+      <>
     {/* Fixed layout: column widths come from the <th>s, so long values
         truncate instead of resizing columns. */}
     <table className="w-full table-fixed text-left text-sm">
@@ -1239,7 +1385,6 @@ export default function TrackList({
             canDelete={canDelete}
             playQueue={playQueue}
             onToggleSelect={toggleSelected}
-            onMove={onMove}
             onRemove={onRemove}
             removeLabel={removeLabel}
             onEdit={setEditing}
@@ -1254,6 +1399,8 @@ export default function TrackList({
       <div ref={sentinelRef} aria-hidden className="py-4 text-center text-xs text-fg-subtle">
         Loading more…
       </div>
+    )}
+      </>
     )}
     <EditTrackDialog
       track={editing}
