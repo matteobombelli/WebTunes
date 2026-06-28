@@ -2,9 +2,9 @@ import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db, isUniqueViolation } from "@/db";
-import { trackEmbeddings, tracks } from "@/db/schema";
+import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { embedTrack } from "@/lib/clap-embedding";
+import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
@@ -99,15 +99,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // These four are independent — run them concurrently so the I/O-bound lrclib
-  // lookup inside metadata extraction overlaps the CPU-bound ffmpeg/ONNX work
-  // instead of running in series. Loudness and the CLAP embedding are best-effort
-  // (null on any failure, like art/lyrics); the re-mux returns null for anything
-  // that isn't Opus or that fails.
-  const [meta, loudnessLufs, embedding, remuxed] = await Promise.all([
+  // These three are independent — run them concurrently so the I/O-bound lrclib
+  // lookup inside metadata extraction overlaps the CPU-bound ffmpeg work instead
+  // of running in series. Loudness is best-effort (null on any failure, like
+  // art/lyrics); the re-mux returns null for anything that isn't Opus or fails.
+  // The CLAP embedding used to run here too, but it's the slowest step, so it's
+  // deferred to a background queue (enqueueEmbedding, after the row exists).
+  const [meta, loudnessLufs, remuxed] = await Promise.all([
     extractTrackMetadata(buffer, file.type, file.name),
     analyzeLoudnessLufs(buffer, ext),
-    embedTrack(buffer, ext),
     // iOS Safari can't play Opus-in-Ogg; losslessly re-mux Opus to MP4.
     remuxOpusToMp4(buffer, ext, file.type),
   ]);
@@ -202,16 +202,11 @@ export async function POST(req: NextRequest) {
         lyricsSource: meta.lyricsSource,
       })
       .returning();
-    // Store the embedding in its 1:1 side table, best-effort: a missing row
-    // just means this track won't seed/appear in "play similar" until the
-    // backfill script runs — it must never fail the upload.
-    if (embedding) {
-      try {
-        await db.insert(trackEmbeddings).values({ trackId, embedding });
-      } catch {
-        // harmless; leave the track without an embedding
-      }
-    }
+    // Compute the CLAP embedding in the background (the slowest upload step),
+    // now that the row + S3 object exist. Best-effort: a missing row just means
+    // this track won't seed/appear in "play similar" until the worker (or the
+    // backfill script) fills it in — it must never fail or delay the upload.
+    enqueueEmbedding({ trackId, s3Key, ext: audioExt });
     return NextResponse.json(toTrackDTO(track), { status: 201 });
   } catch (err) {
     // Concurrent upload of the same file slipped past the dedupe check.

@@ -36,6 +36,12 @@ export async function deleteObject(key: string) {
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
+/** Download an object's full bytes into a Buffer (server-side use only). */
+export async function getObjectBytes(key: string): Promise<Buffer> {
+  const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  return Buffer.from(await obj.Body!.transformToByteArray());
+}
+
 const PRESIGN_TTL_SEC = 3600;
 // Reuse a freshly-signed URL for up to this long so repeat list loads (e.g. the
 // Playlists grid's covers) return the *same* URL and the browser serves the
