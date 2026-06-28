@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
@@ -9,8 +10,6 @@ import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import PlayerProgress from "@/components/PlayerProgress";
-import QueuePanel from "@/components/QueuePanel";
-import NowPlayingScreen from "@/components/NowPlayingScreen";
 import { AddToPlaylistMenu } from "@/components/TrackList";
 import TrackArt from "@/components/TrackArt";
 import {
@@ -70,6 +69,18 @@ function logAudio(event: string, detail?: string) {
     // localStorage full/unavailable — in-memory buffer still holds the line.
   }
 }
+
+// The queue + now-playing overlays pull in @dnd-kit (~28 KB gz). Load that chunk
+// off every authenticated page's initial JS by importing them lazily. They're
+// client-only (closed = display:none / null), so ssr:false drops nothing
+// visible; PlayerBar mounts them shortly after first paint (see `overlaysReady`)
+// so the queue's drag tree still pre-warms before the user first opens it.
+const QueuePanel = dynamic(() => import("@/components/QueuePanel"), {
+  ssr: false,
+});
+const NowPlayingScreen = dynamic(() => import("@/components/NowPlayingScreen"), {
+  ssr: false,
+});
 
 /**
  * Always-mounted, render-nothing helper that warms the browser image cache for
@@ -180,13 +191,44 @@ export default function PlayerBar({
   // and the queue sheet it opens.
   const [npOpen, setNpOpen] = useState(false);
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  // Gates the lazy queue/now-playing chunk (see the dynamic imports above):
+  // mount the overlays once the page is idle so the queue's drag tree pre-warms
+  // before first open — or immediately if the user opens one before idle fires.
+  const [overlaysReady, setOverlaysReady] = useState(false);
   // Stable identities so transport-state changes don't re-render the memoized
   // QueuePanel through a fresh onClose each render.
   const closeQueue = useCallback(() => setQueueOpen(false), [setQueueOpen]);
   const closeNp = useCallback(() => setNpOpen(false), []);
-  const openNp = useCallback(() => setNpOpen(true), []);
-  const openMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
+  // Opening an overlay latches `overlaysReady` (so its chunk loads now and it
+  // stays mounted through the close animation) in addition to flipping its own
+  // open flag.
+  const toggleQueue = useCallback(() => {
+    setOverlaysReady(true);
+    setQueueOpen((o) => !o);
+  }, []);
+  const openNp = useCallback(() => {
+    setOverlaysReady(true);
+    setNpOpen(true);
+  }, []);
+  const openMobileQueue = useCallback(() => {
+    setOverlaysReady(true);
+    setMobileQueueOpen(true);
+  }, []);
   const closeMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
+
+  // Pre-mount the overlays once the page goes idle so the queue's drag tree is
+  // already built before the user first opens it (only sets state from the
+  // deferred callbacks, never synchronously in the effect body).
+  useEffect(() => {
+    if (overlaysReady) return;
+    const ric = window.requestIdleCallback;
+    if (ric) {
+      const id = ric(() => setOverlaysReady(true), { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = setTimeout(() => setOverlaysReady(true), 1200);
+    return () => clearTimeout(t);
+  }, [overlaysReady]);
 
   // Keep the "play similar" radio's queue topped up while it's active.
   usePlaySimilarRefill();
@@ -667,18 +709,22 @@ export default function PlayerBar({
     <div className="relative border-t border-border-subtle bg-surface-1">
       <QueueArtPreloader />
       <NextTrackPrefetcher />
-      <QueuePanel open={queueOpen} onClose={closeQueue} variant="desktop" />
-      <NowPlayingScreen
-        open={npOpen}
-        onClose={closeNp}
-        onOpenQueue={openMobileQueue}
-        onPlaySimilar={handlePlaySimilar}
-      />
-      <QueuePanel
-        open={mobileQueueOpen}
-        onClose={closeMobileQueue}
-        variant="mobile"
-      />
+      {overlaysReady && (
+        <>
+          <QueuePanel open={queueOpen} onClose={closeQueue} variant="desktop" />
+          <NowPlayingScreen
+            open={npOpen}
+            onClose={closeNp}
+            onOpenQueue={openMobileQueue}
+            onPlaySimilar={handlePlaySimilar}
+          />
+          <QueuePanel
+            open={mobileQueueOpen}
+            onClose={closeMobileQueue}
+            variant="mobile"
+          />
+        </>
+      )}
       <audio
         ref={audioRef}
         onPlaying={(e) => {
@@ -878,7 +924,7 @@ export default function PlayerBar({
             triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
           />
           {transportButton(
-            () => setQueueOpen((o) => !o),
+            toggleQueue,
             queueOpen ? "Hide queue" : "Show queue",
             <QueueIcon size={16} />,
             `h-10 w-10 hover:bg-surface-2 ${
