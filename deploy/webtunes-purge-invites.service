@@ -1,0 +1,11 @@
+[Unit]
+Description=WebTunes purge of expired unused invite links
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=debian
+WorkingDirectory=/home/debian/WebTunes
+# Login shell so node resolves on PATH, exactly like webtunes.service.
+ExecStart=/bin/sh -lc 'node scripts/purge-expired-invites.mjs'

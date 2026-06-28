@@ -1,0 +1,10 @@
+[Unit]
+Description=Purge expired WebTunes invite links daily
+
+[Timer]
+OnCalendar=*-*-* 04:35:00
+# Fire on next boot if the box was down at the scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
