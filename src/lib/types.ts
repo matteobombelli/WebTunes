@@ -47,3 +47,11 @@ export type FriendRequestDTO = {
   user: FriendDTO;
   createdAt: string;
 };
+
+export type InviteDTO = {
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+  /** Display name of whoever redeemed this link, or null if still unused. */
+  usedByName: string | null;
+};

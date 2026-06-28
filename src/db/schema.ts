@@ -247,6 +247,36 @@ export const friendships = pgTable(
   ]
 );
 
+// Invite links for the (now invite-only) registration. An unguessable plaintext
+// capability token: anyone holding an unused, unexpired one can create exactly
+// ONE account at /register?invite=<token>, which is then auto-friended with the
+// inviter. Multiple concurrent links per user (no UNIQUE(inviter_id)); each is
+// single-use (used_by_user_id set on registration, then kept as history so the
+// inviter sees "used by <name>"). Plaintext on purpose — re-displayable, low
+// sensitivity, like track_shares (unlike the hashed auth tokens). Auto-expires
+// after 7 days. See lib/invites.ts.
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inviterId: uuid("inviter_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    // NULL = unused/available; set to the new user's id when the link is redeemed.
+    usedByUserId: uuid("used_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    usedAt: timestamp("used_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  },
+  (t) => [
+    index("invites_inviter_id_idx").on(t.inviterId),
+    index("invites_expires_at_idx").on(t.expiresAt),
+  ]
+);
+
 export const playlists = pgTable("playlists", {
   id: uuid("id").primaryKey().defaultRandom(),
   ownerId: uuid("owner_id")
@@ -281,3 +311,4 @@ export type Playlist = typeof playlists.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Listen = typeof listens.$inferSelect;
+export type Invite = typeof invites.$inferSelect;

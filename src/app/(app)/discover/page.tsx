@@ -6,6 +6,7 @@ import {
   randomSeedTracks,
 } from "@/lib/discover";
 import { friendsOf, pendingRequestsFor } from "@/lib/friends";
+import { INVITE_BLOCKED_EMAILS } from "@/lib/invites";
 import { findSimilarToCentroid } from "@/lib/similar";
 import { getUserSettings } from "@/lib/users";
 import DiscoverBrowser from "@/components/DiscoverBrowser";
@@ -36,6 +37,7 @@ export default async function DiscoverPage() {
         sections={{ top, recommended, random, friendsTop, newTracks }}
         friends={friends}
         requests={requests}
+        canInvite={!INVITE_BLOCKED_EMAILS.has(user.email)}
       />
     </div>
   );

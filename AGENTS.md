@@ -87,6 +87,29 @@ setup, and architecture rationale.
 - **Auth gotcha**: credentials provider + database sessions requires the
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
+- Invite-only registration: there is NO open sign-up path. Account creation
+  lives ONLY in `registerInvitedUser` (`lib/invites.ts`) — a single transaction
+  that takes a `pg_advisory_xact_lock`, enforces the `MAX_USERS = 100` total cap
+  (counts demo accounts), atomically consumes a single-use invite (`UPDATE …
+  WHERE used_at IS NULL AND expires_at > now()`), creates the user, and inserts
+  an `accepted` `friendships` row so the invitee is **auto-friended** with the
+  inviter. BOTH entry points go through it: the web `registerAction`
+  (`(auth)/actions.ts`) and the mobile `POST /api/register` (which now requires
+  an `invite` field in its JSON body — keep it gated). The `register` page is a
+  server component that gates on `getInviteByToken` before rendering the form.
+  Invite tokens are plaintext capability links like `track_shares` (re-displayable
+  on the Discover → Friends → **Invite** tab), multiple concurrent per user, each
+  single-use, 7-day expiry (`invites` table; `used_at` is the consumed flag — set
+  before `used_by_user_id` so it survives a redeemer deletion). `INVITE_BLOCKED_
+  EMAILS` (the two demo accounts) can't create invites (`POST /api/invites` 403 +
+  the tab hides the button). Expired-unused rows are dead clutter (a purge
+  script/timer mirroring `purge-expired-shares` is a TODO; negligible at ≤100).
+- Friend-request notifications: incoming pending requests light a red
+  `NotificationDot` breadcrumb (Discover nav in `Sidebar`/`MobileNav` ← layout
+  fetch, the Friends `SegmentedControl` segment, the Requests tab, the Incoming
+  heading). All server-rendered from `pendingRequestsFor` (`cache()`-deduped
+  across the layout + discover page) — refreshes on navigation/`router.refresh`,
+  no polling.
 - Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
 - Public track sharing: anyone who can ACCESS a track (its owner, or a friend
   for a non-private track — the `POST /api/tracks/[id]/shares` route gates on
@@ -128,16 +151,23 @@ setup, and architecture rationale.
   every ffmpeg subprocess (loudness, CLAP decode, remux) goes through the shared
   `lib/ffmpeg-gate.ts` semaphore (~cores-1) so parallel steps within an upload —
   and across concurrent uploads — can't oversubscribe CPU/RAM.
-- "Play similar" radio: on upload `lib/clap-embedding.ts` decodes audio with
-  ffmpeg and runs the CLAP audio encoder (`@huggingface/transformers`, ONNX,
-  marked `serverExternalPackages`; weights cached in gitignored
-  `.transformers-cache/`) into a 512-d L2-normalized vector stored in the
-  `track_embeddings` 1:1 side table (kept off the `tracks` row so it never loads
-  in hot list/search paths). Best-effort like loudness — failure stores no row.
-  `POST /api/tracks/[id]/similar` (body `{ limit, excludeIds }`) ranks accessible
-  tracks by cosine (brute-force JS, fine at personal scale) with Gumbel-top-k
-  sampling whose noise scale comes from the viewer's `users.similar_variation`
-  (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`; 4 = deterministic cosine).
+- "Play similar" radio: CLAP embeddings are computed in the background, not on
+  the upload request — the route enqueues to `lib/clap-queue.ts` (~2 workers) and
+  returns, since the embedding is the slowest upload step. Each worker re-fetches
+  the stored bytes from S3 (so an upload burst can't pile audio buffers in RAM)
+  and runs `lib/clap-embedding.ts`, which decodes with ffmpeg and runs the CLAP
+  audio encoder (`@huggingface/transformers`, ONNX, marked
+  `serverExternalPackages`; weights cached in gitignored `.transformers-cache/`)
+  into a 512-d L2-normalized vector stored in the `track_embeddings` 1:1 side
+  table (kept off the `tracks` row so it never loads in hot list/search paths).
+  Best-effort like loudness — failure stores no row (the backfill script
+  recovers it). `POST /api/tracks/[id]/similar` (body `{ limit, excludeIds }`)
+  ranks accessible tracks by cosine in-DB via pgvector — the `embedding` column
+  is `vector(512)` with an HNSW `vector_cosine_ops` index, and `lib/similar.ts`
+  pulls a 200-row candidate pool (`embedding <=> seed`, no vectors crossing the
+  wire), then Gumbel-top-k samples that pool in JS, noise scale from the viewer's
+  `users.similar_variation` (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`;
+  4 = deterministic cosine).
   The PlayerBar toggle seeds an auto-refilling queue; the client sends
   already-served ids in `excludeIds` (POST body, not a query string) to avoid
   repeats, since sampling isn't deterministic. With `users.similar_drift` (the

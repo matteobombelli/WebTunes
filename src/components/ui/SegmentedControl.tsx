@@ -2,11 +2,14 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "./cn";
+import { NotificationDot } from "./NotificationDot";
 
 type Option<T extends string> = {
   value: T;
   label: string;
   icon?: React.ReactNode;
+  /** Show a red notification dot on this option. */
+  dot?: boolean;
 };
 
 /**
@@ -81,6 +84,7 @@ export function SegmentedControl<T extends string>({
           <span className={cn(o.icon ? "hidden sm:inline" : undefined)}>
             {o.label}
           </span>
+          {o.dot && <NotificationDot />}
         </button>
       ))}
     </div>

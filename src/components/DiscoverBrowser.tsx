@@ -23,12 +23,15 @@ export default function DiscoverBrowser({
   sections,
   friends,
   requests,
+  canInvite,
 }: {
   sections: Sections;
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
+  canInvite: boolean;
 }) {
   const [tab, setTab] = useState<"discover" | "friends">("discover");
+  const hasIncoming = requests.some((r) => r.direction === "incoming");
 
   return (
     <>
@@ -50,6 +53,7 @@ export default function DiscoverBrowser({
               value: "friends",
               label: "Friends",
               icon: <UsersIcon className="h-6 w-6 sm:h-4 sm:w-4" />,
+              dot: hasIncoming,
             },
           ]}
         />
@@ -80,7 +84,11 @@ export default function DiscoverBrowser({
           />
         </div>
       ) : (
-        <FriendsPanel friends={friends} requests={requests} />
+        <FriendsPanel
+          friends={friends}
+          requests={requests}
+          canInvite={canInvite}
+        />
       )}
     </>
   );

@@ -77,10 +77,7 @@ export default function LoginPage() {
         {pending ? "Signing in…" : "Sign in"}
       </Button>
       <p className="text-center text-sm text-fg-muted">
-        No account?{" "}
-        <Link href="/register" className="text-accent-bright hover:underline">
-          Register
-        </Link>
+        No account? Registration is currently invite-only
       </p>
       <p className="-mt-2 text-center text-sm">
         <Link

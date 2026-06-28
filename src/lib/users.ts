@@ -1,8 +1,7 @@
-import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { cache } from "react";
 import { z } from "zod";
-import { db, isUniqueViolation } from "@/db";
+import { db } from "@/db";
 import { users } from "@/db/schema";
 
 // Shared so the register form and the in-app rename (PATCH /api/account) can't
@@ -17,35 +16,8 @@ export const registerSchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export type CreateUserResult =
-  | { user: { id: string; email: string; name: string | null } }
-  | { error: string };
-
-export async function createUser(
-  input: RegisterInput
-): Promise<CreateUserResult> {
-  const [existing] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, input.email));
-  if (existing) {
-    return { error: "An account with that email already exists" };
-  }
-  const passwordHash = await hash(input.password, 12);
-  try {
-    const [user] = await db
-      .insert(users)
-      .values({ name: input.name, email: input.email, passwordHash })
-      .returning({ id: users.id, email: users.email, name: users.name });
-    return { user };
-  } catch (err) {
-    // Concurrent registration slipped past the existence check.
-    if (isUniqueViolation(err)) {
-      return { error: "An account with that email already exists" };
-    }
-    throw err;
-  }
-}
+// Account creation lives in lib/invites.ts (registerInvitedUser): registration
+// is invite-only, so there's no open createUser path anymore.
 
 /** Update the signed-in user's display name; returns the stored value. */
 export async function updateDisplayName(

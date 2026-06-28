@@ -12,6 +12,7 @@ import {
   MusicIcon,
   SettingsIcon,
 } from "@/components/icons";
+import { NotificationDot } from "@/components/ui/NotificationDot";
 
 const NAV = [
   { href: "/discover", label: "Discover", Icon: CompassIcon },
@@ -23,9 +24,11 @@ const NAV = [
 export default function Sidebar({
   userName,
   userEmail,
+  hasIncomingRequests = false,
 }: {
   userName: string | null;
   userEmail: string;
+  hasIncomingRequests?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -53,6 +56,9 @@ export default function Sidebar({
             >
               <item.Icon size={16} />
               {item.label}
+              {item.href === "/discover" && hasIncomingRequests && (
+                <NotificationDot className="ml-auto" />
+              )}
             </Link>
           );
         })}

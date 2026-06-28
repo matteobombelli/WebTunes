@@ -12,6 +12,7 @@ import {
   MusicIcon,
   SettingsIcon,
 } from "@/components/icons";
+import { NotificationDot } from "@/components/ui/NotificationDot";
 
 const NAV = [
   { href: "/discover", label: "Discover", Icon: CompassIcon },
@@ -21,7 +22,11 @@ const NAV = [
 ];
 
 /** Bottom tab bar, shown below md. */
-export function MobileNav() {
+export function MobileNav({
+  hasIncomingRequests = false,
+}: {
+  hasIncomingRequests?: boolean;
+}) {
   const pathname = usePathname();
   return (
     <nav className="flex border-t border-border-subtle bg-surface-1 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] md:hidden">
@@ -37,7 +42,12 @@ export function MobileNav() {
               active ? "text-accent-bright" : "text-fg-muted"
             }`}
           >
-            <Icon size={26} />
+            <span className="relative flex items-center justify-center">
+              <Icon size={26} />
+              {href === "/discover" && hasIncomingRequests && (
+                <NotificationDot overlay />
+              )}
+            </span>
           </Link>
         );
       })}

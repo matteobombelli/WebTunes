@@ -5,8 +5,9 @@ import { headers } from "next/headers";
 import { signIn, signOut } from "@/lib/auth";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getClientIp } from "@/lib/client-ip";
+import { registerInvitedUser } from "@/lib/invites";
 import { rateLimit } from "@/lib/rate-limit";
-import { createUser, registerSchema } from "@/lib/users";
+import { registerSchema } from "@/lib/users";
 import { sendVerificationEmail } from "@/lib/verification";
 
 // `notice` carries non-error feedback (e.g. "check your email");
@@ -53,6 +54,12 @@ export async function registerAction(
     return { error: "Too many sign-up attempts. Please try again later." };
   }
 
+  // Registration is invite-only: the token is the authorization. The page only
+  // renders the form for a valid token, but re-validate here (the form post is
+  // the real trust boundary) inside registerInvitedUser's transaction.
+  const token = String(formData.get("invite") ?? "");
+  if (!token) return { error: "Registration is invite-only." };
+
   const parsed = registerSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -62,7 +69,7 @@ export async function registerAction(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const result = await createUser(parsed.data);
+  const result = await registerInvitedUser({ ...parsed.data, token });
   if ("error" in result) return { error: result.error };
 
   // Send the verification link; don't sign in until the email is confirmed.

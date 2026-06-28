@@ -5,23 +5,27 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
+import InvitePanel from "@/components/InvitePanel";
 import { XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cardClass } from "@/components/ui/Card";
+import { NotificationDot } from "@/components/ui/NotificationDot";
 
 export default function FriendsPanel({
   friends,
   requests,
+  canInvite,
 }: {
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
+  canInvite: boolean;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"friends" | "requests">("friends");
+  const [tab, setTab] = useState<"friends" | "requests" | "invite">("friends");
 
   const incoming = requests.filter((r) => r.direction === "incoming");
   const outgoing = requests.filter((r) => r.direction === "outgoing");
@@ -67,18 +71,20 @@ export default function FriendsPanel({
           [
             ["friends", `Friends (${friends.length})`],
             ["requests", `Requests${incoming.length ? ` (${incoming.length})` : ""}`],
+            ["invite", "Invite"],
           ] as const
         ).map(([value, label]) => (
           <button
             key={value}
             onClick={() => setTab(value)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium ${
               tab === value
                 ? "border-accent text-white"
                 : "border-transparent text-fg-muted hover:text-fg"
             }`}
           >
             {label}
+            {value === "requests" && incoming.length > 0 && <NotificationDot />}
           </button>
         ))}
       </div>
@@ -108,8 +114,9 @@ export default function FriendsPanel({
 
       {tab === "requests" && incoming.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase text-fg-subtle">
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase text-fg-subtle">
             Incoming requests
+            <NotificationDot />
           </h2>
           <ul className="flex flex-col gap-2">
             {incoming.map((r) => (
@@ -162,6 +169,8 @@ export default function FriendsPanel({
           </ul>
         </section>
       )}
+
+      {tab === "invite" && <InvitePanel canInvite={canInvite} />}
 
       {tab === "friends" && (
       <section>

@@ -1,24 +1,23 @@
-"use client";
-
-import { useActionState } from "react";
 import Link from "next/link";
-import { registerAction, type AuthFormState } from "../actions";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { getInviteByToken } from "@/lib/invites";
+import RegisterForm from "./RegisterForm";
 
-const initialState: AuthFormState = { error: null };
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string }>;
+}) {
+  const { invite } = await searchParams;
+  const valid = invite ? await getInviteByToken(invite) : null;
 
-export default function RegisterPage() {
-  const [state, formAction, pending] = useActionState(
-    registerAction,
-    initialState
-  );
-
-  if (state.notice) {
+  if (!invite || !valid) {
     return (
       <div className="flex flex-col gap-4 text-sm">
-        <h2 className="font-display text-lg font-semibold">Check your email</h2>
-        <p className="text-fg-muted">{state.notice}</p>
+        <h2 className="font-display text-lg font-semibold">Invite-only</h2>
+        <p className="text-fg-muted">
+          Registration is currently invite-only. Ask a friend on WebTunes to send
+          you an invite link.
+        </p>
         <Link href="/login" className="text-accent-bright hover:underline">
           Back to sign in
         </Link>
@@ -26,35 +25,5 @@ export default function RegisterPage() {
     );
   }
 
-  return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="font-display text-lg font-semibold">Create account</h2>
-      <Input name="name" type="text" required placeholder="Name" autoComplete="name" />
-      <Input
-        name="email"
-        type="email"
-        required
-        placeholder="Email"
-        autoComplete="email"
-      />
-      <Input
-        name="password"
-        type="password"
-        required
-        minLength={8}
-        placeholder="Password (8+ characters)"
-        autoComplete="new-password"
-      />
-      {state.error && <p className="text-sm text-red-400">{state.error}</p>}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create account"}
-      </Button>
-      <p className="text-center text-sm text-fg-muted">
-        Have an account?{" "}
-        <Link href="/login" className="text-accent-bright hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </form>
-  );
+  return <RegisterForm token={invite} inviterName={valid.inviterName} />;
 }

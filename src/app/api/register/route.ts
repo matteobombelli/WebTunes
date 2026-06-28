@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getClientIp } from "@/lib/client-ip";
+import { registerInvitedUser } from "@/lib/invites";
 import { rateLimit } from "@/lib/rate-limit";
-import { createUser, registerSchema } from "@/lib/users";
+import { registerSchema } from "@/lib/users";
 import { sendVerificationEmail } from "@/lib/verification";
 
 const REGISTER_IP_LIMIT = 5;
@@ -32,9 +33,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await createUser(parsed.data);
+  // Registration is invite-only — the JSON body must carry an invite token.
+  const invite =
+    body && typeof body === "object" && "invite" in body
+      ? String((body as Record<string, unknown>).invite ?? "")
+      : "";
+  if (!invite) {
+    return NextResponse.json(
+      { error: "An invite link is required to register." },
+      { status: 400 }
+    );
+  }
+
+  const result = await registerInvitedUser({ ...parsed.data, token: invite });
   if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: 409 });
+    // Email already taken → 409; full / invalid invite → 403.
+    const status = result.error.includes("already exists") ? 409 : 403;
+    return NextResponse.json({ error: result.error }, { status });
   }
 
   // Email verification is required before the account can sign in.
