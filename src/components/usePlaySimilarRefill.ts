@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { fetchSimilarTracks } from "@/lib/api";
+import { pushRadioHistory } from "@/lib/radio-history";
 import { usePlayerStore } from "@/stores/player";
 
 // Keep the "play similar" radio topped up: when the queue gets within
@@ -17,31 +18,40 @@ export function usePlaySimilarRefill() {
   const index = usePlayerStore((s) => s.index);
 
   const fetchingRef = useRef(false);
-  // Once the seed's similar pool runs dry, stop hammering the API; the radio
-  // just plays out the remaining queue and ends.
+  // Once a seed's similar pool runs dry, stop hammering the API for that seed.
+  // Keyed to the seed actually used (not the frozen original): in drift mode the
+  // seed changes as the queue advances, so an exhausted seed only pauses refills
+  // until a fresher track becomes current. In frozen mode the seed never
+  // changes, so the radio just plays out the remaining queue and ends.
   const exhaustedSeedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!playSimilar || !similarSeedId || index < 0) return;
-    if (exhaustedSeedRef.current === similarSeedId) return;
     if (fetchingRef.current) return;
     const upcoming = queueLength - index - 1;
     if (upcoming > REFILL_THRESHOLD) return;
 
     const st = usePlayerStore.getState();
-    fetchingRef.current = true;
     // Drift: rank each refill against the track playing now so the radio
     // evolves; otherwise stay anchored to the original frozen seed.
     const seedId = st.similarDrift
       ? st.queue[st.index]?.track.id ?? similarSeedId
       : similarSeedId;
+    // Skip only if *this* seed is the one that ran dry — a different drift seed
+    // gets a fresh chance.
+    if (exhaustedSeedRef.current === seedId) return;
+
+    fetchingRef.current = true;
     fetchSimilarTracks(seedId, st.similarSeen, REFILL_COUNT)
       .then((tracks) => {
         // The user may have switched modes/seed while the fetch was in flight.
         const s = usePlayerStore.getState();
         if (!s.playSimilar || s.similarSeedId !== similarSeedId) return;
-        if (tracks.length > 0) s.advanceSimilar(tracks);
-        if (tracks.length < REFILL_COUNT) exhaustedSeedRef.current = similarSeedId;
+        if (tracks.length > 0) {
+          s.advanceSimilar(tracks);
+          pushRadioHistory(tracks.map((t) => t.id));
+        }
+        if (tracks.length < REFILL_COUNT) exhaustedSeedRef.current = seedId;
       })
       .catch(() => {
         // Transient failure (offline, etc.); a later queue change retries.

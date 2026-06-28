@@ -7,6 +7,7 @@ import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { BASE_PATH } from "@/lib/base-path";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
+import { loadRadioHistory, pushRadioHistory } from "@/lib/radio-history";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import PlayerProgress from "@/components/PlayerProgress";
@@ -244,11 +245,19 @@ export default function PlayerBar({
     }
     if (store.index < 0) return;
     const seed = store.queue[store.index].track;
+    // Pre-seed exclusions with recently-served tracks so a restart doesn't
+    // replay the same neighbourhood (similarSeen is otherwise session-only).
+    const history = loadRadioHistory();
     try {
-      const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
+      const similar = await fetchSimilarTracks(
+        seed.id,
+        [seed.id, ...history],
+        10
+      );
       // No embedding for the seed yet (or nothing similar) — stay off.
       if (similar.length === 0) return;
-      usePlayerStore.getState().startSimilar(seed.id, similar);
+      usePlayerStore.getState().startSimilar(seed.id, similar, history);
+      pushRadioHistory(similar.map((t) => t.id));
     } catch {
       // Leave the mode off on failure.
     }

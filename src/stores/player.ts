@@ -77,7 +77,11 @@ type PlayerState = {
   toggleShuffle: () => void;
   /** Enable "play similar": keep the current track playing, replace the rest of
    *  the queue with the first batch of similar tracks, freeze the seed. */
-  startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
+  startSimilar: (
+    seedId: string,
+    tracks: TrackDTO[],
+    initialSeen?: string[]
+  ) => void;
   /** Append the next refill batch and advance the pagination offset. */
   advanceSimilar: (tracks: TrackDTO[]) => void;
   /** Disable "play similar" (leaves the current queue intact). */
@@ -315,7 +319,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  startSimilar: (seedId, tracks) => {
+  startSimilar: (seedId, tracks, initialSeen) => {
     const s = get();
     if (s.index < 0) return;
     // Keep the current track playing (don't reset isPlaying/currentTime); drop
@@ -327,7 +331,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       unshuffledQueue: null,
       playSimilar: true,
       similarSeedId: seedId,
-      similarSeen: [seedId, ...tracks.map((t) => t.id)],
+      similarSeen: [seedId, ...(initialSeen ?? []), ...tracks.map((t) => t.id)],
     });
   },
 
