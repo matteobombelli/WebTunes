@@ -12,6 +12,11 @@ import { findCoverArt } from "@/lib/metadata-lookup";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import {
+  makeThumbnail,
+  THUMBNAIL_CONTENT_TYPE,
+  thumbnailS3Key,
+} from "@/lib/thumbnail";
+import {
   listAccessibleTracks,
   listFriendsTracks,
   listOwnTracks,
@@ -144,6 +149,7 @@ export async function POST(req: NextRequest) {
   // Upload audio and cover art together. Art is best-effort and must never fail
   // the track — swallow its errors and drop the key so the row isn't orphaned.
   let artS3Key: string | null = null;
+  let artThumbS3Key: string | null = null;
   const uploads: Promise<unknown>[] = [
     uploadObject(s3Key, audioBody, storedType ?? undefined),
   ];
@@ -154,8 +160,26 @@ export async function POST(req: NextRequest) {
         artS3Key = null; // leave the track artless rather than orphan a row
       })
     );
+    // Best-effort downscaled thumbnail for <=64px list/queue/mini-bar rows;
+    // failure just means those rows fall back to the full art via the /art route.
+    const thumbKey = thumbnailS3Key(user.id, trackId);
+    uploads.push(
+      makeThumbnail(cover.body, cover.ext)
+        .then((thumb) =>
+          thumb
+            ? uploadObject(thumbKey, thumb, THUMBNAIL_CONTENT_TYPE).then(() => {
+                artThumbS3Key = thumbKey;
+              })
+            : undefined
+        )
+        .catch(() => {
+          artThumbS3Key = null;
+        })
+    );
   }
   await Promise.all(uploads);
+  // Don't reference a thumb for an artless track (if the full-art upload failed).
+  if (!artS3Key) artThumbS3Key = null;
 
   try {
     const [track] = await db
@@ -170,6 +194,7 @@ export async function POST(req: NextRequest) {
         loudnessLufs,
         s3Key,
         artS3Key,
+        artThumbS3Key,
         mimeType: storedType,
         fileSize: audioBody.length,
         contentHash,
@@ -194,6 +219,7 @@ export async function POST(req: NextRequest) {
       try {
         await deleteObject(s3Key);
         if (artS3Key) await deleteObject(artS3Key);
+        if (artThumbS3Key) await deleteObject(artThumbS3Key);
       } catch {
         // Orphaned object is harmless.
       }

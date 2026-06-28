@@ -111,6 +111,11 @@ export const tracks = pgTable(
     s3Key: text("s3_key").notNull().unique(),
     // S3 key of embedded cover art extracted on upload; null when none.
     artS3Key: text("art_s3_key"),
+    // S3 key of a downscaled JPEG thumbnail of the cover (lib/thumbnail.ts),
+    // served to <=64px list/queue/mini-bar rows so they don't pull the full art;
+    // null when none/failed. The art route falls back to the full art, so this
+    // is purely an optimization.
+    artThumbS3Key: text("art_thumb_s3_key"),
     mimeType: text("mime_type"),
     fileSize: integer("file_size"),
     // sha256 of the file bytes; null for tracks uploaded before dedupe.

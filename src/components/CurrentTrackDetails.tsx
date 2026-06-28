@@ -75,7 +75,7 @@ export default function CurrentTrackDetails({
   if (row) {
     return (
       <div className="flex min-w-0 items-center gap-3">
-        <TrackArt track={track} size={artSize} iconSize={iconSize} />
+        <TrackArt track={track} size={artSize} iconSize={iconSize} thumb />
         <div className="min-w-0 flex-1">{text}</div>
         {trailing}
       </div>

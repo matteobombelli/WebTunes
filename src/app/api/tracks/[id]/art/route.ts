@@ -6,6 +6,11 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
+import {
+  makeThumbnail,
+  THUMBNAIL_CONTENT_TYPE,
+  thumbnailS3Key,
+} from "@/lib/thumbnail";
 import { toTrackDTO } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
 
@@ -14,7 +19,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // Stable per-track cover-art URL (mirrors the stream route): the client keys
 // on this URL while the presigned redirect target rotates per request.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await requireUser();
@@ -30,6 +35,7 @@ export async function GET(
       ownerId: tracks.ownerId,
       isPrivate: tracks.isPrivate,
       artS3Key: tracks.artS3Key,
+      artThumbS3Key: tracks.artThumbS3Key,
     })
     .from(tracks)
     .where(eq(tracks.id, id));
@@ -40,7 +46,13 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { url } = await getPresignedGetUrl(track.artS3Key);
+  // `?v=thumb` serves the downscaled thumbnail when one exists, else falls back
+  // to the full art (so pre-feature rows and failed thumbs still render).
+  const key =
+    req.nextUrl.searchParams.get("v") === "thumb" && track.artThumbS3Key
+      ? track.artThumbS3Key
+      : track.artS3Key;
+  const { url } = await getPresignedGetUrl(key);
   // Cache the redirect per-browser, well under the 1h presigned-URL TTL, so a
   // list's thumbnails reuse across scroll/navigation without re-hitting the
   // server (session lookup + DB + access check + presign) on every render. The
@@ -101,11 +113,34 @@ export async function POST(
       // Orphaned art object is harmless.
     }
   }
-  await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), kind.contentType);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  await uploadObject(s3Key, bytes, kind.contentType);
+
+  // Regenerate the thumbnail from the new art. The thumb key is deterministic,
+  // so a success overwrites the old one; on failure clear it (and delete any
+  // stale thumb) so the row never points at a thumbnail of the previous cover.
+  const thumbKey = thumbnailS3Key(user.id, id);
+  let artThumbS3Key: string | null = null;
+  const thumb = await makeThumbnail(bytes, kind.ext).catch(() => null);
+  if (thumb) {
+    try {
+      await uploadObject(thumbKey, thumb, THUMBNAIL_CONTENT_TYPE);
+      artThumbS3Key = thumbKey;
+    } catch {
+      artThumbS3Key = null;
+    }
+  }
+  if (!artThumbS3Key && track.artThumbS3Key) {
+    try {
+      await deleteObject(track.artThumbS3Key);
+    } catch {
+      // Orphaned thumb object is harmless.
+    }
+  }
 
   const [updated] = await db
     .update(tracks)
-    .set({ artS3Key: s3Key })
+    .set({ artS3Key: s3Key, artThumbS3Key })
     .where(eq(tracks.id, id))
     .returning();
   return NextResponse.json(toTrackDTO(updated));

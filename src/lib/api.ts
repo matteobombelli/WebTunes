@@ -52,9 +52,12 @@ export function streamSrc(trackId: string): string {
 }
 
 // Stable cover-art URL for a track (302s to a presigned S3 URL). The service
-// worker matches this exact path shape to serve downloaded art offline.
-export function artSrc(trackId: string): string {
-  return `${BASE_PATH}/api/tracks/${trackId}/art`;
+// worker matches this exact path shape to serve downloaded art offline. With
+// `{ thumb: true }` it requests the downscaled thumbnail (`?v=thumb`); the route
+// falls back to the full art when no thumbnail exists, and the SW falls back to
+// the cached full art offline, so the thumb URL is always safe to request.
+export function artSrc(trackId: string, opts?: { thumb?: boolean }): string {
+  return `${BASE_PATH}/api/tracks/${trackId}/art${opts?.thumb ? "?v=thumb" : ""}`;
 }
 
 // Stable cover URL for a playlist (302s to a presigned S3 URL), mirroring

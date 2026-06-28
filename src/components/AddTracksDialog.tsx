@@ -134,7 +134,7 @@ function AddTracksBody({
               onChange={() => toggle(t.id)}
               className="checkbox shrink-0"
             />
-            <TrackArt track={t} size="h-9 w-9" iconSize={16} />
+            <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
             <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
             <span className="hidden max-w-32 truncate text-fg-muted sm:block">
               {t.artist ?? "—"}

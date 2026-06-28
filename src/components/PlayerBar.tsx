@@ -102,7 +102,8 @@ const QueueArtPreloader = memo(function QueueArtPreloader() {
       if (!track.artS3Key || seen.has(track.id)) continue;
       seen.add(track.id);
       const img = new Image();
-      img.src = artSrc(track.id);
+      // Warm the thumbnail URL the queue rows actually request, not the full art.
+      img.src = artSrc(track.id, { thumb: true });
     }
   }, [queue, index]);
   return null;
@@ -666,7 +667,7 @@ export default function PlayerBar({
 
   const art = (size: string, iconSize: number) => (
     <div className="shrink-0">
-      <TrackArt track={track} size={size} iconSize={iconSize} />
+      <TrackArt track={track} size={size} iconSize={iconSize} thumb />
     </div>
   );
 

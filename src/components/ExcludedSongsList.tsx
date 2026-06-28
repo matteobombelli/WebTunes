@@ -42,7 +42,7 @@ export default function ExcludedSongsList({
               key={track.id}
               className="flex items-center gap-2 rounded-md px-1 py-1"
             >
-              <TrackArt track={track} size="h-9 w-9" iconSize={16} />
+              <TrackArt track={track} size="h-9 w-9" iconSize={16} thumb />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-fg">{track.title}</p>
                 <p className="truncate text-xs text-fg-muted">

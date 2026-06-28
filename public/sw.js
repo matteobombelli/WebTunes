@@ -119,10 +119,21 @@ async function serveStream(request) {
  * Downloaded cover art. Cache hit → serve the stored image (no Range dance;
  * <img> requests don't need 206). Cache miss → network (the route 302s to a
  * presigned S3 URL, which the image request follows when online).
+ *
+ * Downloads only cache the full-art URL (no query), so a `?v=thumb` request
+ * misses the exact-URL match; fall back to the cached full art (stripping the
+ * query) so downloaded rows still show art offline.
  */
 async function serveArt(request) {
   const cache = await caches.open(ART_CACHE);
-  const cached = await cache.match(request.url);
+  let cached = await cache.match(request.url);
+  if (!cached) {
+    const u = new URL(request.url);
+    if (u.search) {
+      u.search = "";
+      cached = await cache.match(u.toString());
+    }
+  }
   return cached || fetch(request);
 }
 

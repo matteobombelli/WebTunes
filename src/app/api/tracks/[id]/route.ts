@@ -84,6 +84,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     await deleteObject(track.s3Key);
     if (track.artS3Key) await deleteObject(track.artS3Key);
+    if (track.artThumbS3Key) await deleteObject(track.artThumbS3Key);
   } catch {
     // Orphaned object beats a track row pointing at deleted audio.
   }

@@ -132,7 +132,7 @@ function EditTrackForm({
               className="h-16 w-16 rounded object-cover"
             />
           ) : (
-            <TrackArt track={track} size="h-16 w-16" iconSize={28} />
+            <TrackArt track={track} size="h-16 w-16" iconSize={28} thumb />
           )}
           <span className="absolute inset-0 hidden items-center justify-center rounded bg-black/60 text-[10px] font-medium text-white group-hover:flex">
             Change

@@ -1,0 +1,1 @@
+ALTER TABLE "tracks" ADD COLUMN "art_thumb_s3_key" text;

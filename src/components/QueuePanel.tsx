@@ -502,7 +502,7 @@ const QueueRow = memo(function QueueRow({
         isCurrent ? "bg-surface-3/40" : "hover:bg-surface-3/40"
       }`}
     >
-      <TrackArt track={track} size="h-10 w-10" iconSize={18} />
+      <TrackArt track={track} size="h-10 w-10" iconSize={18} thumb />
       <div className="min-w-0 flex-1">
         <button
           onClick={onPlay}
@@ -571,7 +571,7 @@ function QueueRowOverlay({
   const { track } = item;
   return (
     <div className="flex items-center gap-2 rounded-md bg-surface-3 px-4 py-1.5 shadow-lg">
-      <TrackArt track={track} size="h-10 w-10" iconSize={18} />
+      <TrackArt track={track} size="h-10 w-10" iconSize={18} thumb />
       <div className="min-w-0 flex-1">
         <p
           className={`truncate text-sm font-medium ${

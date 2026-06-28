@@ -720,7 +720,7 @@ const TrackRow = memo(function TrackRow({
           className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
         >
           <span className="relative shrink-0">
-            <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} />
+            <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
             {isCurrent && (
               <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
                 <NowPlayingBars playing={isPlaying} />

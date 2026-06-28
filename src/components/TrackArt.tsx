@@ -13,16 +13,20 @@ export default function TrackArt({
   size,
   className = "",
   iconSize,
+  thumb = false,
 }: {
   track: Pick<TrackDTO, "id" | "artS3Key">;
   /** Tailwind size classes for the box, e.g. "h-9 w-9". */
   size: string;
   className?: string;
   iconSize?: number;
+  /** Request the downscaled thumbnail — for small (<=64px) rows. The route
+   *  falls back to the full art when no thumbnail exists. */
+  thumb?: boolean;
 }) {
   return (
     <CoverImage
-      src={track.artS3Key ? artSrc(track.id) : null}
+      src={track.artS3Key ? artSrc(track.id, { thumb }) : null}
       iconSize={iconSize}
       className={`${size} shrink-0 rounded bg-surface-2 ${className}`}
     />
