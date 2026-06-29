@@ -180,8 +180,13 @@ export default function PlayerBar({
   // the flag can't go stale; also cleared in onPlaying.
   const expectedPauseRef = useRef(false);
   // One-shot playhead to restore for a session rehydrated after a page discard,
-  // applied in onLoadedMetadata when the element is seekable.
-  const restoredPositionRef = useRef<number | null>(null);
+  // applied in onLoadedMetadata when the element is seekable. Bound to a specific
+  // track id so a restore meant for one track can't leak onto a different track
+  // the user selects before it lands (which would start that track partway in).
+  const restoredPositionRef = useRef<{
+    trackId: string;
+    position: number;
+  } | null>(null);
   // Last currentTime pushed to the store, so onTimeUpdate can throttle the
   // 4-30 Hz timeupdate down to ~4 Hz of store writes (see onTimeUpdate).
   const lastProgressRef = useRef(0);
@@ -379,10 +384,20 @@ export default function PlayerBar({
   const tryRestorePosition = () => {
     const audio = audioRef.current;
     const target = restoredPositionRef.current;
-    if (!audio || target == null || audio.readyState < 1) return;
+    if (!audio || target == null) return;
+    // A target meant for a previously-loaded track must never seek this one —
+    // drop it (even before the element is seekable) so it can't fire later.
+    if (target.trackId !== track?.id) {
+      restoredPositionRef.current = null;
+      return;
+    }
+    if (audio.readyState < 1) return;
     // Clamp so a value past the end can't strand us seeking forever (or fire
     // 'ended' → auto-advance).
-    const clamped = Math.min(target, audio.duration || target);
+    const clamped = Math.min(
+      target.position,
+      audio.duration || target.position
+    );
     if (Math.abs(audio.currentTime - clamped) <= 0.5) {
       restoredPositionRef.current = null; // arrived — stop re-asserting
       return;
@@ -426,6 +441,14 @@ export default function PlayerBar({
     freshLoadRef.current = true;
     pendingPlayRef.current = false; // a new track supersedes any owed retry
     recoverAttemptsRef.current = 0; // fresh recovery budget per track
+    // Drop a restore target meant for a previous track so it neither seeks this
+    // one (starting it partway through) nor blocks the warm fallback in
+    // onLoadedMetadata. A cold-mount target for THIS track is kept (same id).
+    if (
+      restoredPositionRef.current &&
+      restoredPositionRef.current.trackId !== track.id
+    )
+      restoredPositionRef.current = null;
     const autoAdvance = autoAdvanceRef.current;
     autoAdvanceRef.current = false; // consume the flag
     if (usePlayerStore.getState().isPlaying) attemptPlay(autoAdvance);
@@ -590,7 +613,10 @@ export default function PlayerBar({
         return;
       }
       if (s.tracks?.length && s.index >= 0 && s.index < s.tracks.length) {
-        restoredPositionRef.current = s.currentTime > 0 ? s.currentTime : null;
+        restoredPositionRef.current =
+          s.currentTime > 0
+            ? { trackId: s.tracks[s.index].id, position: s.currentTime }
+            : null;
         usePlayerStore
           .getState()
           .hydrateSession(s.tracks, s.index, s.currentTime);
@@ -893,7 +919,7 @@ export default function PlayerBar({
           if (restoredPositionRef.current == null) {
             const stored = usePlayerStore.getState().currentTime;
             if (stored > 1 && audio.currentTime < 0.5)
-              restoredPositionRef.current = stored;
+              restoredPositionRef.current = { trackId: track.id, position: stored };
           }
           tryRestorePosition();
         }}
