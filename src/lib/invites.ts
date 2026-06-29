@@ -1,10 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { hash } from "bcryptjs";
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { db, isUniqueViolation } from "@/db";
+import { db, uniqueViolationConstraint } from "@/db";
 import { friendships, invites, users } from "@/db/schema";
 import type { InviteDTO } from "@/lib/types";
-import type { RegisterInput } from "@/lib/users";
+import {
+  isNameTaken,
+  USERNAME_TAKEN_MESSAGE,
+  USERNAME_UNIQUE_INDEX,
+  type RegisterInput,
+} from "@/lib/users";
 
 // Registration is invite-only. An invite row is an unguessable plaintext
 // capability: anyone holding an unused, unexpired token can create exactly one
@@ -32,15 +37,12 @@ function toDTO(row: {
   expiresAt: Date;
   usedAt: Date | null;
   usedByName?: string | null;
-  usedByEmail?: string | null;
 }): InviteDTO {
   return {
     token: row.token,
     createdAt: row.createdAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
-    usedByName: row.usedAt
-      ? row.usedByName ?? row.usedByEmail ?? "a former member"
-      : null,
+    usedByName: row.usedAt ? row.usedByName ?? "a former member" : null,
   };
 }
 
@@ -74,7 +76,6 @@ export async function listInvitesFor(userId: string): Promise<InviteDTO[]> {
       expiresAt: invites.expiresAt,
       usedAt: invites.usedAt,
       usedByName: users.name,
-      usedByEmail: users.email,
     })
     .from(invites)
     .leftJoin(users, eq(users.id, invites.usedByUserId))
@@ -94,7 +95,7 @@ export async function getInviteByToken(
   token: string
 ): Promise<{ inviterName: string } | null> {
   const [row] = await db
-    .select({ name: users.name, email: users.email })
+    .select({ name: users.name })
     .from(invites)
     .innerJoin(users, eq(users.id, invites.inviterId))
     .where(
@@ -105,7 +106,7 @@ export async function getInviteByToken(
       )
     );
   if (!row) return null;
-  return { inviterName: row.name ?? row.email };
+  return { inviterName: row.name };
 }
 
 export type RegisterInvitedResult =
@@ -120,12 +121,14 @@ export type RegisterInvitedResult =
 export async function registerInvitedUser(
   input: RegisterInput & { token: string }
 ): Promise<RegisterInvitedResult> {
-  // Friendly pre-check (invite untouched); the unique index is the race guard.
+  // Friendly pre-checks (invite untouched); the unique indexes are the race
+  // guards. Both email and username are unique.
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, input.email));
   if (existing) return { error: "An account with that email already exists" };
+  if (await isNameTaken(input.name)) return { error: USERNAME_TAKEN_MESSAGE };
 
   const passwordHash = await hash(input.password, 12); // slow — keep out of the tx
   try {
@@ -185,9 +188,13 @@ export async function registerInvitedUser(
       return { user };
     });
   } catch (err) {
-    // Concurrent registration of the same email slipped past the pre-check; the
-    // tx rolled back, so the invite is still unused.
-    if (isUniqueViolation(err)) {
+    // A concurrent registration slipped the same email or username past the
+    // pre-check; the tx rolled back, so the invite is still unused.
+    const constraint = uniqueViolationConstraint(err);
+    if (constraint === USERNAME_UNIQUE_INDEX) {
+      return { error: USERNAME_TAKEN_MESSAGE };
+    }
+    if (constraint !== null) {
       return { error: "An account with that email already exists" };
     }
     throw err;

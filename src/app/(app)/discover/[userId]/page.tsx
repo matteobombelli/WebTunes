@@ -23,12 +23,12 @@ export default async function FriendLibraryPage({
   if (!(await areFriends(user.id, userId))) notFound();
 
   const [friend] = await db
-    .select({ name: users.name, email: users.email })
+    .select({ name: users.name })
     .from(users)
     .where(eq(users.id, userId));
   if (!friend) notFound();
 
-  const displayName = friend.name ?? friend.email;
+  const displayName = friend.name;
   const { hideFriendDuplicates } = await getUserSettings(user.id);
   const [topTracks, trackDTOs] = await Promise.all([
     listUserTopTracks(userId, user.id, hideFriendDuplicates),

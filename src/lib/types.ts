@@ -37,10 +37,11 @@ export type PlaylistDTO = {
   coverTrackIds?: string[];
 };
 
+// `name` is the public username; email is intentionally never exposed to other
+// users. Also the shape returned by the username search.
 export type FriendDTO = {
   id: string;
-  name: string | null;
-  email: string;
+  name: string;
 };
 
 export type FriendRequestDTO = {

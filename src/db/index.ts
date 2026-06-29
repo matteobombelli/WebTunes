@@ -35,6 +35,23 @@ export function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
+ * The constraint/index name of a unique violation (23505), or null when the
+ * error isn't one. Lets a flow that can trip more than one unique constraint
+ * (registration: both email and username are unique) tell which one collided —
+ * Postgres reports the index name for unique-index violations.
+ */
+export function uniqueViolationConstraint(err: unknown): string | null {
+  while (typeof err === "object" && err !== null) {
+    if ((err as { code?: unknown }).code === "23505") {
+      const name = (err as { constraint?: unknown }).constraint;
+      return typeof name === "string" ? name : "";
+    }
+    err = (err as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+/**
  * True when an error is (or wraps) a Postgres foreign-key violation (23503),
  * so an insert referencing a row that doesn't exist (e.g. a stale track id)
  * can return a 404 instead of a 500.

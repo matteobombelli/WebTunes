@@ -12,7 +12,7 @@ export async function GET() {
   return NextResponse.json(await pendingRequestsFor(user.id));
 }
 
-const requestSchema = z.object({ email: z.string().trim().toLowerCase().email() });
+const requestSchema = z.object({ userId: z.string().uuid() });
 
 export async function POST(req: NextRequest) {
   const user = await requireUser();
@@ -20,18 +20,15 @@ export async function POST(req: NextRequest) {
 
   const parsed = requestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
+    return NextResponse.json({ error: "A valid user is required" }, { status: 400 });
   }
 
   const [target] = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.email, parsed.data.email));
+    .where(eq(users.id, parsed.data.userId));
   if (!target) {
-    return NextResponse.json(
-      { error: "No user with that email" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
   if (target.id === user.id) {
     return NextResponse.json(

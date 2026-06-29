@@ -10,19 +10,22 @@ import { nameSchema, updateDisplayName } from "@/lib/users";
 const schema = z.object({ email: z.string() });
 const patchSchema = z.object({ name: nameSchema });
 
-// Rename the signed-in user. The database session reads users.name fresh per
-// request, so the new name surfaces everywhere on the client's next refresh.
+// Rename the signed-in user (the username). The database session reads
+// users.name fresh per request, so the new name surfaces everywhere on the
+// client's next refresh. Usernames are unique — a clash returns 409.
 export async function PATCH(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid name" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid username" }, { status: 400 });
   }
-  return NextResponse.json({
-    name: await updateDisplayName(user.id, parsed.data.name),
-  });
+  const result = await updateDisplayName(user.id, parsed.data.name);
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: 409 });
+  }
+  return NextResponse.json({ name: result.name });
 }
 
 // Deletes the signed-in user's own account. Typing the account email is a

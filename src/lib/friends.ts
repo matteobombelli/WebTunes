@@ -56,12 +56,12 @@ export const friendIdsOf = cache(async function friendIdsOf(
   );
 });
 
-/** All accepted friends of a user, with their display fields. */
+/** All accepted friends of a user (username only — email is never exposed). */
 export async function friendsOf(userId: string): Promise<FriendDTO[]> {
   const ids = await friendIdsOf(userId);
   if (ids.length === 0) return [];
   return db
-    .select({ id: users.id, name: users.name, email: users.email })
+    .select({ id: users.id, name: users.name })
     .from(users)
     .where(inArray(users.id, ids));
 }
@@ -80,12 +80,10 @@ export async function pendingRequestsFor(
       requester: {
         id: requester.id,
         name: requester.name,
-        email: requester.email,
       },
       addressee: {
         id: addressee.id,
         name: addressee.name,
-        email: addressee.email,
       },
     })
     .from(friendships)

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
+import { useUsernameAvailability } from "@/lib/use-username-availability";
 import { usePlayerStore } from "@/stores/player";
 import { useExclusionsStore } from "@/stores/exclusions";
 import Dialog from "@/components/Dialog";
@@ -114,9 +115,11 @@ export default function SettingsModal({
 
   const trimmedName = name.trim();
   const nameUnchanged = trimmedName === (userName ?? "");
+  const availability = useUsernameAvailability(name, userName);
+  const nameTaken = availability === "taken";
 
   const saveName = async () => {
-    if (!trimmedName || nameUnchanged || savingName) return;
+    if (!trimmedName || nameUnchanged || savingName || nameTaken) return;
     setSavingName(true);
     setNameError(null);
     setNameSaved(false);
@@ -167,7 +170,7 @@ export default function SettingsModal({
         <>
           <div className="mb-5 border-b border-border pb-5">
             <label htmlFor="display-name" className="block text-sm text-fg">
-              Display name
+              Username
             </label>
             <div className="mt-2 flex gap-2">
               <input
@@ -180,12 +183,12 @@ export default function SettingsModal({
                   setNameSaved(false);
                   setNameError(null);
                 }}
-                placeholder="Your name"
+                placeholder="Username"
                 className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-fg outline-none focus:border-accent"
               />
               <button
                 onClick={saveName}
-                disabled={!trimmedName || nameUnchanged || savingName}
+                disabled={!trimmedName || nameUnchanged || savingName || nameTaken}
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {savingName ? "Saving…" : "Save"}
@@ -193,11 +196,16 @@ export default function SettingsModal({
             </div>
             {nameError ? (
               <p className="mt-1 text-xs text-red-400">{nameError}</p>
+            ) : nameTaken ? (
+              <p className="mt-1 text-xs text-red-400">That username is taken</p>
+            ) : availability === "available" ? (
+              <p className="mt-1 text-xs text-accent-bright">Username available</p>
             ) : nameSaved ? (
-              <p className="mt-1 text-xs text-accent-bright">Name updated.</p>
+              <p className="mt-1 text-xs text-accent-bright">Username updated.</p>
             ) : (
               <p className="mt-1 text-xs text-fg-muted">
-                Shown to your friends and on your tracks.
+                Your unique username — friends find you by this. Your email stays
+                private.
               </p>
             )}
           </div>

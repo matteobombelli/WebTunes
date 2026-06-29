@@ -313,3 +313,14 @@ setup, and architecture rationale.
   `playlist_tracks.track_id` / `similar_exclusions.track_id` + softens
   `track_shares.created_by` to `ON DELETE SET NULL`, matching `schema.ts`) was
   applied to prod 2026-06-28.
+- Username uniqueness is also hand-applied out-of-band: `drizzle/0020_username_
+  unique.sql` makes `users.name` `NOT NULL` + `UNIQUE (lower(name))` (the
+  expression index lives only in raw SQL, like `search_vector`, with a comment
+  in `schema.ts`). `name` IS the public username now — friend search keys on it
+  (`searchUsers` in `lib/users.ts`), it's the only identifier shown to other
+  users (email is never exposed: `FriendDTO` has no email), and uniqueness is
+  enforced on registration (`registerInvitedUser`) and rename (`updateDisplay-
+  Name`) — both pre-check `isNameTaken` and catch the index 23505 via
+  `uniqueViolationConstraint`. Live "taken" warning via the public, IP-rate-
+  limited `GET /api/username-available` (`useUsernameAvailability` hook). Applied
+  to prod 2026-06-29.

@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { registerAction, type AuthFormState } from "../actions";
+import { useUsernameAvailability } from "@/lib/use-username-availability";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -19,6 +20,9 @@ export default function RegisterForm({
     registerAction,
     initialState
   );
+  const [name, setName] = useState("");
+  const availability = useUsernameAvailability(name);
+  const nameTaken = availability === "taken";
 
   if (state.notice) {
     return (
@@ -41,7 +45,23 @@ export default function RegisterForm({
         become friends automatically.
       </p>
       <input type="hidden" name="invite" value={token} />
-      <Input name="name" type="text" required placeholder="Name" autoComplete="name" />
+      <div>
+        <Input
+          name="name"
+          type="text"
+          required
+          maxLength={100}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Username"
+          autoComplete="username"
+        />
+        {nameTaken ? (
+          <p className="mt-1 text-xs text-red-400">That username is taken</p>
+        ) : availability === "available" ? (
+          <p className="mt-1 text-xs text-accent-bright">Username available</p>
+        ) : null}
+      </div>
       <Input
         name="email"
         type="email"
@@ -58,7 +78,7 @@ export default function RegisterForm({
         autoComplete="new-password"
       />
       {state.error && <p className="text-sm text-red-400">{state.error}</p>}
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending || nameTaken}>
         {pending ? "Creating…" : "Create account"}
       </Button>
       <p className="text-center text-sm text-fg-muted">

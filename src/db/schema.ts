@@ -15,9 +15,14 @@ import {
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
+// `name` doubles as the public username: it's how friends find each other
+// (search) and the only identifier shown to other users (email is never
+// exposed). It must be unique case-insensitively — enforced by a
+// `UNIQUE (lower(name))` index that, like the search_vector index, lives only in
+// raw SQL (drizzle/0020_username_unique.sql), not here.
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name"),
+  name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("image"),
