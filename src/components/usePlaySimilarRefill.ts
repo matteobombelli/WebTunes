@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { fetchSimilarTracks } from "@/lib/api";
-import { pushRadioHistory } from "@/lib/radio-history";
 import { usePlayerStore } from "@/stores/player";
 
 // Keep the "play similar" radio topped up: when the queue gets within
@@ -47,11 +46,10 @@ export function usePlaySimilarRefill() {
         // The user may have switched modes/seed while the fetch was in flight.
         const s = usePlayerStore.getState();
         if (!s.playSimilar || s.similarSeedId !== similarSeedId) return;
-        if (tracks.length > 0) {
-          s.advanceSimilar(tracks);
-          pushRadioHistory(tracks.map((t) => t.id));
-        }
-        if (tracks.length < REFILL_COUNT) exhaustedSeedRef.current = seedId;
+        if (tracks.length > 0) s.advanceSimilar(tracks);
+        // Only stop refilling this seed when the pool is truly empty — a short
+        // batch (fewer than requested) is still progress; keep going.
+        if (tracks.length === 0) exhaustedSeedRef.current = seedId;
       })
       .catch(() => {
         // Transient failure (offline, etc.); a later queue change retries.

@@ -7,7 +7,7 @@ import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { BASE_PATH } from "@/lib/base-path";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
-import { loadRadioHistory, pushRadioHistory } from "@/lib/radio-history";
+import { useToastStore } from "@/stores/toast";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import { usePlaySimilarAutoStart } from "@/components/usePlaySimilarAutoStart";
@@ -280,24 +280,23 @@ export default function PlayerBar({
       store.setPlaySimilarPref(false);
       return;
     }
-    // Remember it first, so it sticks even with nothing playing yet (or a seed
-    // with no embedding): the next track you click will auto-start radio.
+    // Remember it first, so it sticks even with nothing playing yet: the next
+    // track you click will auto-start radio.
     store.setPlaySimilarPref(true);
     if (store.index < 0) return;
     const seed = store.queue[store.index].track;
-    // Pre-seed exclusions with recently-served tracks so a restart doesn't
-    // replay the same neighbourhood (similarSeen is otherwise session-only).
-    const history = loadRadioHistory();
     try {
-      const similar = await fetchSimilarTracks(
-        seed.id,
-        [seed.id, ...history],
-        10
-      );
-      // No embedding for the seed yet (or nothing similar) — stay off.
-      if (similar.length === 0) return;
-      usePlayerStore.getState().startSimilar(seed.id, similar, history);
-      pushRadioHistory(similar.map((t) => t.id));
+      // Load the closest matches, excluding only the seed itself — no-repeat is
+      // enforced within the session by the store's similarSeen.
+      const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
+      // Nothing to play (tiny library, everything excluded, or no embedding):
+      // an explicit toggle shouldn't sit lit-but-dead — tell the user and clear.
+      if (similar.length === 0) {
+        useToastStore.getState().show("No similar tracks for this song");
+        usePlayerStore.getState().setPlaySimilarPref(false);
+        return;
+      }
+      usePlayerStore.getState().startSimilar(seed.id, similar);
     } catch {
       // Leave the mode off on failure.
     }

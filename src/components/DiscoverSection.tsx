@@ -54,7 +54,10 @@ export default function DiscoverSection({
     const playRadio = async () => {
       // Fresh seed per tap so the radio varies even from the router cache.
       const seed = seeds[Math.floor(Math.random() * seeds.length)];
-      usePlayerStore.getState().playQueue([seed], 0);
+      // noAutoSimilar: start this ephemeral radio via startSimilar below without
+      // also firing the pref-driven auto-start (no double-fire), and without
+      // touching the saved toggle.
+      usePlayerStore.getState().playQueue([seed], 0, { noAutoSimilar: true });
       try {
         const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
         if (similar.length)
@@ -107,7 +110,8 @@ export default function DiscoverSection({
   // Tap a song: play it, then start a full-library "play similar" radio seeded
   // from it (auto-refilling, ranked by CLAP cosine — keeps the genre coherent).
   const playFromSong = async (track: TrackDTO) => {
-    usePlayerStore.getState().playQueue([track], 0);
+    // Ephemeral radio (see playRadio): no auto-start double-fire, toggle untouched.
+    usePlayerStore.getState().playQueue([track], 0, { noAutoSimilar: true });
     try {
       const similar = await fetchSimilarTracks(track.id, [track.id], 10);
       if (similar.length)

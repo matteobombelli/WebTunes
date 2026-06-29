@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { fetchSimilarTracks } from "@/lib/api";
-import { loadRadioHistory, pushRadioHistory } from "@/lib/radio-history";
 import { usePlayerStore } from "@/stores/player";
 
 // When a single track is played while the remembered "play similar" preference
@@ -18,10 +17,9 @@ export function usePlaySimilarAutoStart() {
     if (!pendingSimilarSeed) return;
     const seedId = pendingSimilarSeed;
     let cancelled = false;
-    // Pre-seed exclusions with recently-served tracks so restarting near the
-    // same neighbourhood doesn't replay it (similarSeen is session-only).
-    const history = loadRadioHistory();
-    fetchSimilarTracks(seedId, [seedId, ...history], SEED_COUNT)
+    // Load the closest matches, excluding only the seed itself — no-repeat is
+    // enforced within the session by the store's similarSeen.
+    fetchSimilarTracks(seedId, [seedId], SEED_COUNT)
       .then((similar) => {
         if (cancelled) return;
         const s = usePlayerStore.getState();
@@ -35,8 +33,7 @@ export function usePlaySimilarAutoStart() {
         // No embedding for the seed (or nothing similar) — leave it playing the
         // normal queue; the pref stays on so the next track retries.
         if (similar.length === 0) return;
-        s.startSimilar(seedId, similar, history);
-        pushRadioHistory(similar.map((t) => t.id));
+        s.startSimilar(seedId, similar);
       })
       .catch(() => {
         // Transient failure (offline downloaded track, etc.) — play normally.
