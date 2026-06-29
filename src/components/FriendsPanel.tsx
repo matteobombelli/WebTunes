@@ -184,7 +184,7 @@ export default function FriendsPanel({
               <li
                 key={f.id}
                 style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
-                className={`flex animate-fade-in-up items-center gap-3 p-4 ${cardClass}`}
+                className={`relative flex animate-fade-in-up items-center gap-3 p-4 ${cardClass}`}
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 font-display text-lg font-semibold text-accent-bright">
                   {(f.name ?? f.email).charAt(0).toUpperCase()}
@@ -192,7 +192,7 @@ export default function FriendsPanel({
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/discover/${f.id}`}
-                    className="block truncate text-sm font-medium hover:underline"
+                    className="block truncate text-sm font-medium after:absolute after:inset-0 hover:text-accent-bright"
                   >
                     {f.name ?? f.email}
                   </Link>
@@ -201,7 +201,7 @@ export default function FriendsPanel({
                 <button
                   onClick={() => unfriend(f)}
                   title="Unfriend"
-                  className="text-fg-subtle hover:text-red-400"
+                  className="relative z-10 text-fg-subtle hover:text-red-400"
                 >
                   <XIcon size={14} />
                 </button>

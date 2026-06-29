@@ -37,7 +37,7 @@ function ResendVerification({ email }: { email: string }) {
           type="button"
           onClick={resend}
           disabled={status === "sending"}
-          className="mt-1 font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+          className="mt-1 font-semibold hover:text-accent-bright disabled:opacity-50"
         >
           {status === "sending" ? "Sending…" : "Resend verification email"}
         </button>
@@ -82,7 +82,7 @@ export default function LoginPage() {
       <p className="-mt-2 text-center text-sm">
         <Link
           href="/forgot-password"
-          className="text-fg-muted underline-offset-2 hover:text-accent-bright hover:underline"
+          className="text-fg-muted hover:text-accent-bright"
         >
           Forgot password?
         </Link>

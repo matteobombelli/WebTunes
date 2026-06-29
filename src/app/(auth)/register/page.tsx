@@ -18,7 +18,7 @@ export default async function RegisterPage({
           Registration is currently invite-only. Ask a friend on WebTunes to send
           you an invite link.
         </p>
-        <Link href="/login" className="text-accent-bright hover:underline">
+        <Link href="/login" className="text-accent-bright hover:text-white">
           Back to sign in
         </Link>
       </div>

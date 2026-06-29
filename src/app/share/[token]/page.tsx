@@ -55,7 +55,7 @@ export default async function SharePage({
         <p className="text-fg-muted">
           This share link has expired or doesn’t exist.
         </p>
-        <Link href="/" className="text-accent-bright hover:underline">
+        <Link href="/" className="text-accent-bright hover:text-white">
           Go to WebTunes
         </Link>
       </main>

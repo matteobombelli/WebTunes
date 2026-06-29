@@ -41,7 +41,7 @@ function VerifyEmail() {
         <p className="text-fg-muted">
           Your account is now active. You can sign in.
         </p>
-        <Link href="/login" className="text-accent-bright hover:underline">
+        <Link href="/login" className="text-accent-bright hover:text-white">
           Sign in
         </Link>
       </div>
@@ -54,7 +54,7 @@ function VerifyEmail() {
       <p className="text-fg-muted">
         {error ?? "This verification link is missing its token."}
       </p>
-      <Link href="/login" className="text-accent-bright hover:underline">
+      <Link href="/login" className="text-accent-bright hover:text-white">
         Back to sign in
       </Link>
     </div>

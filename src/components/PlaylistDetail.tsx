@@ -155,7 +155,7 @@ export default function PlaylistDetail({
                 onChange={(e) => setName(e.target.value)}
                 className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xl font-bold outline-none focus:border-accent"
               />
-              <button type="submit" className="text-sm text-accent-bright hover:underline">
+              <button type="submit" className="text-sm text-accent-bright hover:text-white">
                 Save
               </button>
               <button
@@ -168,7 +168,7 @@ export default function PlaylistDetail({
             </form>
           ) : isOwner ? (
             <h1
-              className="cursor-pointer truncate font-display text-3xl font-bold tracking-tight hover:underline"
+              className="cursor-pointer truncate font-display text-3xl font-bold tracking-tight hover:text-accent-bright"
               title="Rename"
               onClick={() => setRenaming(true)}
             >

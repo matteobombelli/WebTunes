@@ -46,7 +46,7 @@ export default function CurrentTrackDetails({
           <Link
             href={`/artist?name=${encodeURIComponent(track.artist)}`}
             onClick={onNavigate}
-            className="hover:text-accent-bright hover:underline"
+            className="hover:text-accent-bright"
           >
             {track.artist}
           </Link>
@@ -59,7 +59,7 @@ export default function CurrentTrackDetails({
             <Link
               href={`/album?name=${encodeURIComponent(track.album)}`}
               onClick={onNavigate}
-              className="hover:text-accent-bright hover:underline"
+              className="hover:text-accent-bright"
             >
               {track.album}
             </Link>

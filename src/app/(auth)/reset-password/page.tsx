@@ -36,7 +36,7 @@ function ResetForm() {
     return (
       <p className="text-sm text-fg-muted">
         This reset link is missing its token. Request a new one{" "}
-        <Link href="/forgot-password" className="text-accent-bright hover:underline">
+        <Link href="/forgot-password" className="text-accent-bright hover:text-white">
           here
         </Link>
         .
@@ -51,7 +51,7 @@ function ResetForm() {
         <p className="text-fg-muted">
           Your password has been changed and all existing sessions were signed out.
         </p>
-        <Link href="/login" className="text-accent-bright hover:underline">
+        <Link href="/login" className="text-accent-bright hover:text-white">
           Sign in
         </Link>
       </div>

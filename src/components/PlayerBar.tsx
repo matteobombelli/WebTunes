@@ -687,7 +687,7 @@ export default function PlayerBar({
         {track.artist ? (
           <Link
             href={`/artist?name=${encodeURIComponent(track.artist)}`}
-            className="hover:text-accent-bright hover:underline"
+            className="hover:text-accent-bright"
           >
             {track.artist}
           </Link>

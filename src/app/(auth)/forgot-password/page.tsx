@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
           If an account exists for <span className="text-fg">{email}</span>,
           a reset link is on its way. It expires in 1 hour.
         </p>
-        <Link href="/login" className="text-accent-bright hover:underline">
+        <Link href="/login" className="text-accent-bright hover:text-white">
           Back to sign in
         </Link>
       </div>
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
         {busy ? "Sending…" : "Send reset link"}
       </Button>
       <p className="text-center text-sm text-fg-muted">
-        <Link href="/login" className="text-accent-bright hover:underline">
+        <Link href="/login" className="text-accent-bright hover:text-white">
           Back to sign in
         </Link>
       </p>

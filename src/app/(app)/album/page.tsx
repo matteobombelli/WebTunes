@@ -36,7 +36,7 @@ export default async function AlbumPage({
           ) : (
             <Link
               href={`/artist?name=${encodeURIComponent(albumArtist)}`}
-              className="hover:text-accent-bright hover:underline"
+              className="hover:text-accent-bright"
             >
               {albumArtist}
             </Link>

@@ -749,7 +749,7 @@ const TrackRow = memo(function TrackRow({
               </span>
             )}
           </span>
-          <span className="truncate text-base hover:underline sm:text-sm">
+          <span className="truncate text-base hover:text-accent-bright sm:text-sm">
             {track.title}
           </span>
           {track.isPrivate && !track.ownerName && (
@@ -761,7 +761,7 @@ const TrackRow = memo(function TrackRow({
         {track.artist ? (
           <Link
             href={`/artist?name=${encodeURIComponent(track.artist)}`}
-            className="hover:text-accent-bright hover:underline"
+            className="hover:text-accent-bright"
           >
             {track.artist}
           </Link>
@@ -773,7 +773,7 @@ const TrackRow = memo(function TrackRow({
         {track.album ? (
           <Link
             href={`/album?name=${encodeURIComponent(track.album)}`}
-            className="hover:text-accent-bright hover:underline"
+            className="hover:text-accent-bright"
           >
             {track.album}
           </Link>
