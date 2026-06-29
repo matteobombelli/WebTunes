@@ -146,6 +146,13 @@ export default function PlayerBar({
   initialHideFriendDuplicates: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  // EXPERIMENT (iOS lock-screen resume): a second <audio> looping silence, played
+  // through a pause so the iOS audio session is never released. A backgrounded iOS
+  // PWA can't restart a paused <audio> from the lock screen (play() hangs pending);
+  // keeping a real media element playing holds the session where the keep-alive
+  // AudioContext tone can't (iOS suspends an AudioContext in the background). Gated
+  // to the installed iOS PWA (navigator.standalone); stopped once the track resumes.
+  const silenceRef = useRef<HTMLAudioElement>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
   const countedRef = useRef<string | null>(null);
   // True from a fresh track load until playback actually begins. A cold first
@@ -375,6 +382,31 @@ export default function PlayerBar({
     attemptPlay(true);
   };
 
+  // Pin the OS Now Playing scrubber to the TRACK's real position/duration. The
+  // silent keep-alive element (see silenceRef) is the actively-playing media
+  // during a pause, so without this iOS derives the scrubber from ITS 0-3s loop
+  // (snapping to the real spot on resume). setPositionState overrides that with
+  // page-global values. Guarded: it throws on NaN/out-of-range inputs (e.g.
+  // before metadata, or a streamed element whose duration is briefly Infinity).
+  const updatePositionState = () => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!("setPositionState" in navigator.mediaSession)) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const position = Math.min(Math.max(0, audio.currentTime), duration);
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        position,
+        playbackRate: audio.playbackRate || 1,
+      });
+    } catch {
+      // Out-of-range mid-load — ignore; a later call corrects it.
+    }
+  };
+
   // Re-assert a pending restore target (set by the cold-mount discard restore, or
   // by a warm same-track reload that lost its position) until the element really
   // reaches it, then clear. A single seek at loadedmetadata is NOT enough on iOS:
@@ -473,9 +505,30 @@ export default function PlayerBar({
       // PWA cannot restart <audio> regardless. So we suspend it to save the idle
       // Bluetooth cost.)
       autoAdvanceRef.current = false;
+      // EXPERIMENT: in an installed iOS PWA, start the silent loop in-gesture
+      // BEFORE pausing the track so the audio session stays held across the
+      // pause — the bet for enabling a locked-screen resume. onPlaying stops it
+      // once the track resumes. No-op (and unstarted) anywhere but an iOS PWA.
+      if ((navigator as unknown as { standalone?: boolean }).standalone === true) {
+        const s = silenceRef.current;
+        if (s) {
+          s.currentTime = 0;
+          s.play()
+            .then(() => {
+              logAudio("silence:play");
+              // Re-assert the paused display AFTER the silence element starts:
+              // iOS otherwise derives "playing" from the actively-playing loop.
+              if ("mediaSession" in navigator)
+                navigator.mediaSession.playbackState = "paused";
+              updatePositionState();
+            })
+            .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
+        }
+      }
       if (!audio.paused) expectedPauseRef.current = true;
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
+      updatePositionState(); // pin the OS scrubber to the frozen track position
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -647,6 +700,7 @@ export default function PlayerBar({
       restoredPositionRef.current = null; // a deliberate seek cancels a pending restore
       audio.currentTime = seekRequest;
       _clearSeek();
+      updatePositionState(); // reflect the seek in the OS scrubber immediately
     }
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -803,6 +857,10 @@ export default function PlayerBar({
           logAudio("playing");
           pendingPlayRef.current = false; // playback truly began: nothing owed
           expectedPauseRef.current = false; // ...and no deliberate pause is pending
+          silenceRef.current?.pause(); // EXPERIMENT: track holds the session now
+          if ("mediaSession" in navigator)
+            navigator.mediaSession.playbackState = "playing";
+          updatePositionState();
           // Re-assert media-session handlers now that the element is seekable,
           // so WebKit's playback-time auto-enable of the ±10/15s seek commands
           // gets overridden and the previous/next-track arrows show instead.
@@ -837,6 +895,7 @@ export default function PlayerBar({
           ) {
             lastProgressRef.current = ct;
             _setProgress(ct, dur);
+            updatePositionState(); // keep the OS scrubber in step while playing
           }
           // Count a "friend play" once the track passes 30s (server ignores
           // the owner's own plays). Fire-and-forget; silent if offline.
@@ -922,9 +981,14 @@ export default function PlayerBar({
               restoredPositionRef.current = { trackId: track.id, position: stored };
           }
           tryRestorePosition();
+          updatePositionState(); // seed the OS scrubber before first playback
         }}
         onSeeked={tryRestorePosition}
       />
+      {/* EXPERIMENT: silent loop kept playing through a pause to hold the iOS
+          audio session (see silenceRef). Played/paused imperatively; renders
+          harmlessly everywhere but only ever plays in an installed iOS PWA. */}
+      <audio ref={silenceRef} src={`${BASE_PATH}/silence.m4a`} loop preload="auto" />
 
       {/* Mobile (below md, matching MobileNav): a minimal mini-player — art +
           title/artist on the left (tap to open the now-playing sheet),

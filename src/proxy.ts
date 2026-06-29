@@ -42,9 +42,9 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // PWA assets (sw.js, manifest, icons) must be reachable logged-out, or SW
-  // registration/installation breaks.
+  // PWA assets (sw.js, manifest, icons, the iOS keep-alive silence loop) must be
+  // reachable without the cookie gate redirecting them to /login.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|apple-icon\\.png|icon-.*\\.png|.*\\.svg$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|apple-icon\\.png|icon-.*\\.png|silence\\.m4a|.*\\.svg$).*)",
   ],
 };
