@@ -194,9 +194,13 @@ export default function PlayerBar({
   // live in <PlayerProgress>, which subscribes to them in isolation.
   const seekRequest = usePlayerStore((s) => s.seekRequest);
   const shuffled = usePlayerStore((s) => s.shuffled);
-  // The button reflects the remembered preference (not the active radio, which
-  // dips false briefly during the auto-start seed fetch).
+  // The button lights for the remembered preference OR an active radio (e.g. one
+  // started from a Discover tile, which sets no pref). The pref covers the brief
+  // dip of `playSimilar` to false during an auto-start seed fetch, so the lit
+  // state never flickers.
   const playSimilarPref = usePlayerStore((s) => s.playSimilarPref);
+  const playSimilar = usePlayerStore((s) => s.playSimilar);
+  const playSimilarOn = playSimilar || playSimilarPref;
   const [queueOpen, setQueueOpen] = useState(false);
   // Mobile-only fullscreen surfaces: the now-playing sheet (tap the mini-bar)
   // and the queue sheet it opens.
@@ -250,8 +254,8 @@ export default function PlayerBar({
   // first batch; on → stop refilling (leaving the queue as-is).
   const handlePlaySimilar = async () => {
     const store = usePlayerStore.getState();
-    if (store.playSimilarPref) {
-      // Currently remembered on → forget it and stop any active radio.
+    if (store.playSimilar || store.playSimilarPref) {
+      // On (active radio and/or remembered) → forget the pref and stop the radio.
       store.stopSimilar();
       store.setPlaySimilarPref(false);
       return;
@@ -987,10 +991,10 @@ export default function PlayerBar({
           )}
           {transportButton(
             handlePlaySimilar,
-            playSimilarPref ? "Stop play similar" : "Play similar",
+            playSimilarOn ? "Stop play similar" : "Play similar",
             <SimilarIcon size={16} />,
             `h-10 w-10 hover:bg-surface-2 ${
-              playSimilarPref
+              playSimilarOn
                 ? "text-accent-bright hover:text-accent-bright"
                 : "text-fg-muted hover:text-white"
             }`

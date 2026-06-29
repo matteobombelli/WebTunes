@@ -40,8 +40,11 @@ export default function NowPlayingScreen({
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffled = usePlayerStore((s) => s.shuffled);
-  // Mirrors PlayerBar: the button reflects the remembered preference.
+  // Mirrors PlayerBar: the button lights for the remembered preference or an
+  // active radio (e.g. one started from a Discover tile).
   const playSimilarPref = usePlayerStore((s) => s.playSimilarPref);
+  const playSimilar = usePlayerStore((s) => s.playSimilar);
+  const playSimilarOn = playSimilar || playSimilarPref;
   const { toggle, next, prev, toggleShuffle } = usePlayerStore.getState();
 
   // closing: kept in the DOM briefly after close for the slide-down.
@@ -222,10 +225,10 @@ export default function NowPlayingScreen({
           )}
           {iconBtn(
             onPlaySimilar,
-            playSimilarPref ? "Stop play similar" : "Play similar",
+            playSimilarOn ? "Stop play similar" : "Play similar",
             <SimilarIcon size={30} />,
             `h-16 w-16 active:bg-white/10 ${
-              playSimilarPref ? "text-accent-bright" : "text-white/80"
+              playSimilarOn ? "text-accent-bright" : "text-white/80"
             }`
           )}
           {iconBtn(

@@ -61,12 +61,7 @@ export default function DiscoverBrowser({
 
       {tab === "discover" ? (
         <div className="flex flex-col gap-4 sm:gap-5">
-          <DiscoverSection
-            title="Random"
-            tracks={sections.random}
-            showCount={false}
-            emptyHint="No tracks yet."
-          />
+          <DiscoverSection title="Random" radioSeeds={sections.random} />
           <DiscoverSection
             title="Recommended"
             tracks={sections.recommended}

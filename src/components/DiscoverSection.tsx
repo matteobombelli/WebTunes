@@ -16,21 +16,12 @@ const PREVIEW = 12;
 /** Action-button glyph: larger on mobile (label hidden), smaller with text on >=sm. */
 const ICON = "h-6 w-6 sm:h-4 sm:w-4";
 
-/** Fisher-Yates copy, used when a tapped seed has no embedding to rank by. */
-function shuffled<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 /**
  * One Discover section. Sections blend into the page (no card chrome); spacing
  * between them comes from the parent. The buttons act on the whole pool; tapping
- * an album-art tile plays that song then continues with a similarity mix drawn
- * only from this section, so the pick carries past the first track.
+ * an album-art tile plays that song then starts a full-library "play similar"
+ * radio seeded from it. Pass `radioSeeds` instead of `tracks` to render the
+ * section as a single "Play Radio" button (used by Random).
  *
  * Display order is the server order (no render-time shuffle, which would desync
  * SSR from hydration); Shuffle randomizes playback.
@@ -38,11 +29,15 @@ function shuffled<T>(items: T[]): T[] {
 export default function DiscoverSection({
   title,
   tracks,
+  radioSeeds,
   showCount = true,
   emptyHint,
 }: {
   title: string;
   tracks?: TrackDTO[];
+  /** When set, render this pool as a single "Play Radio" button (used by Random)
+   *  instead of the art grid. */
+  radioSeeds?: TrackDTO[];
   /** Show the track-count next to the title. Off for the Random pool, where a
    *  count is meaningless. */
   showCount?: boolean;
@@ -51,6 +46,38 @@ export default function DiscoverSection({
 }) {
   const current = useCurrentTrack();
   const [saveState, setSaveState] = useState<SaveState>("idle");
+
+  // Random: the whole section is one big, easy-to-press "Play Radio" button.
+  if (radioSeeds !== undefined) {
+    if (radioSeeds.length === 0) return null;
+    const seeds = radioSeeds;
+    const playRadio = async () => {
+      // Fresh seed per tap so the radio varies even from the router cache.
+      const seed = seeds[Math.floor(Math.random() * seeds.length)];
+      usePlayerStore.getState().playQueue([seed], 0);
+      try {
+        const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
+        if (similar.length)
+          usePlayerStore.getState().startSimilar(seed.id, similar);
+      } catch {
+        // Leave it as a single-track queue on failure.
+      }
+    };
+    return (
+      <section>
+        <h2 className="mb-3 font-display text-lg font-semibold sm:text-[1.6875rem]">
+          {title}
+        </h2>
+        <button
+          onClick={playRadio}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-4 font-display text-base font-semibold text-accent-fg transition hover:bg-accent-hover"
+        >
+          <PlayIcon size={20} />
+          Play Radio
+        </button>
+      </section>
+    );
+  }
 
   const pool = tracks ?? [];
 
@@ -77,29 +104,16 @@ export default function DiscoverSection({
       });
   };
 
-  // Tap a song: play it now, then queue the rest of this section ranked by
-  // similarity to it (or shuffled, if it has no embedding to rank by).
+  // Tap a song: play it, then start a full-library "play similar" radio seeded
+  // from it (auto-refilling, ranked by CLAP cosine — keeps the genre coherent).
   const playFromSong = async (track: TrackDTO) => {
-    usePlayerStore.setState({ shuffled: false });
-    usePlayerStore.getState().playQueue([track], 0, { collection: true });
-    const rest = pool.filter((t) => t.id !== track.id);
-    let mix = shuffled(rest);
+    usePlayerStore.getState().playQueue([track], 0);
     try {
-      const similar = await fetchSimilarTracks(
-        track.id,
-        [track.id],
-        Math.min(50, rest.length),
-        pool.map((t) => t.id)
-      );
-      if (similar.length) mix = similar;
+      const similar = await fetchSimilarTracks(track.id, [track.id], 10);
+      if (similar.length)
+        usePlayerStore.getState().startSimilar(track.id, similar);
     } catch {
-      // Keep the shuffled fallback.
-    }
-    // Append only if our seed is still the lone current track (the user hasn't
-    // tapped something else, and we have not already appended).
-    const s = usePlayerStore.getState();
-    if (s.queue.length === 1 && s.queue[s.index]?.track.id === track.id) {
-      s.addToQueue(mix);
+      // Leave it as a single-track queue on failure.
     }
   };
 
