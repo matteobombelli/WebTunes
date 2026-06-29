@@ -165,7 +165,18 @@ setup, and architecture rationale.
   ranks accessible tracks by cosine in-DB via pgvector — the `embedding` column
   is `vector(512)` with an HNSW `vector_cosine_ops` index, and `lib/similar.ts`
   pulls a 200-row candidate pool (`embedding <=> seed`, no vectors crossing the
-  wire), then Gumbel-top-k samples that pool in JS, noise scale from the viewer's
+  wire), then Gumbel-top-k samples that pool in JS.
+  **pgvector filtered-search gotcha**: that ranking runs the HNSW index UNDER
+  restrictive `WHERE` filters (access rule + `similar_exclusions` + friend-dup
+  dedup). Plain HNSW only explores `hnsw.ef_search` (~40) nodes and applies the
+  filters *afterward*, so a seed whose acoustic neighbours are mostly inaccessible
+  returns far fewer than `limit` (seen as low as 4 of 10) — seed-dependent, so it
+  looks like random "play similar sometimes only fills 4–5". The fix is
+  `hnsw.iterative_scan=relaxed_order`, set pool-wide beside `jit=off` in
+  `src/db/index.ts` (pgvector 0.8 resumes the index until the LIMIT/POOL_SIZE is
+  filled; `relaxed_order` is safe because the pool is re-scored + sampled). Any
+  NEW filtered vector query inherits this — don't reintroduce per-query HNSW
+  without it. The noise scale comes from the viewer's
   `users.similar_variation` (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`;
   4 = deterministic cosine).
   The PlayerBar toggle seeds an auto-refilling queue; the client sends
