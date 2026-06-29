@@ -7,7 +7,7 @@ import {
 } from "@/lib/discover";
 import { friendsOf, pendingRequestsFor } from "@/lib/friends";
 import { INVITE_BLOCKED_EMAILS } from "@/lib/invites";
-import { findSimilarToCentroid } from "@/lib/similar";
+import { findRecommendedClusters } from "@/lib/similar";
 import { getUserSettings } from "@/lib/users";
 import DiscoverBrowser from "@/components/DiscoverBrowser";
 
@@ -23,7 +23,7 @@ export default async function DiscoverPage() {
 
   const [recommended, random, friendsTop, newTracks, friends, requests] =
     await Promise.all([
-      findSimilarToCentroid(user.id, topIds, { limit: 50, excludeIds: topIds }),
+      findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
       randomSeedTracks(user.id, hideFriendDuplicates),
       listFriendsTop(user.id, hideFriendDuplicates),
       listNewTracks(user.id, hideFriendDuplicates),

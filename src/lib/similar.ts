@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm";
 import { db } from "@/db";
 import { similarExclusions, trackEmbeddings, tracks, users } from "@/db/schema";
+import { autoClusterCentroids } from "@/lib/cluster";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
@@ -91,12 +92,17 @@ export async function findSimilarTracks(
 }
 
 /**
- * "Recommended": rank accessible tracks against the centroid (mean) of the seed
- * tracks' embeddings — used to blend the viewer's top-100 into one taste vector.
- * The seeds (and any extra `excludeIds`) are excluded from the results. Returns
- * [] when none of the seeds has an embedding yet.
+ * "Recommended": cluster the viewer's top-N seed embeddings into K acoustic
+ * groups (K auto-chosen by silhouette in `lib/cluster.ts`) and draft `limit`
+ * tracks round-robin across the clusters. Consecutive results come from
+ * different clusters, so the Discover album-art grid alternates and the feed
+ * spans the viewer's whole taste instead of one averaged centroid. Falls back to
+ * the single mean centroid (the previous behavior) when there are too few seeds
+ * or the embeddings show no real cluster structure. The seeds (and any extra
+ * `excludeIds`) are excluded from the results. Returns [] when none of the seeds
+ * has an embedding yet.
  */
-export async function findSimilarToCentroid(
+export async function findRecommendedClusters(
   userId: string,
   seedTrackIds: string[],
   { limit, excludeIds = [] }: { limit: number; excludeIds?: string[] }
@@ -127,22 +133,67 @@ export async function findSimilarToCentroid(
     ]);
   if (seedRows.length === 0) return []; // none analyzed yet
 
-  // Mean of the seed embeddings. cosineDistance normalizes both operands, so the
-  // centroid's magnitude is irrelevant to ranking — no re-normalization needed.
-  const dim = seedRows[0].embedding.length; // 512
-  const centroid = new Array<number>(dim).fill(0);
-  for (const { embedding } of seedRows) {
-    for (let i = 0; i < dim; i++) centroid[i] += embedding[i];
-  }
-  for (let i = 0; i < dim; i++) centroid[i] /= seedRows.length;
-
-  return rankAccessibleByVector(userId, centroid, {
-    limit,
+  const embeddings = seedRows.map((r) => r.embedding);
+  const shared = {
     excludeIds: [...seedTrackIds, ...excludeIds],
     sigma: SIGMA_BY_VARIATION[similarVariation] ?? 0,
     friendIds,
     hideFriendDuplicates,
-  });
+  };
+
+  const centroids = autoClusterCentroids(embeddings, seedTrackIds);
+
+  // No usable cluster structure (too few seeds / homogeneous library) → fall
+  // back to the single mean centroid, the prior "Recommended" behavior.
+  // cosineDistance normalizes both operands, so the mean's magnitude is
+  // irrelevant to ranking — no re-normalization needed.
+  if (!centroids) {
+    const dim = embeddings[0].length; // 512
+    const mean = new Array<number>(dim).fill(0);
+    for (const v of embeddings) for (let i = 0; i < dim; i++) mean[i] += v[i];
+    for (let i = 0; i < dim; i++) mean[i] /= embeddings.length;
+    return rankAccessibleByVector(userId, mean, { limit, ...shared });
+  }
+
+  // One ranked pool per cluster — request the full POOL_SIZE so the draft has
+  // headroom to reach `limit` after cross-cluster dedup. K ≤ 8 cheap HNSW
+  // queries; no embeddings cross the wire (pgvector ranks in-DB).
+  const lists = await Promise.all(
+    centroids.map((c) =>
+      rankAccessibleByVector(userId, c, { limit: POOL_SIZE, ...shared })
+    )
+  );
+  return draftRoundRobin(lists, limit);
+}
+
+/**
+ * Round-robin draft across per-cluster ranked lists: cycle the clusters, each
+ * contributing its best not-yet-chosen track (deduped by id), until `limit` are
+ * chosen or every pool is exhausted. Advancing the cluster on each pick makes
+ * consecutive results come from different clusters (1,2,…,K,1,2,…) until only one
+ * non-exhausted cluster remains. The server returns this order verbatim, so the
+ * Discover album-art grid alternates clusters.
+ */
+function draftRoundRobin(lists: TrackDTO[][], limit: number): TrackDTO[] {
+  const ptr = new Array<number>(lists.length).fill(0);
+  const chosen = new Set<string>();
+  const result: TrackDTO[] = [];
+
+  let progressed = true;
+  while (result.length < limit && progressed) {
+    progressed = false;
+    for (let c = 0; c < lists.length && result.length < limit; c++) {
+      const list = lists[c];
+      // Skip tracks an earlier cluster already drafted this round.
+      while (ptr[c] < list.length && chosen.has(list[ptr[c]].id)) ptr[c]++;
+      if (ptr[c] >= list.length) continue; // this pool is exhausted
+      const track = list[ptr[c]++];
+      chosen.add(track.id);
+      result.push(track);
+      progressed = true;
+    }
+  }
+  return result;
 }
 
 /**
