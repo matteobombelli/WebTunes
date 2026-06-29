@@ -30,8 +30,7 @@ function shuffled<T>(items: T[]): T[] {
  * One Discover section. Sections blend into the page (no card chrome); spacing
  * between them comes from the parent. The buttons act on the whole pool; tapping
  * an album-art tile plays that song then continues with a similarity mix drawn
- * only from this section, so the pick carries past the first track. The Random
- * variant (radioSeeds) renders as a single large "Play Radio" button.
+ * only from this section, so the pick carries past the first track.
  *
  * Display order is the server order (no render-time shuffle, which would desync
  * SSR from hydration); Shuffle randomizes playback.
@@ -39,51 +38,19 @@ function shuffled<T>(items: T[]): T[] {
 export default function DiscoverSection({
   title,
   tracks,
-  radioSeeds,
+  showCount = true,
   emptyHint,
 }: {
   title: string;
   tracks?: TrackDTO[];
-  /** When set, this is the Random section: a pool of hidden seeds; each "Play
-   *  Radio" tap picks one at random to start the whole-library radio. */
-  radioSeeds?: TrackDTO[];
+  /** Show the track-count next to the title. Off for the Random pool, where a
+   *  count is meaningless. */
+  showCount?: boolean;
   /** Shown when the section has no tracks. */
   emptyHint?: string;
 }) {
   const current = useCurrentTrack();
   const [saveState, setSaveState] = useState<SaveState>("idle");
-
-  // Random: the whole section is one big, easy-to-press button.
-  if (radioSeeds !== undefined) {
-    if (radioSeeds.length === 0) return null;
-    const seeds = radioSeeds;
-    const playRadio = async () => {
-      // Pick a fresh seed per tap so the radio varies even when the page
-      // payload is served from the router cache.
-      const seed = seeds[Math.floor(Math.random() * seeds.length)];
-      usePlayerStore.getState().playQueue([seed], 0);
-      try {
-        const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
-        if (similar.length) {
-          usePlayerStore.getState().startSimilar(seed.id, similar);
-        }
-      } catch {
-        // Leave it as a single-track queue on failure.
-      }
-    };
-    return (
-      <section>
-        <h2 className="mb-3 font-display text-lg font-semibold sm:text-[1.6875rem]">{title}</h2>
-        <button
-          onClick={playRadio}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-4 font-display text-base font-semibold text-accent-fg transition hover:bg-accent-hover"
-        >
-          <PlayIcon size={20} />
-          Play Radio
-        </button>
-      </section>
-    );
-  }
 
   const pool = tracks ?? [];
 
@@ -98,20 +65,23 @@ export default function DiscoverSection({
 
   const preview = pool.slice(0, PREVIEW);
 
-  const play = () => usePlayerStore.getState().playQueue(pool, 0);
+  const play = () =>
+    usePlayerStore.getState().playQueue(pool, 0, { collection: true });
 
   const shuffle = () => {
     usePlayerStore.setState({ shuffled: true });
     usePlayerStore
       .getState()
-      .playQueue(pool, Math.floor(Math.random() * pool.length));
+      .playQueue(pool, Math.floor(Math.random() * pool.length), {
+        collection: true,
+      });
   };
 
   // Tap a song: play it now, then queue the rest of this section ranked by
   // similarity to it (or shuffled, if it has no embedding to rank by).
   const playFromSong = async (track: TrackDTO) => {
     usePlayerStore.setState({ shuffled: false });
-    usePlayerStore.getState().playQueue([track], 0);
+    usePlayerStore.getState().playQueue([track], 0, { collection: true });
     const rest = pool.filter((t) => t.id !== track.id);
     let mix = shuffled(rest);
     try {
@@ -159,9 +129,11 @@ export default function DiscoverSection({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="mr-auto font-display text-lg font-semibold sm:text-[1.6875rem]">
           {title}
-          <span className="ml-2 text-xs font-normal text-fg-subtle">
-            {pool.length}
-          </span>
+          {showCount && (
+            <span className="ml-2 text-xs font-normal text-fg-subtle">
+              {pool.length}
+            </span>
+          )}
         </h2>
         <Button size="md" pill onClick={play} aria-label="Play">
           <PlayIcon className={ICON} />

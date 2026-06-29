@@ -181,11 +181,14 @@ export async function randomSeedTracks(
 }
 
 /**
- * "Friends Top 100": your friends' most-played tracks, combined into one list and
- * ranked recent-first per the shared recency rule (see topTracksByRecency) —
- * plays are summed across all friends (a track two friends spin both counts).
- * Only tracks the viewer can access are included. Empty when the viewer has no
- * friends.
+ * "Friends Top 100": each friend's own top tracks, interleaved round-robin so the
+ * art alternates between friends — friend1's #1, friend2's #1, …, then friend1's
+ * #2, and so on. Friends are ordered by how much they listened in the last 7 days
+ * (most first; friends with no recent plays come last but still contribute their
+ * backfilled top tracks). Each friend's list is ranked recent-first per the shared
+ * recency rule and filtered to what the viewer can access (same predicate as a
+ * single friend's profile top — see listUserTopTracks). A track two friends both
+ * spin appears once, at its first round-robin slot. Empty with no friends.
  */
 export async function listFriendsTop(
   userId: string,
@@ -193,11 +196,58 @@ export async function listFriendsTop(
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(userId);
   if (friendIds.length === 0) return [];
-  return topTracksByRecency({
-    listenerIds: friendIds,
-    viewerId: userId,
-    accessClause: accessWhere(userId, friendIds, hideFriendDuplicates),
-  });
+
+  // Order friends by recent (7-day) listening, most-active first. Friends with no
+  // recent plays are absent from this result; append them so they still rank last.
+  const activity = await db
+    .select({
+      userId: listens.userId,
+      plays: sql<number>`count(*)`.as("plays"),
+    })
+    .from(listens)
+    .where(
+      and(
+        inArray(listens.userId, friendIds),
+        sql`${listens.playedAt} > now() - interval '7 days'`
+      )
+    )
+    .groupBy(listens.userId)
+    .orderBy(desc(sql`plays`));
+  const ranked = activity.map((a) => a.userId);
+  const orderedFriends = [
+    ...ranked,
+    ...friendIds.filter((id) => !ranked.includes(id)),
+  ];
+
+  // Each friend's own top tracks, ranked + access-filtered the same way a single
+  // friend's profile top is.
+  const accessClause = accessWhere(userId, friendIds, hideFriendDuplicates);
+  const perFriend = await Promise.all(
+    orderedFriends.map((fid) =>
+      topTracksByRecency({
+        listenerIds: [fid],
+        viewerId: userId,
+        accessClause,
+      })
+    )
+  );
+
+  // Column-major round-robin, keeping each track at its first slot, capped at 100.
+  const out: TrackDTO[] = [];
+  const seen = new Set<string>();
+  const LIMIT = 100;
+  const maxLen = perFriend.reduce((m, list) => Math.max(m, list.length), 0);
+  for (let col = 0; col < maxLen && out.length < LIMIT; col++) {
+    for (const list of perFriend) {
+      const t = list[col];
+      if (t && !seen.has(t.id)) {
+        seen.add(t.id);
+        out.push(t);
+        if (out.length >= LIMIT) break;
+      }
+    }
+  }
+  return out;
 }
 
 /**
