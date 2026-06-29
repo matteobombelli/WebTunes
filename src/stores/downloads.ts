@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { log } from "@/lib/log";
 import type { TrackDTO } from "@/lib/types";
 import {
   getDownloadedPlaylists,
@@ -98,9 +99,14 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
           // scans). Playlists don't change here; storage updates once at drain.
           const rec = await getDownloadedTrack(next.track.id);
           if (rec) set((s) => ({ tracks: { ...s.tracks, [rec.id]: rec } }));
-        } catch {
+        } catch (err) {
           // Skip the failed track and keep draining; it stays undownloaded
           // and the button returns to its download state.
+          log.warn(
+            "downloads",
+            `track ${next.track.id} failed`,
+            err instanceof Error ? err.message : String(err)
+          );
         }
       }
     } finally {
@@ -139,6 +145,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
         (t) => !pending.has(t.id) && !(downloaded[t.id] && !pin)
       );
       if (additions.length === 0) return;
+      log.info("downloads", `enqueue ${additions.length}`);
       void requestPersistentStorage();
       set({ queue: [...queue, ...additions.map((track) => ({ track, pin }))] });
       void processQueue();
@@ -162,12 +169,14 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
     },
 
     removeAll: async () => {
+      log.info("downloads", "removeAll");
       set({ queue: [] });
       await offline.removeAll();
       await refresh();
     },
 
     purgeForAccountSwitch: async () => {
+      log.info("downloads", "purgeForAccountSwitch");
       // Reset in-memory state synchronously so the UI can't flash the previous
       // user's downloads while the async storage clear runs.
       set({ tracks: {}, playlists: {}, queue: [], current: null, storage: null });

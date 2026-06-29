@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Space_Grotesk } from "next/font/google";
+import ClientErrorLogger from "@/components/ClientErrorLogger";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -39,6 +40,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-surface-0 text-fg">
+        <ClientErrorLogger />
         {children}
       </body>
     </html>

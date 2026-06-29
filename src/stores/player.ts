@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { log } from "@/lib/log";
 import type { TrackDTO } from "@/lib/types";
 
 /** Fisher-Yates; returns a new array. */
@@ -127,6 +128,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   seekRequest: null,
 
   playQueue: (tracks, startIndex) => {
+    log.info(
+      "player",
+      `playQueue ${tracks.length} from #${startIndex}`,
+      tracks[startIndex]?.title
+    );
     const prev = get();
     // Starting a brand-new queue means the user picked new content — end any
     // "play similar" radio so it doesn't keep refilling from the old seed.
@@ -284,6 +290,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   toggleShuffle: () => {
     const s = get();
+    log.info("player", `shuffle ${!s.shuffled ? "on" : "off"}`);
     // Shuffle and "play similar" are mutually exclusive ways to order the
     // queue; turning shuffle on ends the radio.
     const stopSim = {
@@ -322,6 +329,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   startSimilar: (seedId, tracks, initialSeen) => {
     const s = get();
     if (s.index < 0) return;
+    log.info("player", `startSimilar seed=${seedId} +${tracks.length}`);
     // Keep the current track playing (don't reset isPlaying/currentTime); drop
     // the rest of the queue and seed it with the first similar batch.
     set({
@@ -344,8 +352,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
   },
 
-  stopSimilar: () =>
-    set({ playSimilar: false, similarSeedId: null, similarSeen: [] }),
+  stopSimilar: () => {
+    log.info("player", "stopSimilar");
+    set({ playSimilar: false, similarSeedId: null, similarSeen: [] });
+  },
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 

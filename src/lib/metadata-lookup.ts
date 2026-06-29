@@ -1,4 +1,5 @@
 import { imageKindFromBytes, type ImageKind } from "@/lib/image-upload";
+import { log } from "@/lib/log";
 
 // Online cover-art lookup for tracks whose audio file has no embedded art.
 // Best-effort like loudness/lyrics — returns null on any miss.
@@ -94,8 +95,13 @@ export async function findCoverArt(q: {
         const img = await downloadImage(url);
         if (img) return img;
       }
-    } catch {
-      // try the next term
+    } catch (err) {
+      // try the next term ("no art found" is normal — gated debug only)
+      log.debug(
+        "cover",
+        `iTunes lookup failed for "${term}"`,
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
   return null;

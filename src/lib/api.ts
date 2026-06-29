@@ -1,14 +1,38 @@
 import { BASE_PATH } from "./base-path";
+import { log } from "./log";
 import type { TrackDTO } from "./types";
 
 // Client-side fetch wrapper. next/link and the router add the basePath
 // automatically, but plain fetch() does not — this is the one place that
 // knows the prefix.
+//
+// REDACTION: this is the chokepoint for nearly all client API traffic, including
+// login/register/password-reset POSTs whose bodies carry passwords and tokens.
+// We log ONLY method, path (UUIDs — safe), status, duration, and the
+// already-user-facing `error` string — NEVER init.body, headers, or response JSON.
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${BASE_PATH}/api${path}`, init);
+  const method = init?.method ?? "GET";
+  const t0 = performance.now();
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_PATH}/api${path}`, init);
+  } catch (err) {
+    // Network/abort: server unreachable, offline, or a superseded request the
+    // caller aborted. Aborts are routine (e.g. PlaylistBrowser) — don't shout.
+    const ms = Math.round(performance.now() - t0);
+    if (!(err instanceof DOMException && err.name === "AbortError")) {
+      log.error(
+        "api",
+        `${method} ${path} network error (${ms}ms)`,
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+    throw err;
+  }
+  const ms = Math.round(performance.now() - t0);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
@@ -17,8 +41,10 @@ export async function api<T = unknown>(
     } catch {
       // non-JSON error body
     }
+    log.warn("api", `${method} ${path} → ${res.status} (${ms}ms)`, message);
     throw new Error(message);
   }
+  log.debug("api", `${method} ${path} → ${res.status} (${ms}ms)`);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

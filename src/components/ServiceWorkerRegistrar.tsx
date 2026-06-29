@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { BASE_PATH } from "@/lib/base-path";
+import { log } from "@/lib/log";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useExclusionsStore } from "@/stores/exclusions";
 
@@ -46,8 +47,13 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
         updateViaCache: "none",
       })
       .then(() => primeOfflineFallback())
-      .catch(() => {
+      .catch((err) => {
         // The SW is progressive enhancement; the app works without it.
+        log.warn(
+          "sw",
+          "registration failed",
+          err instanceof Error ? err.message : String(err)
+        );
       });
   }, [userId]);
   return null;

@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { BASE_PATH } from "@/lib/base-path";
+import { log } from "@/lib/log";
 
 export type UploadItem = {
   name: string;
@@ -78,6 +79,7 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
   start: (files) => {
     if (get().busy || files.length === 0) return;
     canceled = false;
+    log.info("upload", `start ${files.length} file(s)`);
     set({
       busy: true,
       items: files.map((f) => ({
@@ -112,6 +114,15 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
               ),
             }));
           } catch (err) {
+            if (!canceled) {
+              log.warn(
+                "upload",
+                `${file.name}: ${
+                  err instanceof DuplicateError ? "duplicate" : "failed"
+                }`,
+                err instanceof Error ? err.message : "failed"
+              );
+            }
             set((s) => ({
               items: s.items.map((it, j) =>
                 j === i
@@ -149,6 +160,7 @@ export const useUploadsStore = create<UploadsState>((set, get) => ({
   cancel: () => {
     if (!get().busy) return;
     canceled = true;
+    log.info("upload", "canceled batch");
     for (const xhr of activeXhrs) xhr.abort();
   },
 

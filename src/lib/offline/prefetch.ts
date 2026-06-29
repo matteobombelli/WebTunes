@@ -9,6 +9,7 @@
 // (throttled) fetch.
 
 import { streamSrc } from "@/lib/api";
+import { log } from "@/lib/log";
 import { hasAudio } from "@/lib/offline/audio-cache";
 
 // Must match PREFETCH_CACHE in public/sw.js.
@@ -43,8 +44,13 @@ export async function prefetchUpcoming(
       const res = await fetch(url); // SW → 302 → presigned S3
       if (res.ok) await cache.put(url, res);
     }
-  } catch {
-    // best-effort
+  } catch (err) {
+    // best-effort (offline / iOS-throttled is normal — gated debug, not warn)
+    log.debug(
+      "prefetch",
+      "warm failed",
+      err instanceof Error ? err.message : String(err)
+    );
   }
 }
 

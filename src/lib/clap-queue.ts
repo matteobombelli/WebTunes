@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { trackEmbeddings } from "@/db/schema";
 import { embedTrack } from "@/lib/clap-embedding";
+import { log } from "@/lib/log";
 import { getObjectBytes } from "@/lib/s3";
 
 // Background queue for CLAP embeddings. On upload we no longer block the request
@@ -53,7 +54,13 @@ async function processJob(job: Job): Promise<void> {
       .values({ trackId: job.trackId, embedding })
       // A racing backfill (or a re-enqueue) may have inserted it already.
       .onConflictDoNothing();
-  } catch {
-    // Swallow: a missing embedding row is the documented best-effort outcome.
+  } catch (err) {
+    // A missing embedding row is the documented best-effort outcome; surface
+    // infra failures (S3 fetch / DB) to the journal so they're diagnosable.
+    log.warn(
+      "clap",
+      `job failed ${job.trackId}`,
+      err instanceof Error ? err.message : String(err)
+    );
   }
 }

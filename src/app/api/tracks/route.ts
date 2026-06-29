@@ -6,6 +6,7 @@ import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
+import { log } from "@/lib/log";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
 import { findCoverArt } from "@/lib/metadata-lookup";
@@ -128,8 +129,13 @@ export async function POST(req: NextRequest) {
       });
       if (art)
         cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
-    } catch {
-      // best-effort; never block the upload
+    } catch (err) {
+      // best-effort; never block the upload (gated debug — a miss is normal)
+      log.debug(
+        "upload",
+        "cover lookup failed",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 
@@ -156,8 +162,13 @@ export async function POST(req: NextRequest) {
   if (cover) {
     artS3Key = `art/${user.id}/${trackId}.${cover.ext}`;
     uploads.push(
-      uploadObject(artS3Key, cover.body, cover.contentType).catch(() => {
+      uploadObject(artS3Key, cover.body, cover.contentType).catch((err) => {
         artS3Key = null; // leave the track artless rather than orphan a row
+        log.warn(
+          "upload",
+          `art upload failed ${trackId}`,
+          err instanceof Error ? err.message : String(err)
+        );
       })
     );
     // Best-effort downscaled thumbnail for <=64px list/queue/mini-bar rows;
@@ -172,8 +183,13 @@ export async function POST(req: NextRequest) {
               })
             : undefined
         )
-        .catch(() => {
+        .catch((err) => {
           artThumbS3Key = null;
+          log.warn(
+            "upload",
+            `thumb upload failed ${trackId}`,
+            err instanceof Error ? err.message : String(err)
+          );
         })
     );
   }

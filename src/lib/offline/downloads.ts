@@ -3,6 +3,7 @@
 // (audio-cache.ts); queueing and UI state live in src/stores/downloads.ts.
 
 import { api } from "@/lib/api";
+import { log } from "@/lib/log";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
 import { deleteArt, hasArt, putArt } from "./art-cache";
 import { deleteAudio, hasAudio, hasManyAudio, putAudio } from "./audio-cache";
@@ -36,8 +37,14 @@ async function cacheArt(track: TrackDTO): Promise<void> {
     const res = await fetch(url);
     if (!res.ok) return;
     await putArt(track.id, await res.blob());
-  } catch {
-    // Art is non-essential; never fail a download over it.
+  } catch (err) {
+    // Art is non-essential; never fail a download over it (offline failure is
+    // normal here, so debug — gated by wt-log, not a warning).
+    log.debug(
+      "offline",
+      `art cache failed ${track.id}`,
+      err instanceof Error ? err.message : String(err)
+    );
   }
 }
 

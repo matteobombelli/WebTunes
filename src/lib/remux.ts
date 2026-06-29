@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { withFfmpeg } from "@/lib/ffmpeg-gate";
+import { log } from "@/lib/log";
 
 // iOS Safari mis-handles Opus-in-Ogg playback (it truncates a track partway and
 // auto-skips). The identical Opus bitstream plays correctly once rewrapped in an
@@ -61,7 +62,12 @@ export async function remuxOpusToMp4(
     if (!srcHash || srcHash !== outHash) return null;
 
     return { body: await readFile(outPath), ext: "mp4", contentType: "audio/mp4" };
-  } catch {
+  } catch (err) {
+    log.warn(
+      "remux",
+      `opus→mp4 failed (.${ext})`,
+      err instanceof Error ? err.message : String(err)
+    );
     return null;
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
+import { log } from "@/lib/log";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 import TrackArt from "@/components/TrackArt";
@@ -80,6 +81,11 @@ function EditTrackForm({
       router.refresh();
       onSaved?.();
     } catch (err) {
+      log.warn(
+        "art",
+        `upload failed for ${track.id}`,
+        err instanceof Error ? err.message : "failed"
+      );
       setArtError(err instanceof Error ? err.message : "Failed to upload art");
     } finally {
       setArtBusy(false);

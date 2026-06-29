@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { withFfmpeg } from "@/lib/ffmpeg-gate";
+import { log } from "@/lib/log";
 
 // Encode a track's audio into a CLAP embedding for similarity search ("play
 // similar"). We decode to PCM with the same ffmpeg we already depend on for
@@ -61,7 +62,12 @@ export async function embedTrack(
     } finally {
       release();
     }
-  } catch {
+  } catch (err) {
+    log.warn(
+      "clap",
+      `embed failed (.${ext})`,
+      err instanceof Error ? err.message : String(err)
+    );
     return null;
   }
 }
