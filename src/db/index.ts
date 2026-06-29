@@ -10,11 +10,20 @@ const pool =
   new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 25,
-    // Disable JIT pool-wide. Queries whose *estimated* cost crosses Postgres's
-    // jit_above_cost (notably scope=all/search, inflated by the dedup subplan)
-    // otherwise spend ~400ms compiling machine code to speed up a query that
-    // runs in single-digit ms — at this data scale JIT is pure overhead.
-    options: "-c jit=off",
+    // Two pool-wide GUCs:
+    // - jit=off: queries whose *estimated* cost crosses Postgres's jit_above_cost
+    //   (notably scope=all/search, inflated by the dedup subplan) otherwise spend
+    //   ~400ms compiling machine code to speed up a query that runs in single-digit
+    //   ms — at this data scale JIT is pure overhead.
+    // - hnsw.iterative_scan=relaxed_order: "play similar"/Discover rank an HNSW
+    //   vector index UNDER restrictive WHERE filters (access rule + exclusions +
+    //   dedup). Plain HNSW explores only ef_search (~40) nodes, then the filters
+    //   drop most — so a seed whose acoustic neighbours are mostly inaccessible
+    //   returned as few as 4 of the requested 10. Iterative scan keeps resuming
+    //   the index until the LIMIT (POOL_SIZE) is filled; relaxed_order is fine
+    //   since we re-score and Gumbel-sample the pool anyway. Only affects HNSW
+    //   scans, so it's inert for every non-vector query.
+    options: "-c jit=off -c hnsw.iterative_scan=relaxed_order",
   });
 
 if (process.env.NODE_ENV !== "production") globalForDb.webtunesPool = pool;
