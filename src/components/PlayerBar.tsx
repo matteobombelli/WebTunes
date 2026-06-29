@@ -10,6 +10,7 @@ import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { loadRadioHistory, pushRadioHistory } from "@/lib/radio-history";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
+import { usePlaySimilarAutoStart } from "@/components/usePlaySimilarAutoStart";
 import PlayerProgress from "@/components/PlayerProgress";
 import { AddToPlaylistMenu } from "@/components/TrackList";
 import TrackArt from "@/components/TrackArt";
@@ -29,6 +30,10 @@ const TARGET_LUFS = -18;
 
 /** localStorage key for the persisted master volume (client-only preference). */
 const VOLUME_KEY = "wt-volume";
+
+/** localStorage key for the remembered "play similar" preference (client-only).
+ *  "1" when on; the key is removed when off. */
+const PLAY_SIMILAR_KEY = "wt-play-similar";
 
 /** localStorage key for the persisted player session (queue/track/position),
  *  restored after an iOS page-lifecycle discard wipes the in-memory store. */
@@ -151,6 +156,8 @@ export default function PlayerBar({
   // Gates the volume-persist effect until the saved value has been read on
   // mount, so the default (1) isn't written over the saved value first.
   const volumeHydratedRef = useRef(false);
+  // Same gate for the "play similar" preference persist effect.
+  const playSimilarHydratedRef = useRef(false);
   // A continuous, inaudible Web Audio tone kept running while a track plays so
   // the output device (notably Bluetooth) doesn't sleep during the gap between
   // tracks. When it sleeps, resuming for the next track flushes the previous
@@ -187,7 +194,9 @@ export default function PlayerBar({
   // live in <PlayerProgress>, which subscribes to them in isolation.
   const seekRequest = usePlayerStore((s) => s.seekRequest);
   const shuffled = usePlayerStore((s) => s.shuffled);
-  const playSimilar = usePlayerStore((s) => s.playSimilar);
+  // The button reflects the remembered preference (not the active radio, which
+  // dips false briefly during the auto-start seed fetch).
+  const playSimilarPref = usePlayerStore((s) => s.playSimilarPref);
   const [queueOpen, setQueueOpen] = useState(false);
   // Mobile-only fullscreen surfaces: the now-playing sheet (tap the mini-bar)
   // and the queue sheet it opens.
@@ -234,15 +243,22 @@ export default function PlayerBar({
 
   // Keep the "play similar" radio's queue topped up while it's active.
   usePlaySimilarRefill();
+  // Auto-start radio when a single track is played with the pref remembered on.
+  usePlaySimilarAutoStart();
 
   // Toggle "play similar": off → seed from the current track and fetch the
   // first batch; on → stop refilling (leaving the queue as-is).
   const handlePlaySimilar = async () => {
     const store = usePlayerStore.getState();
-    if (store.playSimilar) {
+    if (store.playSimilarPref) {
+      // Currently remembered on → forget it and stop any active radio.
       store.stopSimilar();
+      store.setPlaySimilarPref(false);
       return;
     }
+    // Remember it first, so it sticks even with nothing playing yet (or a seed
+    // with no embedding): the next track you click will auto-start radio.
+    store.setPlaySimilarPref(true);
     if (store.index < 0) return;
     const seed = store.queue[store.index].track;
     // Pre-seed exclusions with recently-served tracks so a restart doesn't
@@ -493,6 +509,22 @@ export default function PlayerBar({
     if (!volumeHydratedRef.current) return;
     localStorage.setItem(VOLUME_KEY, String(volume));
   }, [volume]);
+
+  // Restore the remembered "play similar" preference on mount, then let the
+  // persist effect below write subsequent changes.
+  useEffect(() => {
+    usePlayerStore
+      .getState()
+      .setPlaySimilarPref(localStorage.getItem(PLAY_SIMILAR_KEY) === "1");
+    playSimilarHydratedRef.current = true;
+  }, []);
+
+  // Persist preference changes once hydrated.
+  useEffect(() => {
+    if (!playSimilarHydratedRef.current) return;
+    if (playSimilarPref) localStorage.setItem(PLAY_SIMILAR_KEY, "1");
+    else localStorage.removeItem(PLAY_SIMILAR_KEY);
+  }, [playSimilarPref]);
 
   // Persist a minimal session snapshot when the tab is backgrounded/hidden — the
   // last reliable signals before iOS freezes then discards a paused PWA. Not a
@@ -955,10 +987,10 @@ export default function PlayerBar({
           )}
           {transportButton(
             handlePlaySimilar,
-            playSimilar ? "Stop play similar" : "Play similar",
+            playSimilarPref ? "Stop play similar" : "Play similar",
             <SimilarIcon size={16} />,
             `h-10 w-10 hover:bg-surface-2 ${
-              playSimilar
+              playSimilarPref
                 ? "text-accent-bright hover:text-accent-bright"
                 : "text-fg-muted hover:text-white"
             }`

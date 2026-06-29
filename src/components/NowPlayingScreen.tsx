@@ -40,7 +40,8 @@ export default function NowPlayingScreen({
   const track = useCurrentTrack();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffled = usePlayerStore((s) => s.shuffled);
-  const playSimilar = usePlayerStore((s) => s.playSimilar);
+  // Mirrors PlayerBar: the button reflects the remembered preference.
+  const playSimilarPref = usePlayerStore((s) => s.playSimilarPref);
   const { toggle, next, prev, toggleShuffle } = usePlayerStore.getState();
 
   // closing: kept in the DOM briefly after close for the slide-down.
@@ -221,10 +222,10 @@ export default function NowPlayingScreen({
           )}
           {iconBtn(
             onPlaySimilar,
-            playSimilar ? "Stop play similar" : "Play similar",
+            playSimilarPref ? "Stop play similar" : "Play similar",
             <SimilarIcon size={30} />,
             `h-16 w-16 active:bg-white/10 ${
-              playSimilar ? "text-accent-bright" : "text-white/80"
+              playSimilarPref ? "text-accent-bright" : "text-white/80"
             }`
           )}
           {iconBtn(

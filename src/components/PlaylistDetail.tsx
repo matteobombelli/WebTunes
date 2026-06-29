@@ -186,7 +186,9 @@ export default function PlaylistDetail({
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button
               pill
-              onClick={() => tracks.length && playQueue(tracks, 0)}
+              onClick={() =>
+                tracks.length && playQueue(tracks, 0, { collection: true })
+              }
               disabled={tracks.length === 0}
             >
               <PlayIcon size={16} />
@@ -198,7 +200,9 @@ export default function PlaylistDetail({
               onClick={() => {
                 if (!tracks.length) return;
                 usePlayerStore.setState({ shuffled: true });
-                playQueue(tracks, Math.floor(Math.random() * tracks.length));
+                playQueue(tracks, Math.floor(Math.random() * tracks.length), {
+                  collection: true,
+                });
               }}
               disabled={tracks.length === 0}
             >

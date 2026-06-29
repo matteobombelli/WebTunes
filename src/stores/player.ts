@@ -44,6 +44,15 @@ type PlayerState = {
   /** Ids already served this radio session (seed + every queued track), sent
    *  as the exclude list so refills don't repeat. */
   similarSeen: string[];
+  /** Remembered "play similar" preference (persisted to localStorage by
+   *  PlayerBar). When on, playing a single track auto-starts a radio seeded from
+   *  it. Cleared by the exceptions: enabling shuffle or playing a collection
+   *  outright. Source of truth for the toggle button (distinct from the active
+   *  `playSimilar` above, which can momentarily lag during the seed fetch). */
+  playSimilarPref: boolean;
+  /** Transient: a single-track play stamped this seed id to auto-start radio;
+   *  consumed (and cleared) by usePlaySimilarAutoStart. null when nothing pends. */
+  pendingSimilarSeed: string | null;
   /** Whether the settings modal is open (triggered from PlayerBar/MobileTopBar). */
   settingsOpen: boolean;
   isPlaying: boolean;
@@ -62,7 +71,14 @@ type PlayerState = {
   /** One-shot seek target consumed by PlayerBar's audio element. */
   seekRequest: number | null;
 
-  playQueue: (tracks: TrackDTO[], startIndex: number) => void;
+  /** Replace the queue and start playing. `collection` marks a "play outright"
+   *  (playlist / discover mix): it skips the play-similar auto-start and clears
+   *  the remembered preference. A single-track play (no opts) is radio-eligible. */
+  playQueue: (
+    tracks: TrackDTO[],
+    startIndex: number,
+    opts?: { collection?: boolean }
+  ) => void;
   /** Jump to a queue position (queue panel row click). */
   playAt: (index: number) => void;
   /** Insert right after the current track. */
@@ -87,6 +103,10 @@ type PlayerState = {
   advanceSimilar: (tracks: TrackDTO[]) => void;
   /** Disable "play similar" (leaves the current queue intact). */
   stopSimilar: () => void;
+  /** Set the remembered "play similar" preference (PlayerBar persists it). */
+  setPlaySimilarPref: (on: boolean) => void;
+  /** Clear the pending auto-start seed (consumed by usePlaySimilarAutoStart). */
+  _clearPendingSimilar: () => void;
   setSettingsOpen: (open: boolean) => void;
   toggle: () => void;
   next: () => void;
@@ -117,6 +137,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playSimilar: false,
   similarSeedId: null,
   similarSeen: [],
+  playSimilarPref: false,
+  pendingSimilarSeed: null,
   settingsOpen: false,
   isPlaying: false,
   volume: 1,
@@ -127,7 +149,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   duration: 0,
   seekRequest: null,
 
-  playQueue: (tracks, startIndex) => {
+  playQueue: (tracks, startIndex, opts) => {
     log.info(
       "player",
       `playQueue ${tracks.length} from #${startIndex}`,
@@ -141,6 +163,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       similarSeedId: null,
       similarSeen: [],
     };
+    // Remembered "play similar": a single-track play (no collection flag), with
+    // the pref on and shuffle off, stamps a seed for usePlaySimilarAutoStart to
+    // pick up. A collection play instead clears the pref (an exception).
+    const autoSeed =
+      !opts?.collection && prev.playSimilarPref && !prev.shuffled
+        ? tracks[startIndex]?.id ?? null
+        : null;
+    const prefReset = opts?.collection ? { playSimilarPref: false } : {};
     const items = wrap(tracks);
     // Re-selecting the track that's already current won't change track?.id, so
     // PlayerBar's load effect won't refire — restart it with a seek to 0 so
@@ -161,6 +191,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         ...stopSim,
+        ...prefReset,
+        pendingSimilarSeed: autoSeed,
         ...restart,
       });
     } else {
@@ -171,6 +203,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         ...stopSim,
+        ...prefReset,
+        pendingSimilarSeed: autoSeed,
         ...restart,
       });
     }
@@ -299,17 +333,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       similarSeen: [],
     };
     if (!s.shuffled) {
+      // Enabling shuffle is an exception that clears the remembered "play
+      // similar" preference (and any pending auto-start).
+      const clearPref = { playSimilarPref: false, pendingSimilarSeed: null };
       if (s.index < 0) {
-        set({ shuffled: true, ...stopSim });
+        set({ shuffled: true, ...stopSim, ...clearPref });
         return;
       }
-      const rest = s.queue.filter((_, i) => i !== s.index);
+      // Only shuffle songs *ahead*: keep the already-played history and the
+      // current track in place, shuffle just the upcoming tail.
+      const head = s.queue.slice(0, s.index + 1);
+      const tail = s.queue.slice(s.index + 1);
       set({
         shuffled: true,
         unshuffledQueue: s.queue,
-        queue: [s.queue[s.index], ...shuffle(rest)],
-        index: 0,
+        queue: [...head, ...shuffle(tail)],
+        index: s.index,
         ...stopSim,
+        ...clearPref,
       });
     } else {
       if (s.index < 0 || !s.unshuffledQueue) {
@@ -340,6 +381,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playSimilar: true,
       similarSeedId: seedId,
       similarSeen: [seedId, ...(initialSeen ?? []), ...tracks.map((t) => t.id)],
+      pendingSimilarSeed: null,
     });
   },
 
@@ -356,6 +398,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     log.info("player", "stopSimilar");
     set({ playSimilar: false, similarSeedId: null, similarSeen: [] });
   },
+
+  setPlaySimilarPref: (on) => set({ playSimilarPref: on }),
+
+  _clearPendingSimilar: () => set({ pendingSimilarSeed: null }),
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 
