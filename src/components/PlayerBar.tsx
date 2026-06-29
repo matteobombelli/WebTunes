@@ -198,6 +198,10 @@ export default function PlayerBar({
     trackId: string;
     position: number;
   } | null>(null);
+  // Bounded re-seek budget for one restore target so a streamed element that
+  // keeps landing short can't re-seek forever (the cold-start freeze). Reset
+  // per track load, mirroring recoverAttemptsRef.
+  const restoreAttemptsRef = useRef(0);
   // Last currentTime pushed to the store, so onTimeUpdate can throttle the
   // 4-30 Hz timeupdate down to ~4 Hz of store writes (see onTimeUpdate).
   const lastProgressRef = useRef(0);
@@ -449,6 +453,11 @@ export default function PlayerBar({
       restoredPositionRef.current = null; // arrived — stop re-asserting
       return;
     }
+    if (restoreAttemptsRef.current >= MAX_ATTEMPTS) {
+      restoredPositionRef.current = null; // give up rather than loop forever
+      return;
+    }
+    restoreAttemptsRef.current += 1;
     audio.currentTime = clamped;
     freshLoadRef.current = false; // stop onPlaying's cold-start snap-to-0
     logAudio("restore", String(clamped));
@@ -484,10 +493,28 @@ export default function PlayerBar({
     // A src swap on a still-playing element queues a 'pause' event; tag it as
     // expected so onPause doesn't mistake it for an involuntary interruption.
     if (!audio.paused) expectedPauseRef.current = true;
-    audio.src = streamSrc(track.id);
-    freshLoadRef.current = true;
+    // A cold-restore (page-discard rehydrate) target for THIS track: start the
+    // element AT the saved offset via a media fragment (#t=) so iOS applies it at
+    // LOAD time. A post-load `audio.currentTime = pos` seek is silently ignored on
+    // a freshly-loaded streamed element on iOS (it preloads nothing for a paused
+    // element, and the far offset isn't seekable yet at first play) — the track
+    // plays from 0 — whereas the fragment is honored by the media pipeline during
+    // the gesture-driven load. The fragment is client-only (never sent in the HTTP
+    // request), so the SW cache key (streamSrc, no fragment) still matches.
+    const restoreTarget = restoredPositionRef.current;
+    const startAt =
+      restoreTarget && restoreTarget.trackId === track.id
+        ? restoreTarget.position
+        : 0;
+    audio.src =
+      startAt > 0 ? `${streamSrc(track.id)}#t=${startAt}` : streamSrc(track.id);
+    // A restored start is the intended position, not cold-stream drift — clearing
+    // freshLoadRef stops onPlaying's snap-to-0 from resetting it. A normal fresh
+    // load arms the drift guard (true).
+    freshLoadRef.current = startAt === 0;
     pendingPlayRef.current = false; // a new track supersedes any owed retry
     recoverAttemptsRef.current = 0; // fresh recovery budget per track
+    restoreAttemptsRef.current = 0; // fresh restore budget per track
     // Drop a restore target meant for a previous track so it neither seeks this
     // one (starting it partway through) nor blocks the warm fallback in
     // onLoadedMetadata. A cold-mount target for THIS track is kept (same id).
@@ -1003,7 +1030,6 @@ export default function PlayerBar({
           tryRestorePosition();
           updatePositionState(); // seed the OS scrubber before first playback
         }}
-        onSeeked={tryRestorePosition}
       />
       {/* EXPERIMENT: silent loop kept playing through a pause to hold the iOS
           audio session (see silenceRef). Played/paused imperatively; renders
