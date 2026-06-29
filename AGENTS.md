@@ -230,21 +230,33 @@ setup, and architecture rationale.
   that re-asserts a stuck/owed `play()` is `pendingPlayRef` + `retryPendingPlay`
   (fired by `canplay`/`stalled`/`visibilitychange`). Three iOS-only failure modes
   diverge intent from reality and each has a targeted fix in `PlayerBar`:
-  - **Lock-screen / Control-Center resume is in-gesture — but background resume is
-    an iOS limitation we can't beat.** The MediaSession `play` handler resumes
-    *inside the handler* via `attemptPlay(true)` (owed-play on a blocked resume,
-    never a teardown) and the `[isPlaying]` effect guards with `if (audio.paused)`
-    to avoid a second, tearing-down `play()` — this makes **foreground**/
-    Control-Center resume reliable. HOWEVER, on-device logs (`wt-audio-debug`)
-    proved that when the PWA is **backgrounded (screen locked)**, the `play`
-    handler still fires but `audio.play()` neither resolves nor rejects — it
-    *hangs pending* until the app is foregrounded, then every queued `play()`
-    resolves at once (`vis hidden` → `mediasession:play` …silence… → `vis visible`
-    → N×`play-ok`). A backgrounded installed PWA simply cannot (re)start `<audio>`
-    output; only native apps get that. Keeping the keep-alive `AudioContext`
-    running through the pause was tried and did **not** help (reverted). So:
-    lock-screen pause works, lock-screen *resume while locked* does not, and it
-    auto-resumes the moment WebTunes is foregrounded — that is the ceiling.
+  - **Lock-screen / Control-Center resume — now works *while locked* via a silent
+    keep-alive `<audio>`.** The MediaSession `play` handler resumes *inside the
+    handler* via `attemptPlay(true)` (owed-play on a blocked resume, never a
+    teardown) and the `[isPlaying]` effect guards with `if (audio.paused)` to avoid
+    a second, tearing-down `play()`. That alone fixes **foreground**/Control-Center
+    resume but NOT a locked screen: on-device logs (`wt-audio-debug`) proved a
+    backgrounded installed PWA can't (re)start a *paused* `<audio>` — `audio.play()`
+    hangs pending until foregrounded (`vis hidden` → `mediasession:play` …silence…
+    → `vis visible` → N×`play-ok`). THE FIX (`silenceRef` in `PlayerBar`, gated to
+    `navigator.standalone`): a second `<audio>` looping `public/silence.m4a` is
+    played *through* the pause so the iOS audio session is never released — a real
+    media element keeps playing in the background where the keep-alive
+    `AudioContext` tone gets *suspended* (that tone, tried through the pause, did
+    **not** help — reverted; this is the key difference). With the session held
+    there is no cold (re)start to hang on, so the lock-screen `play` resumes the
+    still-loaded track element; the silence loop is stopped in `onPlaying`. COST: a
+    silent element keeps the output/device awake during a pause (battery) — hence
+    the iOS-PWA-only gate. `silence.m4a` is exempted from the `src/proxy.ts` cookie
+    gate like the other PWA assets. DISPLAY caveat: iOS drives Now Playing off the
+    actively-playing silence element, so the scrubber is pinned to the track's
+    frozen position via per-tick `setPositionState` (position is advisory →
+    last-writer-wins → it holds), but the play/pause **icon** can linger on ▶ for a
+    beat after a resume — iOS derives the icon from the playing element and only
+    weakly honors `playbackState` (set once per transition via `setPlaybackState`);
+    forcing it per-tick only causes flicker / spontaneous "playing" flips, so the
+    lag is accepted. Single-element variants (mute the track) are a dead end: iOS
+    ignores `element.volume`, and muting may drop the session.
   - **Involuntary pauses** (iOS handing the shared audio session to another PWA,
     then that PWA closing) fire a DOM `pause` with no transport handler, leaving
     `isPlaying` true. The `<audio onPause>` handler recovers them, gated by
@@ -267,11 +279,13 @@ setup, and architecture rationale.
   (sets `wt-audio-debug`), which persists `logAudio` lines to `localStorage`
   (`wt-audio-log`, survives a discard) and shows them in a copyable panel — no Mac
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
-  our handlers?), `play-ok`/`play-reject`, `pause … vis=…` + `pause:bg-reclaim`/
-  `:fg-reconcile`, `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary:
-  a "stuck playing-UI with dead audio" is usually the background-resume limit
-  above (resumes on foreground); "controls/queue gone after backgrounding" is a
-  discard — check whether `mount cold=true` fired.
+  our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
+  the keep-alive loop start?), `pause … vis=…` + `pause:bg-reclaim`/`:fg-reconcile`,
+  `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary: a "stuck
+  playing-UI with dead audio" usually means the silent keep-alive didn't hold the
+  session (look for `silence:reject` / a missing `silence:play`), which falls back
+  to the old behavior (resumes on foreground); "controls/queue gone after
+  backgrounding" is a discard — check whether `mount cold=true` fired.
 
 ## Production logs
 
