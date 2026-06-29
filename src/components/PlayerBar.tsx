@@ -153,6 +153,10 @@ export default function PlayerBar({
   // AudioContext tone can't (iOS suspends an AudioContext in the background). Gated
   // to the installed iOS PWA (navigator.standalone); stopped once the track resumes.
   const silenceRef = useRef<HTMLAudioElement>(null);
+  // The track position to pin the OS Now Playing scrubber to while paused (the
+  // silence loop is the playing element then, so iOS would otherwise show ITS
+  // 0-3s position). Non-null only between a pause and the next resume.
+  const pausedPosRef = useRef<number | null>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
   const countedRef = useRef<string | null>(null);
   // True from a fresh track load until playback actually begins. A cold first
@@ -388,14 +392,15 @@ export default function PlayerBar({
   // (snapping to the real spot on resume). setPositionState overrides that with
   // page-global values. Guarded: it throws on NaN/out-of-range inputs (e.g.
   // before metadata, or a streamed element whose duration is briefly Infinity).
-  const updatePositionState = () => {
+  const updatePositionState = (positionOverride?: number) => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!("setPositionState" in navigator.mediaSession)) return;
     const audio = audioRef.current;
     if (!audio) return;
     const duration = audio.duration;
     if (!Number.isFinite(duration) || duration <= 0) return;
-    const position = Math.min(Math.max(0, audio.currentTime), duration);
+    const raw = positionOverride ?? audio.currentTime;
+    const position = Math.min(Math.max(0, raw), duration);
     try {
       navigator.mediaSession.setPositionState({
         duration,
@@ -405,6 +410,16 @@ export default function PlayerBar({
     } catch {
       // Out-of-range mid-load — ignore; a later call corrects it.
     }
+  };
+
+  // Set the OS playback state. A plain helper (not an inline mutation inside JSX
+  // event handlers) so the React Compiler immutability lint stays happy.
+  const setPlaybackState = (state: "playing" | "paused") => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    // Mutating a Web-API global the React Compiler can't model as mutable (the
+    // existing [isPlaying] effect does the same; effects are just exempt).
+    // eslint-disable-next-line react-hooks/immutability
+    navigator.mediaSession.playbackState = state;
   };
 
   // Re-assert a pending restore target (set by the cold-mount discard restore, or
@@ -505,6 +520,7 @@ export default function PlayerBar({
       // PWA cannot restart <audio> regardless. So we suspend it to save the idle
       // Bluetooth cost.)
       autoAdvanceRef.current = false;
+      pausedPosRef.current = audio.currentTime; // frozen position for the OS scrubber
       // EXPERIMENT: in an installed iOS PWA, start the silent loop in-gesture
       // BEFORE pausing the track so the audio session stays held across the
       // pause — the bet for enabling a locked-screen resume. onPlaying stops it
@@ -518,9 +534,8 @@ export default function PlayerBar({
               logAudio("silence:play");
               // Re-assert the paused display AFTER the silence element starts:
               // iOS otherwise derives "playing" from the actively-playing loop.
-              if ("mediaSession" in navigator)
-                navigator.mediaSession.playbackState = "paused";
-              updatePositionState();
+              setPlaybackState("paused");
+              updatePositionState(pausedPosRef.current ?? undefined);
             })
             .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
         }
@@ -528,7 +543,7 @@ export default function PlayerBar({
       if (!audio.paused) expectedPauseRef.current = true;
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
-      updatePositionState(); // pin the OS scrubber to the frozen track position
+      updatePositionState(pausedPosRef.current ?? undefined); // pin to frozen position
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -857,9 +872,9 @@ export default function PlayerBar({
           logAudio("playing");
           pendingPlayRef.current = false; // playback truly began: nothing owed
           expectedPauseRef.current = false; // ...and no deliberate pause is pending
+          pausedPosRef.current = null; // resumed: stop pinning the frozen scrubber
           silenceRef.current?.pause(); // EXPERIMENT: track holds the session now
-          if ("mediaSession" in navigator)
-            navigator.mediaSession.playbackState = "playing";
+          setPlaybackState("playing");
           updatePositionState();
           // Re-assert media-session handlers now that the element is seekable,
           // so WebKit's playback-time auto-enable of the ±10/15s seek commands
@@ -896,6 +911,11 @@ export default function PlayerBar({
             lastProgressRef.current = ct;
             _setProgress(ct, dur);
             updatePositionState(); // keep the OS scrubber in step while playing
+            // Re-assert "playing" while the track ticks so the lock-screen
+            // button self-corrects after a resume (it otherwise lingers on the
+            // play icon — iOS latched a paused state when the silence loop
+            // stopped). onTimeUpdate only fires while the track is playing.
+            setPlaybackState("playing");
           }
           // Count a "friend play" once the track passes 30s (server ignores
           // the owner's own plays). Fire-and-forget; silent if offline.
@@ -988,7 +1008,21 @@ export default function PlayerBar({
       {/* EXPERIMENT: silent loop kept playing through a pause to hold the iOS
           audio session (see silenceRef). Played/paused imperatively; renders
           harmlessly everywhere but only ever plays in an installed iOS PWA. */}
-      <audio ref={silenceRef} src={`${BASE_PATH}/silence.m4a`} loop preload="auto" />
+      <audio
+        ref={silenceRef}
+        src={`${BASE_PATH}/silence.m4a`}
+        loop
+        preload="auto"
+        onTimeUpdate={() => {
+          // The silence loop is the actively-playing element during a pause, so
+          // iOS derives the Now Playing scrubber/state from IT (a 0-3s loop) and
+          // ignores a one-shot override. Re-pin to the track's frozen position
+          // and re-assert paused on every tick to keep overriding that.
+          if (pausedPosRef.current == null) return;
+          updatePositionState(pausedPosRef.current);
+          setPlaybackState("paused");
+        }}
+      />
 
       {/* Mobile (below md, matching MobileNav): a minimal mini-player — art +
           title/artist on the left (tap to open the now-playing sheet),
