@@ -1,9 +1,13 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { cache } from "react";
 import { db } from "@/db";
 import { friendships, users } from "@/db/schema";
-import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
+import type {
+  FriendDTO,
+  FriendRequestDTO,
+  FriendSuggestionDTO,
+} from "@/lib/types";
 
 // Wrapped in React's per-request cache(): the (app) layout and the page it
 // renders both reach for friendship data on the same request, and so do the
@@ -64,6 +68,72 @@ export async function friendsOf(userId: string): Promise<FriendDTO[]> {
     .select({ id: users.id, name: users.name })
     .from(users)
     .where(inArray(users.id, ids));
+}
+
+/**
+ * "You might know" suggestions: accepted friends of the viewer's accepted
+ * friends, whom the viewer isn't already friends with and has no pending
+ * request with. Ranked by number of mutual friends (desc), then username.
+ */
+export async function suggestedFriendsFor(
+  userId: string,
+  limit = 12
+): Promise<FriendSuggestionDTO[]> {
+  const friendIds = await friendIdsOf(userId);
+  if (friendIds.length === 0) return [];
+
+  // Anyone with a pending request (either direction) is also excluded.
+  const pendingRows = await db
+    .select({
+      requesterId: friendships.requesterId,
+      addresseeId: friendships.addresseeId,
+    })
+    .from(friendships)
+    .where(
+      and(
+        eq(friendships.status, "pending"),
+        or(
+          eq(friendships.requesterId, userId),
+          eq(friendships.addresseeId, userId)
+        )
+      )
+    );
+  const pendingIds = pendingRows.map((r) =>
+    r.requesterId === userId ? r.addresseeId : r.requesterId
+  );
+
+  const friendIdList = sql.join(
+    friendIds.map((id) => sql`${id}`),
+    sql`, `
+  );
+  // Each accepted edge with one endpoint among the viewer's friends contributes
+  // its OTHER endpoint as a candidate; the candidate joins to `users`. Counting
+  // those edges per candidate = the candidate's mutual-friend count. Candidates
+  // who are themselves the viewer, an existing friend, or a pending-request user
+  // are excluded — which also drops edges where BOTH endpoints are friends.
+  const candidateId = sql`case when ${friendships.requesterId} in (${friendIdList}) then ${friendships.addresseeId} else ${friendships.requesterId} end`;
+
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      mutualCount: sql<number>`count(*)::int`,
+    })
+    .from(friendships)
+    .innerJoin(users, eq(users.id, candidateId))
+    .where(
+      and(
+        eq(friendships.status, "accepted"),
+        or(
+          inArray(friendships.requesterId, friendIds),
+          inArray(friendships.addresseeId, friendIds)
+        ),
+        notInArray(users.id, [userId, ...friendIds, ...pendingIds])
+      )
+    )
+    .groupBy(users.id)
+    .orderBy(desc(sql`count(*)`), users.name)
+    .limit(limit);
 }
 
 /** Pending friend requests involving a user, tagged with their direction. */

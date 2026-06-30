@@ -5,7 +5,12 @@ import { CompassIcon, UsersIcon } from "@/components/icons";
 import DiscoverSection from "@/components/DiscoverSection";
 import FriendsPanel from "@/components/FriendsPanel";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import type { FriendDTO, FriendRequestDTO, TrackDTO } from "@/lib/types";
+import type {
+  FriendDTO,
+  FriendRequestDTO,
+  FriendSuggestionDTO,
+  TrackDTO,
+} from "@/lib/types";
 
 type Sections = {
   top: TrackDTO[];
@@ -23,11 +28,13 @@ export default function DiscoverBrowser({
   sections,
   friends,
   requests,
+  suggestions,
   canInvite,
 }: {
   sections: Sections;
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
+  suggestions: FriendSuggestionDTO[];
   canInvite: boolean;
 }) {
   const [tab, setTab] = useState<"discover" | "friends">("discover");
@@ -87,6 +94,7 @@ export default function DiscoverBrowser({
         <FriendsPanel
           friends={friends}
           requests={requests}
+          suggestions={suggestions}
           canInvite={canInvite}
         />
       )}

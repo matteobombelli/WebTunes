@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { FriendDTO, FriendRequestDTO } from "@/lib/types";
+import type {
+  FriendDTO,
+  FriendRequestDTO,
+  FriendSuggestionDTO,
+} from "@/lib/types";
 import InvitePanel from "@/components/InvitePanel";
 import { XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
@@ -15,10 +19,12 @@ import { NotificationDot } from "@/components/ui/NotificationDot";
 export default function FriendsPanel({
   friends,
   requests,
+  suggestions,
   canInvite,
 }: {
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
+  suggestions: FriendSuggestionDTO[];
   canInvite: boolean;
 }) {
   const router = useRouter();
@@ -33,9 +39,13 @@ export default function FriendsPanel({
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [tab, setTab] = useState<"friends" | "requests" | "invite">("friends");
+  // Ids we've just sent a request to, so suggestions disappear immediately
+  // (router.refresh() then drops them server-side once the request exists).
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
 
   const incoming = requests.filter((r) => r.direction === "incoming");
   const outgoing = requests.filter((r) => r.direction === "outgoing");
+  const visibleSuggestions = suggestions.filter((s) => !requestedIds.has(s.id));
 
   const trimmedQuery = query.trim();
   const results = search.q === trimmedQuery ? search.results : [];
@@ -78,6 +88,7 @@ export default function FriendsPanel({
         ...s,
         results: s.results.filter((r) => r.id !== target.id),
       }));
+      setRequestedIds((prev) => new Set(prev).add(target.id));
       router.refresh();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Failed to send request");
@@ -262,6 +273,42 @@ export default function FriendsPanel({
           </ul>
         )}
       </section>
+      )}
+
+      {tab === "friends" && visibleSuggestions.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold uppercase text-fg-subtle">
+            You might know
+          </h2>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleSuggestions.map((s) => (
+              <li
+                key={s.id}
+                className={`flex items-center gap-3 p-4 ${cardClass}`}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 font-display text-lg font-semibold text-accent-bright">
+                  {s.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {s.name}
+                  </span>
+                  <span className="text-xs text-fg-subtle">
+                    {s.mutualCount} mutual friend
+                    {s.mutualCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={sendingId === s.id}
+                  onClick={() => sendRequest(s)}
+                >
+                  {sendingId === s.id ? "Sending…" : "Add"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

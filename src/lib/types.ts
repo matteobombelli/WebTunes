@@ -51,6 +51,13 @@ export type FriendRequestDTO = {
   createdAt: string;
 };
 
+/** A "you might know" suggestion: a friend-of-a-friend with mutual count. */
+export type FriendSuggestionDTO = {
+  id: string;
+  name: string;
+  mutualCount: number;
+};
+
 export type InviteDTO = {
   token: string;
   createdAt: string;

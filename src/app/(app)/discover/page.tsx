@@ -5,7 +5,11 @@ import {
   listTopTracks,
   randomSeedTracks,
 } from "@/lib/discover";
-import { friendsOf, pendingRequestsFor } from "@/lib/friends";
+import {
+  friendsOf,
+  pendingRequestsFor,
+  suggestedFriendsFor,
+} from "@/lib/friends";
 import { INVITE_BLOCKED_EMAILS } from "@/lib/invites";
 import { findRecommendedClusters } from "@/lib/similar";
 import { getUserSettings } from "@/lib/users";
@@ -21,15 +25,23 @@ export default async function DiscoverPage() {
   const top = await listTopTracks(user.id);
   const topIds = top.map((t) => t.id);
 
-  const [recommended, random, friendsTop, newTracks, friends, requests] =
-    await Promise.all([
-      findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
-      randomSeedTracks(user.id, hideFriendDuplicates),
-      listFriendsTop(user.id, hideFriendDuplicates),
-      listNewTracks(user.id, hideFriendDuplicates),
-      friendsOf(user.id),
-      pendingRequestsFor(user.id),
-    ]);
+  const [
+    recommended,
+    random,
+    friendsTop,
+    newTracks,
+    friends,
+    requests,
+    suggestions,
+  ] = await Promise.all([
+    findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
+    randomSeedTracks(user.id, hideFriendDuplicates),
+    listFriendsTop(user.id, hideFriendDuplicates),
+    listNewTracks(user.id, hideFriendDuplicates),
+    friendsOf(user.id),
+    pendingRequestsFor(user.id),
+    suggestedFriendsFor(user.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -37,6 +49,7 @@ export default async function DiscoverPage() {
         sections={{ top, recommended, random, friendsTop, newTracks }}
         friends={friends}
         requests={requests}
+        suggestions={suggestions}
         canInvite={!INVITE_BLOCKED_EMAILS.has(user.email)}
       />
     </div>
