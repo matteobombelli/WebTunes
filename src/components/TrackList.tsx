@@ -684,7 +684,7 @@ type TrackRowProps = {
   canEdit: boolean;
   canDelete: boolean;
   playQueue: (tracks: TrackDTO[], startIndex: number) => void;
-  onToggleSelect: (id: string) => void;
+  onToggleSelect: (id: string, shiftKey: boolean) => void;
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
@@ -725,7 +725,11 @@ const TrackRow = memo(function TrackRow({
             type="checkbox"
             aria-label={`Select ${track.title}`}
             checked={selected}
-            onChange={() => onToggleSelect(track.id)}
+            // React backs checkbox onChange with the native click, so the
+            // nativeEvent carries shiftKey — used for range selection.
+            onChange={(e) =>
+              onToggleSelect(track.id, (e.nativeEvent as MouseEvent).shiftKey)
+            }
             tabIndex={selectMode ? 0 : -1}
             className={`checkbox transition-[opacity,transform] duration-200 ${
               selectMode
@@ -1048,14 +1052,37 @@ export default function TrackList({
       label
     );
 
-  const toggleSelected = useCallback((id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  // The last plainly-clicked row, used as the anchor for a shift+click range.
+  const rangeAnchorRef = useRef<string | null>(null);
+  const toggleSelected = useCallback(
+    (id: string, shiftKey: boolean) => {
+      const anchor = rangeAnchorRef.current;
+      // Shift+click selects every row between the anchor and this one
+      // (inclusive), in display order — no anchor yet falls through to a plain
+      // toggle. The anchor stays put so the range can be re-extended.
+      if (shiftKey && anchor && anchor !== id) {
+        const from = view.findIndex((t) => t.id === anchor);
+        const to = view.findIndex((t) => t.id === id);
+        if (from !== -1 && to !== -1) {
+          const [lo, hi] = from < to ? [from, to] : [to, from];
+          setSelected((prev) => {
+            const next = new Set(prev);
+            for (let i = lo; i <= hi; i++) next.add(view[i].id);
+            return next;
+          });
+          return;
+        }
+      }
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      rangeAnchorRef.current = id;
+    },
+    [view]
+  );
   // Selection can hold ids of tracks that were since deleted (router.refresh
   // keeps client state) — only count ids present in the current list.
   const validSelected = useMemo(() => {
