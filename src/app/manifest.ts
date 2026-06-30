@@ -5,6 +5,7 @@ import { BASE_PATH } from "@/lib/base-path";
 // the URLs inside it — every path here needs BASE_PATH explicitly.
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: `${BASE_PATH}/`,
     name: "WebTunes",
     short_name: "WebTunes",
     description: "Your personal music library, anywhere",
@@ -27,7 +28,7 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
       {
-        src: `${BASE_PATH}/icon-512.png`,
+        src: `${BASE_PATH}/icon-512-maskable.png`,
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
