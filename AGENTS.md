@@ -47,6 +47,10 @@ setup, and architecture rationale.
     `@huggingface/transformers` + ffmpeg) on upload for "play similar";
     `similar.ts` — access-respecting cosine nearest-neighbour query over the
     `track_embeddings` side table
+  - `recognize.ts` — acoustic-fingerprint recognition (fpcalc/Chromaprint →
+    AcoustID → Cover Art Archive, iTunes art fallback) to fill MISSING
+    artist/album/cover; `recognize-queue.ts` — the background worker that runs it
+    (see the recognition-worker note below)
   - `offline/` — PWA download internals: `db.ts` (IndexedDB metadata),
     `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
 - `src/app/api/` — REST-ish JSON routes. Some GET endpoints are unused by the
@@ -195,8 +199,9 @@ setup, and architecture rationale.
 - Online cover-art lookup: `lib/metadata-lookup.ts`'s `findCoverArt` fetches
   cover art via the iTunes Search API (no key; searches by title then album;
   upscales `100x100bb.jpg`→`600x600bb.jpg`) for tracks with an artist but no
-  embedded art. Best-effort like loudness/lyrics — null on miss; the upload
-  route calls it inline only when a track has an artist but no art. Remote art
+  embedded art. Best-effort like loudness/lyrics — null on miss. It is no longer
+  called inline on upload; it is now the **art fallback** inside the recognition
+  worker (Cover Art Archive first, iTunes second — see the note below). Remote art
   is untrusted, so the stored kind/Content-Type comes from `imageKindFromBytes`
   (magic-number sniff through the same allowlist), never the URL/response header
   — same stored-XSS reasoning as image uploads above.
@@ -206,6 +211,28 @@ setup, and architecture rationale.
   `backfill-online-review.jsonl`) and only writes with `--apply` (revert log to
   `backfill-online-revert.jsonl`). The script mirrors the lib + the
   `image-upload.ts` allowlist (keep in sync) and rate-limits iTunes.
+- Recognition worker (fill MISSING metadata): the upload route enqueues to
+  `lib/recognize-queue.ts` (after the row exists, like the CLAP queue) whenever a
+  track lands with a missing artist, album, **or** cover. The worker re-fetches
+  the stored bytes from S3, fingerprints them with **fpcalc/Chromaprint (a runtime
+  dependency on PATH like ffmpeg**, through the shared `ffmpeg-gate`), looks the
+  fingerprint up against **AcoustID** (`meta=recordings+releasegroups`, so artist/
+  album/release-group MBID come back inline — no MusicBrainz call), and resolves
+  art from **Cover Art Archive** (by MBID) → iTunes `findCoverArt` fallback. It
+  fills **only empty** fields and the `title` is never touched: it re-reads the
+  row and every write is a conditional `... WHERE col IS NULL` UPDATE, so the
+  no-overwrite rule is atomic even against a concurrent fill. Best-effort like
+  loudness/CLAP — any failure (no key, no/low-confidence match, fpcalc/network
+  error) just leaves the gaps. `ACOUSTID_API_KEY` (free app key from
+  acoustid.org; unset = recognition disabled, but the worker still does the iTunes
+  art-by-tags fallback for already-tagged tracks). **1 worker** (vs CLAP's 2)
+  because it's gated by external politeness — AcoustID ≤3 req/s, Cover Art
+  Archive/MusicBrainz ≤1 req/s on a shared app key — not CPU; a single serial
+  worker stays under all limits with no cross-worker coordination. Only the
+  compact fingerprint leaves the box, never the audio.
+  `scripts/recognize-missing-metadata.mjs` backfills the existing library
+  (dry-run default → `recognize-missing-review.jsonl`; `--apply` → revert log;
+  mirrors the lib + allowlist + thumbnail logic, keep in sync).
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`

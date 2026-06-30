@@ -9,7 +9,7 @@ import { imageKindFromMime } from "@/lib/image-upload";
 import { log } from "@/lib/log";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
 import { extractTrackMetadata } from "@/lib/metadata";
-import { findCoverArt } from "@/lib/metadata-lookup";
+import { enqueueRecognition } from "@/lib/recognize-queue";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
 import {
@@ -113,31 +113,14 @@ export async function POST(req: NextRequest) {
     remuxOpusToMp4(buffer, ext, file.type),
   ]);
 
-  // Best-effort online cover art for uploads that have an artist but no embedded
-  // art — like loudness/CLAP/lyrics, it never delays or fails a normal, fully-
-  // arted upload (only artless files reach a network call) and needs no API key.
-  let cover: { body: Buffer; contentType: string; ext: string } | null =
+  // Cover art on the upload path now comes only from the file's embedded art.
+  // Online/acoustic cover-art lookup (and artist/album recognition) is handled
+  // afterwards by the background recognition worker (lib/recognize-queue.ts), so
+  // an artless upload returns immediately instead of waiting on a network call.
+  const cover: { body: Buffer; contentType: string; ext: string } | null =
     meta.artBuffer
       ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
       : null;
-  if (!cover && meta.artist) {
-    try {
-      const art = await findCoverArt({
-        artist: meta.artist,
-        album: meta.album,
-        title: meta.title,
-      });
-      if (art)
-        cover = { body: art.body, contentType: art.kind.contentType, ext: art.kind.ext };
-    } catch (err) {
-      // best-effort; never block the upload (gated debug — a miss is normal)
-      log.debug(
-        "upload",
-        "cover lookup failed",
-        err instanceof Error ? err.message : String(err)
-      );
-    }
-  }
 
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
@@ -223,6 +206,12 @@ export async function POST(req: NextRequest) {
     // this track won't seed/appear in "play similar" until the worker (or the
     // backfill script) fills it in — it must never fail or delay the upload.
     enqueueEmbedding({ trackId, s3Key, ext: audioExt });
+    // Fill any MISSING artist/album/cover-art in the background via acoustic
+    // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup
+    // as the fallback. Never overwrites existing data; the title is left alone.
+    if (!meta.artist || !meta.album || !artS3Key) {
+      enqueueRecognition({ trackId, s3Key, ext: audioExt });
+    }
     return NextResponse.json(toTrackDTO(track), { status: 201 });
   } catch (err) {
     // Concurrent upload of the same file slipped past the dedupe check.

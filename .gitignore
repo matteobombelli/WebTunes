@@ -52,6 +52,11 @@ next-env.d.ts
 /backfill-online-revert.jsonl
 /art-apply.log
 
+# Review/revert/run logs written by scripts/recognize-missing-metadata.mjs
+/recognize-missing-review.jsonl
+/recognize-missing-revert.jsonl
+/recognize-apply.log
+
 # Snapshot/audit logs written by scripts/reconcile-r2.mjs (runtime artifacts)
 /reconcile-r2-review.jsonl
 /reconcile-r2-revert.jsonl
