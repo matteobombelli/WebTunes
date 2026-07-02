@@ -6,6 +6,7 @@ import {
   randomSeedTracks,
 } from "@/lib/discover";
 import {
+  friendListensOf,
   friendsOf,
   pendingRequestsFor,
   suggestedFriendsFor,
@@ -33,6 +34,7 @@ export default async function DiscoverPage() {
     friends,
     requests,
     suggestions,
+    ownFriendListens,
   ] = await Promise.all([
     findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
     randomSeedTracks(user.id, hideFriendDuplicates),
@@ -41,6 +43,7 @@ export default async function DiscoverPage() {
     friendsOf(user.id),
     pendingRequestsFor(user.id),
     suggestedFriendsFor(user.id),
+    friendListensOf(user.id),
   ]);
 
   return (
@@ -50,6 +53,7 @@ export default async function DiscoverPage() {
         friends={friends}
         requests={requests}
         suggestions={suggestions}
+        ownFriendListens={ownFriendListens}
         canInvite={!INVITE_BLOCKED_EMAILS.has(user.email)}
       />
     </div>

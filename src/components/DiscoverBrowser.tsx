@@ -29,12 +29,14 @@ export default function DiscoverBrowser({
   friends,
   requests,
   suggestions,
+  ownFriendListens,
   canInvite,
 }: {
   sections: Sections;
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
   suggestions: FriendSuggestionDTO[];
+  ownFriendListens: number;
   canInvite: boolean;
 }) {
   const [tab, setTab] = useState<"discover" | "friends">("discover");
@@ -95,6 +97,7 @@ export default function DiscoverBrowser({
           friends={friends}
           requests={requests}
           suggestions={suggestions}
+          ownFriendListens={ownFriendListens}
           canInvite={canInvite}
         />
       )}

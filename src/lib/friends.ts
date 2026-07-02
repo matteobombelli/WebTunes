@@ -76,6 +76,18 @@ export async function friendsOf(userId: string): Promise<FriendDTO[]> {
     .groupBy(users.id);
 }
 
+/** Total ≥30s plays by non-owners across a user's own library (the same
+ *  metric the friend cards show, for the viewer themselves). */
+export async function friendListensOf(userId: string): Promise<number> {
+  const [row] = await db
+    .select({
+      total: sql<number>`coalesce(sum(${tracks.friendPlayCount}), 0)::int`,
+    })
+    .from(tracks)
+    .where(eq(tracks.ownerId, userId));
+  return row?.total ?? 0;
+}
+
 /**
  * "You might know" suggestions: accepted friends of the viewer's accepted
  * friends, whom the viewer isn't already friends with and has no pending

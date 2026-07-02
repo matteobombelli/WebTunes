@@ -20,11 +20,14 @@ export default function FriendsPanel({
   friends,
   requests,
   suggestions,
+  ownFriendListens,
   canInvite,
 }: {
   friends: FriendDTO[];
   requests: FriendRequestDTO[];
   suggestions: FriendSuggestionDTO[];
+  /** The viewer's own total friend listens (see friendListensOf). */
+  ownFriendListens: number;
   canInvite: boolean;
 }) {
   const router = useRouter();
@@ -238,6 +241,10 @@ export default function FriendsPanel({
 
       {tab === "friends" && (
       <section>
+        <p className="mb-3 text-xs text-fg-subtle">
+          Your tracks have {ownFriendListens} friend listen
+          {ownFriendListens === 1 ? "" : "s"}.
+        </p>
         {friends.length === 0 ? (
           <p className="text-sm text-fg-subtle">
             No friends yet. Friends automatically share their libraries with each other.
