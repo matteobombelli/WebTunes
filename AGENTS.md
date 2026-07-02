@@ -301,7 +301,17 @@ setup, and architecture rationale.
     re-asserts it via `attemptPlay`. Forcing `mediaSession.playbackState` per-tick
     remains a dead end (flicker / spontaneous "playing" flips — see 46f824d), as
     are single-element variants (mute the track): iOS ignores `element.volume`,
-    and muting may drop the session. COST: a silent element keeps the
+    and muting may drop the session. RESIDUAL known issue: a few seconds INTO a
+    pause iOS can re-derive "playing" from the still-playing silence loop and
+    flip the icon back to ⏸. Two mitigations: (1) the MediaSession `pause`
+    handler treats a pause-action-while-already-paused as a toggle and resumes
+    in-gesture (`mediasession:pause-as-resume`) — a drifted icon is never a dead
+    button; (2) `navigator.audioSession.type = "playback"` is declared at mount
+    (iOS 17+ Audio Session API), and the `wt-exp-pause-silence` localStorage
+    flag switches the pause branch to STOP the loop while paused (no playing
+    element → no drift), betting on the Audio Session API to keep locked resume
+    alive — device-testable per phone without a deploy; make it the default if
+    locked resume survives with it on. COST: a silent element keeps the
     output/device awake through pauses (battery, unchanged) and now also decodes
     during playback (marginal) — hence the iOS-PWA-only gate. `silence.m4a` is
     exempted from the `src/proxy.ts` cookie gate like the other PWA assets. The
@@ -335,8 +345,11 @@ setup, and architecture rationale.
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
   our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
   the keep-alive loop start?), `silence:playing`/`silence:paused` (the element's
-  real events; we never pause it, so `silence:paused` always means the OS
+  real events; we never pause it — except a `silence:stop` under
+  `wt-exp-pause-silence` — so an unpaired `silence:paused` means the OS
   interrupted it), `playbackState <state>` (logged on change only),
+  `mediasession:pause-as-resume` (drifted-icon tap honored as toggle),
+  `audiosession playback` (Audio Session API present),
   `pause … vis=…` + `pause:reconcile`,
   `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary: a "stuck
   playing-UI with dead audio" usually means the silent keep-alive didn't hold the
