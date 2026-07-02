@@ -146,24 +146,17 @@ export default function PlayerBar({
   initialHideFriendDuplicates: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
-  // iOS lock-screen support: a second <audio> looping silence, started at the
-  // first play gesture and NEVER paused by us. It holds the iOS audio session
-  // through pauses (a backgrounded iOS PWA can't restart a paused <audio> from
-  // the lock screen — play() hangs pending; a real media element holds the
-  // session where the keep-alive AudioContext tone can't, since iOS suspends an
-  // AudioContext in the background). Running it continuously also fixes the
-  // lock-screen icon polarity: iOS keys the icon to the most recent media-element
-  // state transition, and a silence element that starts on pause / stops on
-  // resume always transitioned LAST with the opposite polarity (inverted icon).
-  // With it never transitioning, the TRACK's pause/playing land last and the
-  // icon reads true. Gated to the installed iOS PWA (navigator.standalone).
+  // EXPERIMENT (iOS lock-screen resume): a second <audio> looping silence, played
+  // through a pause so the iOS audio session is never released. A backgrounded iOS
+  // PWA can't restart a paused <audio> from the lock screen (play() hangs pending);
+  // keeping a real media element playing holds the session where the keep-alive
+  // AudioContext tone can't (iOS suspends an AudioContext in the background). Gated
+  // to the installed iOS PWA (navigator.standalone); stopped once the track resumes.
   const silenceRef = useRef<HTMLAudioElement>(null);
   // The track position to pin the OS Now Playing scrubber to while paused (the
   // silence loop is the playing element then, so iOS would otherwise show ITS
   // 0-3s position). Non-null only between a pause and the next resume.
   const pausedPosRef = useRef<number | null>(null);
-  // Last playbackState written, so setPlaybackState logs transitions only.
-  const lastPlaybackStateRef = useRef<string | null>(null);
   // Track id we've already reported a ≥30s play for, so each load counts once.
   const countedRef = useRef<string | null>(null);
   // True from a fresh track load until playback actually begins. A cold first
@@ -375,18 +368,6 @@ export default function PlayerBar({
   const attemptPlay = (autoAdvance: boolean) => {
     const audio = audioRef.current;
     if (!audio) return;
-    // Keep the silent session-holder running for the whole listening session
-    // (installed iOS PWA only): starting it in the same activation as the track
-    // means it never has to *start* at pause time, so pause/resume element-event
-    // ordering ends on the TRACK's transition and the lock-screen icon stays
-    // true. play() on an already-playing element is an event-silent resolved
-    // promise, so re-calls on every resume/advance are free re-asserts.
-    if ((navigator as unknown as { standalone?: boolean }).standalone === true) {
-      silenceRef.current
-        ?.play()
-        .then(() => logAudio("silence:play"))
-        .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
-    }
     ensureOutputAwake();
     audio
       .play()
@@ -427,9 +408,6 @@ export default function PlayerBar({
       navigator.mediaSession.setPositionState({
         duration,
         position,
-        // MUST be non-zero: the spec makes setPositionState THROW on rate 0
-        // (tried as a "paused" signal — every paused pin then silently failed
-        // in the catch below and iOS fell back to the silence loop's clock).
         playbackRate: audio.playbackRate || 1,
       });
     } catch {
@@ -441,12 +419,6 @@ export default function PlayerBar({
   // event handlers) so the React Compiler immutability lint stays happy.
   const setPlaybackState = (state: "playing" | "paused") => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-    // Log only on change: the per-tick re-asserts (track onTimeUpdate, silence
-    // onTimeUpdate) would otherwise flood the wt-audio-log buffer.
-    if (lastPlaybackStateRef.current !== state) {
-      lastPlaybackStateRef.current = state;
-      logAudio("playbackState", state);
-    }
     // Mutating a Web-API global the React Compiler can't model as mutable (the
     // existing [isPlaying] effect does the same; effects are just exempt).
     // eslint-disable-next-line react-hooks/immutability
@@ -575,31 +547,29 @@ export default function PlayerBar({
       // Bluetooth cost.)
       autoAdvanceRef.current = false;
       pausedPosRef.current = audio.currentTime; // frozen position for the OS scrubber
-      if (!audio.paused) expectedPauseRef.current = true;
-      audio.pause();
-      keepAliveRef.current?.suspend().catch(() => {});
-      // The loop MUST keep playing through the pause: locked resume dies
-      // without a playing element holding the session — device-tested
-      // 2026-07-02, the Audio Session API alone does NOT keep it (stopping the
-      // loop here was tried and killed lock-screen playback). The documented
-      // cost is the lock-screen icon drifting to "playing" a few seconds into
-      // a pause; pause-as-resume keeps the button functional regardless.
-      // play() is event-silent when the loop already plays (the normal case);
-      // it only actually (re)starts after a rejected first start or an OS
-      // interruption that paused the loop too.
+      // EXPERIMENT: in an installed iOS PWA, start the silent loop in-gesture
+      // BEFORE pausing the track so the audio session stays held across the
+      // pause — the bet for enabling a locked-screen resume. onPlaying stops it
+      // once the track resumes. No-op (and unstarted) anywhere but an iOS PWA.
       if ((navigator as unknown as { standalone?: boolean }).standalone === true) {
         const s = silenceRef.current;
         if (s) {
+          s.currentTime = 0;
           s.play()
             .then(() => {
               logAudio("silence:play");
+              // Re-assert the paused display AFTER the silence element starts:
+              // iOS otherwise derives "playing" from the actively-playing loop.
               setPlaybackState("paused");
               updatePositionState(pausedPosRef.current ?? undefined);
             })
             .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
-          updatePositionState(pausedPosRef.current ?? undefined); // pin to frozen position
         }
       }
+      if (!audio.paused) expectedPauseRef.current = true;
+      audio.pause();
+      keepAliveRef.current?.suspend().catch(() => {});
+      updatePositionState(pausedPosRef.current ?? undefined); // pin to frozen position
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -801,18 +771,7 @@ export default function PlayerBar({
     });
     session.setActionHandler("pause", () => {
       logAudio("mediasession:pause");
-      if (usePlayerStore.getState().isPlaying) {
-        toggle();
-      } else {
-        // iOS shows one combined toggle button and sends the action for the
-        // icon it BELIEVES is right. A "pause" while we're already paused means
-        // the icon drifted (it can read "playing" off the silence loop a few
-        // seconds into a pause) — honor the tap as a toggle and resume
-        // in-gesture, or the control is a dead button with no way to play.
-        logAudio("mediasession:pause-as-resume");
-        attemptPlay(true);
-        _setPlaying(true);
-      }
+      if (usePlayerStore.getState().isPlaying) toggle();
     });
     session.setActionHandler("previoustrack", prev);
     session.setActionHandler("nexttrack", next);
@@ -828,22 +787,6 @@ export default function PlayerBar({
     // first-render copies only touch refs and a stable zustand setter, so they
     // operate on live values — no stale-closure hazard.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // iOS 17+ Audio Session API: declare long-form playback intent so the system
-  // keeps our audio session across pauses/interruptions where it can. Feature-
-  // detected no-op elsewhere. The default stop-silence-while-paused path leans
-  // on this to keep locked resume possible without a playing element.
-  useEffect(() => {
-    const audioSession = (navigator as { audioSession?: { type: string } })
-      .audioSession;
-    if (!audioSession) return;
-    try {
-      audioSession.type = "playback";
-      logAudio("audiosession", "playback");
-    } catch {
-      // Property present but read-only/unsupported value — leave defaults.
-    }
-  }, []);
 
   useEffect(() => {
     applyMediaSessionHandlers();
@@ -956,6 +899,7 @@ export default function PlayerBar({
           pendingPlayRef.current = false; // playback truly began: nothing owed
           expectedPauseRef.current = false; // ...and no deliberate pause is pending
           pausedPosRef.current = null; // resumed: stop pinning the frozen scrubber
+          silenceRef.current?.pause(); // EXPERIMENT: track holds the session now
           setPlaybackState("playing");
           updatePositionState();
           // Re-assert media-session handlers now that the element is seekable,
@@ -994,11 +938,9 @@ export default function PlayerBar({
             _setProgress(ct, dur);
             updatePositionState(); // keep the OS scrubber in step while playing
             // Re-assert "playing" while the track ticks so the lock-screen
-            // button self-corrects if iOS latched a stale paused state.
-            // LOAD-BEARING: removing it regressed the playing-state icon to ▶
-            // on-device (2026-07-02). Note the asymmetry: asserting the state
-            // that MATCHES the actively-playing element sticks; asserting
-            // "paused" against a playing element loses and flickers (46f824d).
+            // button self-corrects after a resume (it otherwise lingers on the
+            // play icon — iOS latched a paused state when the silence loop
+            // stopped). onTimeUpdate only fires while the track is playing.
             setPlaybackState("playing");
           }
           // Count a "friend play" once the track passes 30s (server ignores
@@ -1082,26 +1024,22 @@ export default function PlayerBar({
           updatePositionState(); // seed the OS scrubber before first playback
         }}
       />
-      {/* Silent loop holding the iOS audio session (see silenceRef): started at
-          the first play gesture and never paused by us, so its state transitions
-          can't invert the lock-screen icon. Renders harmlessly everywhere but
-          only ever plays in an installed iOS PWA. */}
+      {/* EXPERIMENT: silent loop kept playing through a pause to hold the iOS
+          audio session (see silenceRef). Played/paused imperatively; renders
+          harmlessly everywhere but only ever plays in an installed iOS PWA. */}
       <audio
         ref={silenceRef}
         src={`${BASE_PATH}/silence.m4a`}
         loop
         preload="auto"
-        onPlay={() => logAudio("silence:playing")}
-        // We never pause the loop ourselves, so this always = OS interruption.
-        onPause={() => logAudio("silence:paused")}
         onTimeUpdate={() => {
-          // The loop is the actively-playing element during a pause, so iOS
-          // derives the Now Playing scrubber from IT (a 0-3s loop) without
-          // this per-tick re-pin to the track's frozen position. Deliberately
-          // NO setPlaybackState here: asserting "paused" against an
-          // actively-playing element loses and flickers (46f824d).
+          // The silence loop is the actively-playing element during a pause, so
+          // iOS derives the Now Playing scrubber/state from IT (a 0-3s loop) and
+          // ignores a one-shot override. Re-pin to the track's frozen position
+          // and re-assert paused on every tick to keep overriding that.
           if (pausedPosRef.current == null) return;
           updatePositionState(pausedPosRef.current);
+          setPlaybackState("paused");
         }}
       />
 
