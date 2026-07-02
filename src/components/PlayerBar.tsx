@@ -423,11 +423,18 @@ export default function PlayerBar({
     if (!Number.isFinite(duration) || duration <= 0) return;
     const raw = positionOverride ?? audio.currentTime;
     const position = Math.min(Math.max(0, raw), duration);
+    // The reported RATE is iOS's canonical play/pause signal for the lock
+    // screen (MPNowPlayingInfoPropertyPlaybackRate: 0 = paused). While the
+    // pause pin is active, report 0 — reporting the element's rate (1) here
+    // told iOS we were playing, which drifted the icon back to pause even as
+    // we asserted playbackState "paused".
+    const playbackRate =
+      pausedPosRef.current != null ? 0 : audio.playbackRate || 1;
     try {
       navigator.mediaSession.setPositionState({
         duration,
         position,
-        playbackRate: audio.playbackRate || 1,
+        playbackRate,
       });
     } catch {
       // Out-of-range mid-load — ignore; a later call corrects it.
@@ -996,12 +1003,13 @@ export default function PlayerBar({
           ) {
             lastProgressRef.current = ct;
             _setProgress(ct, dur);
-            updatePositionState(); // keep the OS scrubber in step while playing
-            // Re-assert "playing" while the track ticks so the lock-screen
-            // button self-corrects after a resume (it otherwise lingers on the
-            // play icon — iOS latched a paused state when the silence loop
-            // stopped). onTimeUpdate only fires while the track is playing.
-            setPlaybackState("playing");
+            // Keep the OS scrubber in step while playing; its playbackRate (1
+            // here) is iOS's real play/pause signal. playbackState is set once
+            // per transition (onPlaying / the pause branch) — per-tick state
+            // re-asserts fight iOS's derivation and flicker (46f824d), and the
+            // trailing silence-pause event this one compensated for is gone
+            // since the loop went continuous.
+            updatePositionState();
           }
           // Count a "friend play" once the track passes 30s (server ignores
           // the owner's own plays). Fire-and-forget; silent if offline.
@@ -1099,12 +1107,14 @@ export default function PlayerBar({
         onPause={() => logAudio("silence:paused")}
         onTimeUpdate={() => {
           // The silence loop is the actively-playing element during a pause, so
-          // iOS derives the Now Playing scrubber/state from IT (a 0-3s loop) and
-          // ignores a one-shot override. Re-pin to the track's frozen position
-          // and re-assert paused on every tick to keep overriding that.
+          // iOS derives the Now Playing scrubber from IT (a 0-3s loop) without
+          // this per-tick re-pin to the track's frozen position. The pin also
+          // carries playbackRate 0 (see updatePositionState) — iOS's real
+          // paused signal. Deliberately NO setPlaybackState here: per-tick
+          // state re-asserts fight iOS's own derivation and lose, producing
+          // exactly the icon flicker they were meant to prevent (46f824d).
           if (pausedPosRef.current == null) return;
           updatePositionState(pausedPosRef.current);
-          setPlaybackState("paused");
         }}
       />
 

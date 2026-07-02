@@ -301,17 +301,24 @@ setup, and architecture rationale.
     re-asserts it via `attemptPlay`. Forcing `mediaSession.playbackState` per-tick
     remains a dead end (flicker / spontaneous "playing" flips — see 46f824d), as
     are single-element variants (mute the track): iOS ignores `element.volume`,
-    and muting may drop the session. RESIDUAL known issue: a few seconds INTO a
-    pause iOS can re-derive "playing" from the still-playing silence loop and
-    flip the icon back to ⏸. Two mitigations: (1) the MediaSession `pause`
+    and muting may drop the session. THE ICON MODEL (hard-won): iOS derives the
+    lock-screen toggle icon from evidence, not from `mediaSession.playbackState`
+    — the two signals that matter are (a) whether a media element is actively
+    playing and (b) the `playbackRate` reported via `setPositionState`
+    (`MPNowPlayingInfoPropertyPlaybackRate` semantics: 0 = paused). So: report
+    rate 0 in the paused pin (rate 1 there told iOS "playing" and drifted the
+    icon back to ⏸ mid-pause), set `playbackState` ONCE per transition, and
+    NEVER per-tick — per-tick state re-asserts fight iOS's derivation and lose,
+    manufacturing the exact flicker they try to prevent (46f824d, re-confirmed
+    on-device 2026-07-02). Belt-and-braces: (1) the MediaSession `pause`
     handler treats a pause-action-while-already-paused as a toggle and resumes
-    in-gesture (`mediasession:pause-as-resume`) — a drifted icon is never a dead
-    button; (2) `navigator.audioSession.type = "playback"` is declared at mount
-    (iOS 17+ Audio Session API), and the `wt-exp-pause-silence` localStorage
-    flag switches the pause branch to STOP the loop while paused (no playing
-    element → no drift), betting on the Audio Session API to keep locked resume
-    alive — device-testable per phone without a deploy; make it the default if
-    locked resume survives with it on. COST: a silent element keeps the
+    in-gesture (`mediasession:pause-as-resume`) — a drifted icon is never a
+    dead button; (2) `navigator.audioSession.type = "playback"` is declared at
+    mount (iOS 17+ Audio Session API), and the `wt-exp-pause-silence`
+    localStorage flag switches the pause branch to STOP the loop while paused
+    (no playing element → no drift possible), betting on the Audio Session API
+    to keep locked resume alive — device-testable per phone without a deploy;
+    make it the default if locked resume survives with it on. COST: a silent element keeps the
     output/device awake through pauses (battery, unchanged) and now also decodes
     during playback (marginal) — hence the iOS-PWA-only gate. `silence.m4a` is
     exempted from the `src/proxy.ts` cookie gate like the other PWA assets. The
