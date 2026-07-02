@@ -302,28 +302,26 @@ setup, and architecture rationale.
     remains a dead end (flicker / spontaneous "playing" flips — see 46f824d), as
     are single-element variants (mute the track): iOS ignores `element.volume`,
     and muting may drop the session. THE ICON MODEL (hard-won, device-tested
-    2026-07-02): iOS derives the lock-screen toggle icon from whether a media
-    element is ACTIVELY PLAYING — `mediaSession.playbackState` can only
-    reinforce that evidence, never override it. Asserting the state that
-    matches the playing element sticks (the per-tick "playing" assert in the
-    track's onTimeUpdate is LOAD-BEARING — removing it regressed the playing
-    icon to ▶); asserting "paused" against a playing element loses and
+    2026-07-02, all branches): iOS derives the lock-screen toggle icon from
+    whether a media element is ACTIVELY PLAYING — `mediaSession.playbackState`
+    can only reinforce that evidence, never override it. Asserting the state
+    that matches the playing element sticks (the per-tick "playing" assert in
+    the track's onTimeUpdate is LOAD-BEARING — removing it regressed the
+    playing icon to ▶); asserting "paused" against a playing element loses and
     flickers (46f824d). `setPositionState` `playbackRate: 0` as a paused
-    signal is INVALID — the spec throws, our catch swallowed it, and every
+    signal is INVALID — the spec throws, the catch swallowed it, and every
     paused pin silently failed (scrubber fell back to the silence loop's 0-3s
-    clock). CONSEQUENCE: the paused icon can only read correctly when NOTHING
-    plays while paused — so the pause branch now STOPS the silence loop by
-    default (track pauses first, so the last element transition has paused
-    polarity; iOS then derives the frozen scrubber from the paused track
-    element natively, no pinning needed), betting on the mount-time
-    `navigator.audioSession.type = "playback"` (iOS 17+) to keep a locked
-    resume possible with nothing playing; attemptPlay restarts the loop on
-    resume. The `wt-exp-hold-session` localStorage flag restores
-    play-through-pause (locked resume guaranteed, paused icon reads "playing")
-    for per-device A/B without a deploy. Belt-and-braces either way: the
-    MediaSession `pause` handler treats a pause-action-while-already-paused as
-    a toggle and resumes in-gesture (`mediasession:pause-as-resume`) — a
-    drifted icon is never a dead button. COST: a silent element keeps the
+    clock). Stopping the loop while paused WAS tried (with a mount-time
+    `navigator.audioSession.type = "playback"` declaration, which stays — it's
+    the correct intent signal): the paused icon read correctly but LOCKED
+    RESUME DIED — the Audio Session API does NOT hold the session without a
+    playing element. VERDICT: the session hold wins; the loop plays through
+    every pause, and the paused lock-screen icon drifting to "playing" a few
+    seconds into a pause is an ACCEPTED, unfixable-on-web platform limit — do
+    not re-chase it; every branch of this tree has now been device-tested.
+    The mitigation that matters: the MediaSession `pause` handler treats a
+    pause-action-while-already-paused as a toggle and resumes in-gesture
+    (`mediasession:pause-as-resume`) — a drifted icon is never a dead button. COST: a silent element keeps the
     output/device awake through pauses (battery, unchanged) and now also decodes
     during playback (marginal) — hence the iOS-PWA-only gate. `silence.m4a` is
     exempted from the `src/proxy.ts` cookie gate like the other PWA assets. The
