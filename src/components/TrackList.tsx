@@ -1358,9 +1358,7 @@ export default function TrackList({
               />
             </th>
           )}
-          {/* Indented past the cover art (w-11/w-9 + gap-2) so the label
-              lines up with the title text, like the other columns. */}
-          <th className="py-2 pl-13 sm:pl-11">{sortHeader("title", "Title")}</th>
+          <th className="py-2">{sortHeader("title", "Title")}</th>
           <th className="hidden w-[18%] py-2 sm:table-cell">
             {sortHeader("artist", "Artist")}
           </th>
