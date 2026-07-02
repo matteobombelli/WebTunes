@@ -1035,18 +1035,20 @@ export default function TrackList({
     sortable ? (
       <button
         onClick={() => cycleSort(key)}
-        className="inline-flex items-center uppercase hover:text-fg-muted"
+        className="relative inline-flex items-center uppercase hover:text-fg-muted"
       >
         {label}
-        {/* Fixed-width slot so the chevron never shifts the label. */}
-        <span className="inline-flex w-3.5 justify-center">
-          {sort?.key === key &&
-            (sort.dir === 1 ? (
+        {/* Positioned outside the flow so the chevron never shifts the label —
+            keeps the centered icon columns (duration, plays) truly centered. */}
+        {sort?.key === key && (
+          <span className="absolute inset-y-0 left-full flex w-3.5 items-center justify-center">
+            {sort.dir === 1 ? (
               <ChevronUpIcon size={11} />
             ) : (
               <ChevronDownIcon size={11} />
-            ))}
-        </span>
+            )}
+          </span>
+        )}
       </button>
     ) : (
       label
@@ -1356,7 +1358,9 @@ export default function TrackList({
               />
             </th>
           )}
-          <th className="py-2">{sortHeader("title", "Title")}</th>
+          {/* Indented past the cover art (w-11/w-9 + gap-2) so the label
+              lines up with the title text, like the other columns. */}
+          <th className="py-2 pl-13 sm:pl-11">{sortHeader("title", "Title")}</th>
           <th className="hidden w-[18%] py-2 sm:table-cell">
             {sortHeader("artist", "Artist")}
           </th>
