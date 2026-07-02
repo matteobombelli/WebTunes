@@ -288,18 +288,25 @@ setup, and architecture rationale.
     `AudioContext` tone gets *suspended* (that tone, tried through the pause, did
     **not** help — reverted; this is the key difference). With the session held
     there is no cold (re)start to hang on, so the lock-screen `play` resumes the
-    still-loaded track element; the silence loop is stopped in `onPlaying`. COST: a
-    silent element keeps the output/device awake during a pause (battery) — hence
-    the iOS-PWA-only gate. `silence.m4a` is exempted from the `src/proxy.ts` cookie
-    gate like the other PWA assets. DISPLAY caveat: iOS drives Now Playing off the
-    actively-playing silence element, so the scrubber is pinned to the track's
-    frozen position via per-tick `setPositionState` (position is advisory →
-    last-writer-wins → it holds), but the play/pause **icon** can linger on ▶ for a
-    beat after a resume — iOS derives the icon from the playing element and only
-    weakly honors `playbackState` (set once per transition via `setPlaybackState`);
-    forcing it per-tick only causes flicker / spontaneous "playing" flips, so the
-    lag is accepted. Single-element variants (mute the track) are a dead end: iOS
-    ignores `element.volume`, and muting may drop the session.
+    still-loaded track element. The silence loop starts at the first play gesture
+    (in `attemptPlay`) and is **never paused by us** — it runs continuously for
+    the whole listening session. That continuity is the fix (hypothesis-driven,
+    pending device confirmation) for the lock-screen icon showing INVERTED
+    play/pause: iOS keys the icon to the most recent media-element state
+    transition, and the old start-on-pause/stop-on-resume silence loop always
+    transitioned LAST with opposite polarity. With it never transitioning, the
+    track's own `pause`/`playing` land last and the icon reads true. The pause
+    branch still calls `s.play()` as an event-silent re-assert (covers a rejected
+    first start or an OS interruption pausing it too), and every track advance
+    re-asserts it via `attemptPlay`. Forcing `mediaSession.playbackState` per-tick
+    remains a dead end (flicker / spontaneous "playing" flips — see 46f824d), as
+    are single-element variants (mute the track): iOS ignores `element.volume`,
+    and muting may drop the session. COST: a silent element keeps the
+    output/device awake through pauses (battery, unchanged) and now also decodes
+    during playback (marginal) — hence the iOS-PWA-only gate. `silence.m4a` is
+    exempted from the `src/proxy.ts` cookie gate like the other PWA assets. The
+    scrubber stays pinned to the track's frozen position while paused via
+    per-tick `setPositionState` (position is advisory → last-writer-wins).
   - **Involuntary pauses** (headphone/Bluetooth/CarPlay disconnect, call,
     audio-focus loss, iOS handing the shared audio session to another PWA) fire a
     DOM `pause` with no transport handler, leaving `isPlaying` true. The
@@ -327,7 +334,10 @@ setup, and architecture rationale.
   (`wt-audio-log`, survives a discard) and shows them in a copyable panel — no Mac
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
   our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
-  the keep-alive loop start?), `pause … vis=…` + `pause:reconcile`,
+  the keep-alive loop start?), `silence:playing`/`silence:paused` (the element's
+  real events; we never pause it, so `silence:paused` always means the OS
+  interrupted it), `playbackState <state>` (logged on change only),
+  `pause … vis=…` + `pause:reconcile`,
   `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary: a "stuck
   playing-UI with dead audio" usually means the silent keep-alive didn't hold the
   session (look for `silence:reject` / a missing `silence:play`), which falls back
