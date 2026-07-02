@@ -991,21 +991,15 @@ export default function PlayerBar({
           if (audio.ended) return; // natural track end → onEnded advances
           if (!playing) return; // intent already paused
           // Reality (paused) diverged from intent (playing) with no deliberate
-          // cause: an involuntary/system pause.
-          if (document.visibilityState === "visible") {
-            // Foreground interruption (headphone unplug, call, audio-focus loss):
-            // the user/OS meant it — reconcile UI to reality, don't fight the OS.
-            logAudio("pause:fg-reconcile");
-            _setPlaying(false);
-            return;
-          }
-          // Backgrounded (the iOS shared-session handoff when another PWA closes):
-          // reclaim playback. Arm the owed play and retry; a still-blocked
-          // background play() re-arms via onPlayError(true) and the existing
-          // visibilitychange path resumes on return to the foreground.
-          logAudio("pause:bg-reclaim");
-          pendingPlayRef.current = true;
-          retryPendingPlay();
+          // cause: an involuntary/system pause (headphone/Bluetooth/CarPlay
+          // disconnect, call, audio-focus loss, iOS shared-session handoff).
+          // The user/OS meant it — reconcile UI to reality, don't fight the OS.
+          // Backgrounded pauses reconcile too: we deliberately gave up the old
+          // bg-reclaim (auto-resume after another PWA's session handoff) so a
+          // Bluetooth disconnect while locked stays paused instead of resuming
+          // out of the phone speaker. The preceding "pause" log carries vis=.
+          logAudio("pause:reconcile");
+          _setPlaying(false);
         }}
         onLoadedMetadata={() => {
           // Restore the playhead once the element is seekable (done here, not via

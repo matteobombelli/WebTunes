@@ -295,12 +295,16 @@ setup, and architecture rationale.
     forcing it per-tick only causes flicker / spontaneous "playing" flips, so the
     lag is accepted. Single-element variants (mute the track) are a dead end: iOS
     ignores `element.volume`, and muting may drop the session.
-  - **Involuntary pauses** (iOS handing the shared audio session to another PWA,
-    then that PWA closing) fire a DOM `pause` with no transport handler, leaving
-    `isPlaying` true. The `<audio onPause>` handler recovers them, gated by
-    `document.visibilityState`: foreground → reconcile to paused (don't fight a
-    headphone unplug / call / audio-focus loss); background → arm `pendingPlayRef`
-    + retry. `expectedPauseRef` (set before every deliberate `pause()`/`src` swap,
+  - **Involuntary pauses** (headphone/Bluetooth/CarPlay disconnect, call,
+    audio-focus loss, iOS handing the shared audio session to another PWA) fire a
+    DOM `pause` with no transport handler, leaving `isPlaying` true. The
+    `<audio onPause>` handler reconciles them ALL to paused — foreground and
+    background alike — so a Bluetooth disconnect while locked stays paused
+    instead of resuming out of the phone speaker. This deliberately traded away
+    the old background reclaim (auto-resume-on-foreground after another PWA's
+    session handoff — now one tap to resume); don't reintroduce it without
+    solving BT disconnect, which is indistinguishable from a handoff on iOS.
+    `expectedPauseRef` (set before every deliberate `pause()`/`src` swap,
     cleared in `onPlaying`) tags our own pauses so they aren't mistaken for
     involuntary ones.
   - **Extended background pause → iOS freezes then DISCARDS the page** (the paused
@@ -318,7 +322,7 @@ setup, and architecture rationale.
   (`wt-audio-log`, survives a discard) and shows them in a copyable panel — no Mac
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
   our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
-  the keep-alive loop start?), `pause … vis=…` + `pause:bg-reclaim`/`:fg-reconcile`,
+  the keep-alive loop start?), `pause … vis=…` + `pause:reconcile`,
   `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary: a "stuck
   playing-UI with dead audio" usually means the silent keep-alive didn't hold the
   session (look for `silence:reject` / a missing `silence:play`), which falls back
