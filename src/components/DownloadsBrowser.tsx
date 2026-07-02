@@ -5,6 +5,7 @@ import type { DownloadedPlaylist, DownloadedTrack } from "@/lib/offline/db";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { DownloadIcon, XIcon } from "@/components/icons";
+import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 
 // The offline workhorse: everything rendered here comes from the downloads
 // store (IndexedDB) — no server data, no API-dependent actions. TrackList is
@@ -141,7 +142,17 @@ export default function DownloadsBrowser() {
     [removeTrack]
   );
 
-  if (!ready) return null;
+  // Page-shell skeleton while IndexedDB hydrates — usually one frame, but this
+  // page is the landing surface on the slow-connection fallback path.
+  if (!ready)
+    return (
+      <div className="mx-auto max-w-5xl">
+        <h1 className="mb-6 font-display text-4xl font-bold tracking-tight">
+          Downloads
+        </h1>
+        <TrackRowsSkeleton />
+      </div>
+    );
 
   const currentTrackTitle = current
     ? (tracksById[current.trackId]?.title ?? "track")

@@ -166,6 +166,33 @@ button:not(:disabled):active {
 .animate-pulse {
   animation-duration: 1.2s;
 }
+/* Skeleton shimmer: a soft highlight sweeping across a surface-2 block.
+   Transform-based (compositor-friendly); the base transform parks the
+   highlight off-screen, so reduced-motion (which collapses the animation
+   below) leaves a clean flat block. */
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface-2);
+}
+.animate-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 0.05) 50%,
+    transparent 80%
+  );
+  animation: shimmer 1.6s ease-in-out infinite;
+}
 
 /* Respect users who ask for less motion: collapse animations + transitions. */
 @media (prefers-reduced-motion: reduce) {
