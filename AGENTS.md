@@ -301,24 +301,29 @@ setup, and architecture rationale.
     re-asserts it via `attemptPlay`. Forcing `mediaSession.playbackState` per-tick
     remains a dead end (flicker / spontaneous "playing" flips — see 46f824d), as
     are single-element variants (mute the track): iOS ignores `element.volume`,
-    and muting may drop the session. THE ICON MODEL (hard-won): iOS derives the
-    lock-screen toggle icon from evidence, not from `mediaSession.playbackState`
-    — the two signals that matter are (a) whether a media element is actively
-    playing and (b) the `playbackRate` reported via `setPositionState`
-    (`MPNowPlayingInfoPropertyPlaybackRate` semantics: 0 = paused). So: report
-    rate 0 in the paused pin (rate 1 there told iOS "playing" and drifted the
-    icon back to ⏸ mid-pause), set `playbackState` ONCE per transition, and
-    NEVER per-tick — per-tick state re-asserts fight iOS's derivation and lose,
-    manufacturing the exact flicker they try to prevent (46f824d, re-confirmed
-    on-device 2026-07-02). Belt-and-braces: (1) the MediaSession `pause`
-    handler treats a pause-action-while-already-paused as a toggle and resumes
-    in-gesture (`mediasession:pause-as-resume`) — a drifted icon is never a
-    dead button; (2) `navigator.audioSession.type = "playback"` is declared at
-    mount (iOS 17+ Audio Session API), and the `wt-exp-pause-silence`
-    localStorage flag switches the pause branch to STOP the loop while paused
-    (no playing element → no drift possible), betting on the Audio Session API
-    to keep locked resume alive — device-testable per phone without a deploy;
-    make it the default if locked resume survives with it on. COST: a silent element keeps the
+    and muting may drop the session. THE ICON MODEL (hard-won, device-tested
+    2026-07-02): iOS derives the lock-screen toggle icon from whether a media
+    element is ACTIVELY PLAYING — `mediaSession.playbackState` can only
+    reinforce that evidence, never override it. Asserting the state that
+    matches the playing element sticks (the per-tick "playing" assert in the
+    track's onTimeUpdate is LOAD-BEARING — removing it regressed the playing
+    icon to ▶); asserting "paused" against a playing element loses and
+    flickers (46f824d). `setPositionState` `playbackRate: 0` as a paused
+    signal is INVALID — the spec throws, our catch swallowed it, and every
+    paused pin silently failed (scrubber fell back to the silence loop's 0-3s
+    clock). CONSEQUENCE: the paused icon can only read correctly when NOTHING
+    plays while paused — so the pause branch now STOPS the silence loop by
+    default (track pauses first, so the last element transition has paused
+    polarity; iOS then derives the frozen scrubber from the paused track
+    element natively, no pinning needed), betting on the mount-time
+    `navigator.audioSession.type = "playback"` (iOS 17+) to keep a locked
+    resume possible with nothing playing; attemptPlay restarts the loop on
+    resume. The `wt-exp-hold-session` localStorage flag restores
+    play-through-pause (locked resume guaranteed, paused icon reads "playing")
+    for per-device A/B without a deploy. Belt-and-braces either way: the
+    MediaSession `pause` handler treats a pause-action-while-already-paused as
+    a toggle and resumes in-gesture (`mediasession:pause-as-resume`) — a
+    drifted icon is never a dead button. COST: a silent element keeps the
     output/device awake through pauses (battery, unchanged) and now also decodes
     during playback (marginal) — hence the iOS-PWA-only gate. `silence.m4a` is
     exempted from the `src/proxy.ts` cookie gate like the other PWA assets. The
@@ -352,9 +357,9 @@ setup, and architecture rationale.
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
   our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
   the keep-alive loop start?), `silence:playing`/`silence:paused` (the element's
-  real events; we never pause it — except a `silence:stop` under
-  `wt-exp-pause-silence` — so an unpaired `silence:paused` means the OS
-  interrupted it), `playbackState <state>` (logged on change only),
+  real events; a deliberate stop logs `silence:stop` first, so an unpaired
+  `silence:paused` means the OS interrupted it), `playbackState <state>`
+  (logged on change only),
   `mediasession:pause-as-resume` (drifted-icon tap honored as toggle),
   `audiosession playback` (Audio Session API present),
   `pause … vis=…` + `pause:reconcile`,
