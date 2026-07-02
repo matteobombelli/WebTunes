@@ -71,3 +71,12 @@ export type InviteDTO = {
   /** Display name of whoever redeemed this link, or null if still unused. */
   usedByName: string | null;
 };
+
+/** A connected WebTunes Importer extension, for the Settings revoke list. */
+export type ExtensionTokenDTO = {
+  id: string;
+  /** Browser label sent at pairing ("Firefox on Linux"), or null. */
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+};

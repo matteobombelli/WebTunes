@@ -1,34 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import { requireImportToken, unauthorized } from "@/lib/auth-helpers";
 import { AUDIO_EXTENSIONS, ingestTrack, MAX_FILE_BYTES } from "@/lib/ingest";
-import {
-  listAccessibleTracks,
-  listFriendsTracks,
-  listOwnTracks,
-  toTrackDTO,
-} from "@/lib/tracks";
-import { getUserSettings } from "@/lib/users";
+import { log } from "@/lib/log";
+import { toTrackDTO } from "@/lib/tracks";
 
-export async function GET(req: NextRequest) {
-  const user = await requireUser();
-  if (!user) return unauthorized();
-
-  // scope=all adds friends' non-private tracks to the viewer's own; scope=friends
-  // returns only friends' (own excluded) so that view doesn't over-fetch.
-  const scope = req.nextUrl.searchParams.get("scope");
-  if (scope === "all" || scope === "friends") {
-    const { hideFriendDuplicates } = await getUserSettings(user.id);
-    return NextResponse.json(
-      scope === "friends"
-        ? await listFriendsTracks(user.id, hideFriendDuplicates)
-        : await listAccessibleTracks(user.id, hideFriendDuplicates)
-    );
-  }
-  return NextResponse.json(await listOwnTracks(user.id));
-}
-
+/**
+ * Track upload for the WebTunes Importer extension. Same pipeline as the
+ * session-auth POST /api/tracks (ingestTrack), but authenticated with a bearer
+ * import token — kept a separate route so token auth and session auth stay
+ * cleanly split. The claimed MIME/filename are validated here and re-checked
+ * inside ingestTrack exactly like a web upload; the extension's word is never
+ * trusted for the stored Content-Type.
+ */
 export async function POST(req: NextRequest) {
-  const user = await requireUser();
+  const user = await requireImportToken(req);
   if (!user) return unauthorized();
 
   const form = await req.formData();
@@ -38,8 +23,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const isAudio =
-    file.type.startsWith("audio/") || AUDIO_EXTENSIONS.has(ext);
+  const isAudio = file.type.startsWith("audio/") || AUDIO_EXTENSIONS.has(ext);
   if (!isAudio) {
     return NextResponse.json(
       { error: `Unsupported file type: ${file.type || ext}` },
@@ -63,5 +47,13 @@ export async function POST(req: NextRequest) {
   if (result.status === "duplicate") {
     return NextResponse.json({ error: result.message }, { status: 409 });
   }
+
+  // Provenance breadcrumb only — the URL isn't stored (no column, no need).
+  const sourceUrl = form.get("sourceUrl");
+  log.info(
+    "extension-import",
+    `imported ${result.track.id} for ${user.id}` +
+      (typeof sourceUrl === "string" ? ` from ${sourceUrl.slice(0, 200)}` : "")
+  );
   return NextResponse.json(toTrackDTO(result.track), { status: 201 });
 }
