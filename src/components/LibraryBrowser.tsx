@@ -15,12 +15,20 @@ import {
 } from "@/components/icons";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 
 const SCOPES = [
   { value: "own", label: "My library", icon: <MusicIcon size={17} /> },
   { value: "all", label: "Everything", icon: <GlobeIcon size={17} /> },
   { value: "friends", label: "Friends", icon: <UsersIcon size={17} /> },
 ] as const;
+
+// Session cache of the last successful browse fetch per scope (+ the
+// hideFriendDuplicates setting, which changes the server result). Module-level
+// so it survives navigating away and back; the full list is a large JSON
+// download, so a cached copy renders instantly while a background refetch
+// revalidates it.
+const scopeCache = new Map<string, TrackDTO[]>();
 
 // Default view is the server-rendered own library (initialTracks, kept fresh
 // by router.refresh from TrackList). Any query or non-own scope switches to
@@ -33,6 +41,9 @@ export default function LibraryBrowser({
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
   const [results, setResults] = useState<TrackDTO[] | null>(null);
+  // Which view `results` belongs to, so a scope/query change can tell fresh
+  // results from a previous view's (and fall back to the cache meanwhile).
+  const [resultsKey, setResultsKey] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   // Owned by the global Settings modal (player store); the server reads it per
   // request, so a change re-fires the fetch effect below to re-filter the list.
@@ -45,6 +56,8 @@ export default function LibraryBrowser({
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
+  const cacheKey = `${scope}:${hideDuplicates ? 1 : 0}`;
+  const viewKey = query ? `q:${scope}:${query}` : cacheKey;
 
   useEffect(() => {
     // Own-library browsing renders initialTracks; stale results are ignored.
@@ -68,11 +81,14 @@ export default function LibraryBrowser({
             signal: controller.signal,
           });
         }
+        if (!query) scopeCache.set(cacheKey, tracks);
         setResults(tracks);
+        setResultsKey(viewKey);
         setSearching(false);
       } catch {
         if (!controller.signal.aborted) {
           setResults([]);
+          setResultsKey(viewKey);
           setSearching(false);
         }
       }
@@ -83,10 +99,21 @@ export default function LibraryBrowser({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, scope, refreshKey, browsingOwn, hideDuplicates]);
+  }, [query, scope, cacheKey, viewKey, refreshKey, browsingOwn]);
 
-  const tracks = browsingOwn ? initialTracks : results;
-  const dimmed = !browsingOwn && searching;
+  // Precedence: fresh results win; while a scope switch revalidates, the
+  // cached copy of THAT scope renders at full opacity (right data, maybe
+  // stale) — never the previous scope's misleading rows (skeleton instead).
+  // Typing keeps the previous results visible, dimmed.
+  const fresh = resultsKey === viewKey;
+  const tracks = browsingOwn
+    ? initialTracks
+    : fresh
+      ? results
+      : query
+        ? results
+        : (scopeCache.get(cacheKey) ?? null);
+  const dimmed = !browsingOwn && searching && !fresh && !!query;
   const countNoun = query ? "result" : "track";
 
   return (
@@ -118,7 +145,7 @@ export default function LibraryBrowser({
       </div>
 
       {tracks === null ? (
-        <p className="py-8 text-center text-sm text-fg-subtle">Loading…</p>
+        <TrackRowsSkeleton />
       ) : (
         // Keep stale results visible (dimmed) while a new fetch runs.
         <div

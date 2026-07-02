@@ -15,11 +15,13 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requirePageUser();
-  const { normalizeVolume, similarVariation, similarDrift, hideFriendDuplicates } =
-    await getUserSettings(user.id);
-  // Drives the incoming-request notification dot in the nav. pendingRequestsFor
-  // is cache()d, so this shares the discover page's query within one request.
-  const hasIncomingRequests = (await pendingRequestsFor(user.id)).some(
+  // pendingRequestsFor drives the incoming-request notification dot in the nav;
+  // it's cache()d, so this shares the discover page's query within one request.
+  const [
+    { normalizeVolume, similarVariation, similarDrift, hideFriendDuplicates },
+    pendingRequests,
+  ] = await Promise.all([getUserSettings(user.id), pendingRequestsFor(user.id)]);
+  const hasIncomingRequests = pendingRequests.some(
     (r) => r.direction === "incoming"
   );
 
