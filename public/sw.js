@@ -6,8 +6,9 @@
 //
 // Caches:
 //   wt-shell-vN — app shell (static assets + navigation HTML). Versioned;
-//                 stale versions are deleted on activate. Bump N whenever
-//                 this file's caching logic changes.
+//                 stale versions are deleted on activate. Bump N only when the
+//                 cached data format or keys change (a read-strategy change
+//                 doesn't warrant wiping the primed offline shell).
 //   wt-audio    — downloaded track audio, keyed by the stable stream URL
 //                 (/api/tracks/:id/stream). Written by the download manager
 //                 (src/lib/offline/), read here. NEVER deleted on activate:
@@ -63,7 +64,7 @@ self.addEventListener("fetch", (event) => {
   } else if (url.pathname.startsWith(`${BASE_PATH}/_next/static/`)) {
     event.respondWith(cacheFirst(request));
   } else if (request.mode === "navigate") {
-    event.respondWith(serveNavigation(request));
+    event.respondWith(serveNavigation(event));
   }
 });
 
@@ -168,29 +169,64 @@ async function cacheFirst(request) {
   return response;
 }
 
+// Grace period before a slow navigation falls back to cache. Long enough for a
+// healthy connection to answer, short enough that a bad one feels responsive.
+const NAV_TIMEOUT_MS = 2000;
+
 /**
- * Page navigations: network-first so the app stays fresh, falling back to
- * the cached copy of the same page, then to the downloads page (the one
- * route designed to render fully offline).
+ * Page navigations: network-first with a grace period, so the app stays
+ * fresh. A fast network wins as before; after NAV_TIMEOUT_MS (or a hard
+ * network error) we fall back to the cached copy of the same page, then to
+ * the downloads page (the one route designed to render fully offline). If
+ * nothing is cached we keep waiting on the slow network — a late page always
+ * beats an instant 503. A timed-out fetch is kept alive (event.waitUntil) so
+ * its response still refreshes the cache for next time.
  */
-async function serveNavigation(request) {
+async function serveNavigation(event) {
+  const { request } = event;
   const cache = await caches.open(SHELL_CACHE);
-  try {
-    const response = await fetch(request);
-    // Don't cache redirect results (e.g. unauthenticated → /login) under
-    // the requested URL, or the fallback would serve the wrong page.
+
+  // Start the fetch immediately; successful responses refresh the cache
+  // whether or not this navigation ends up using them. Don't cache redirect
+  // results (e.g. unauthenticated → /login) under the requested URL, or the
+  // fallback would serve the wrong page.
+  const network = fetch(request).then((response) => {
     if (response.ok && !response.redirected) {
       cache.put(request, response.clone());
     }
     return response;
-  } catch {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    const fallback = await cache.match(OFFLINE_FALLBACK);
-    if (fallback) return fallback;
-    return new Response("Offline — open the Downloads page while online once to enable offline mode.", {
-      status: 503,
-      headers: { "Content-Type": "text/plain" },
-    });
+  });
+  // Rejection-swallowed copy for the background/late paths, so a fetch that
+  // fails after losing the race can't surface as an unhandled rejection.
+  const networkSafe = network.catch(() => null);
+
+  let timer;
+  const grace = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), NAV_TIMEOUT_MS);
+  });
+  const winner = await Promise.race([network.catch(() => "offline"), grace]);
+  clearTimeout(timer);
+
+  if (winner instanceof Response) return winner; // network answered in time
+
+  // Slow ("timeout") or dead ("offline"): serve what we have.
+  const cached =
+    (await cache.match(request)) || (await cache.match(OFFLINE_FALLBACK));
+  if (cached) {
+    // Stale-while-revalidate: keep the slow fetch alive so its cache.put
+    // above still lands and the next visit is fresh.
+    if (winner === "timeout") event.waitUntil(networkSafe);
+    return cached;
   }
+
+  // Nothing cached. On a timeout, keep waiting — never replace a possible
+  // slow success with an error page.
+  if (winner === "timeout") {
+    const response = await networkSafe;
+    if (response) return response;
+  }
+  return new Response("Offline — open the Downloads page while online once to enable offline mode.", {
+    status: 503,
+    headers: { "Content-Type": "text/plain" },
+  });
 }
