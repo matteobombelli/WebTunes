@@ -120,9 +120,14 @@ export default function NowPlayingScreen({
 
   if (!mounted || !track) return null;
 
+  // Attached to the whole sheet (nothing in it scrolls — body scroll is locked
+  // above), so a downward swipe dismisses from anywhere. Gestures starting on a
+  // control are ignored: a seek-slider scrub must not also drag the sheet.
   const swipe = {
     onTouchStart: (e: React.TouchEvent) => {
+      if ((e.target as HTMLElement).closest("button, input, a")) return;
       startYRef.current = e.touches[0].clientY;
+      dragYRef.current = 0;
       setDragging(true);
     },
     onTouchMove: (e: React.TouchEvent) => {
@@ -132,10 +137,21 @@ export default function NowPlayingScreen({
       setDragY(dy);
     },
     onTouchEnd: () => {
+      if (startYRef.current == null) return;
       setDragging(false);
       startYRef.current = null;
       if (dragYRef.current > DISMISS_PX) onClose();
       else setDragY(0);
+    },
+    // A system-interrupted swipe (iOS edge gesture, incoming call) fires
+    // touchcancel, not touchend — reset so it can't pin `dragging` (which would
+    // kill the next slide's transition) or strand a past-threshold dragY that a
+    // later tap would read as a dismiss.
+    onTouchCancel: () => {
+      setDragging(false);
+      startYRef.current = null;
+      dragYRef.current = 0;
+      setDragY(0);
     },
   };
 
@@ -159,6 +175,7 @@ export default function NowPlayingScreen({
 
   return (
     <div
+      {...swipe}
       className="fixed inset-0 z-50 flex flex-col bg-surface-1 md:hidden"
       style={{
         background: gradient ?? undefined,
@@ -166,15 +183,12 @@ export default function NowPlayingScreen({
         transition: dragging ? "none" : "transform 0.22s ease",
       }}
     >
-      <div
-        {...swipe}
-        className="flex shrink-0 justify-center pb-1 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
-      >
+      <div className="flex shrink-0 justify-center pb-1 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <div className="h-1.5 w-10 rounded-full bg-white/30" />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-6 px-6">
-        <div {...swipe} className="flex justify-center">
+        <div className="flex justify-center">
           <CurrentTrackDetails
             track={track}
             align="center"
