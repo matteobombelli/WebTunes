@@ -187,7 +187,12 @@ setup, and architecture rationale.
   already-served ids in `excludeIds` (POST body, not a query string) to avoid
   repeats, since sampling isn't deterministic. With `users.similar_drift` (the
   default) each refill re-seeds from the currently-playing track so the radio
-  drifts; off, it stays anchored to the original seed. The drift + variation +
+  drifts; off, it stays anchored to the original seed. Disabling the radio
+  removes nothing from the queue; when it took over a collection queue,
+  `startSimilar` stashed the collection + takeover point in `similarContext`
+  and `stopSimilar` appends the collection's in-order remainder to the end
+  (enabling shuffle or starting a new queue drops the stash without the
+  requeue). The drift + variation +
   volume-normalization controls live in the global `SettingsModal` (gear in the
   Sidebar / mobile top bar). `scripts/analyze-clap-embeddings.mjs` backfills.
   Both the lib and the script must share the same model id + dtype (fp32) or

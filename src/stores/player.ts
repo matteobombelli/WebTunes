@@ -59,6 +59,15 @@ type PlayerState = {
   /** Ids already served this radio session (seed + every queued track), sent
    *  as the exclude list so refills don't repeat. */
   similarSeen: string[];
+  /**
+   * The collection `context` that was live when startSimilar replaced the
+   * queue, plus the uid of the then-current item (one of `items` — `queue` and
+   * `context` share QueueItem objects). Consumed by stopSimilar to append the
+   * collection's in-order remainder after `afterUid`; dropped (without the
+   * requeue) by playQueue/toggleShuffle force-stopping the radio. `null` when
+   * the radio started from an ad-hoc queue.
+   */
+  similarContext: { items: QueueItem[]; afterUid: string } | null;
   /** Remembered "play similar" preference (persisted to localStorage by
    *  PlayerBar). When on, playing a single track auto-starts a radio seeded from
    *  it. Cleared by the exceptions: enabling shuffle or playing a collection
@@ -115,7 +124,9 @@ type PlayerState = {
   startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
   /** Append the next refill batch and advance the pagination offset. */
   advanceSimilar: (tracks: TrackDTO[]) => void;
-  /** Disable "play similar" (leaves the current queue intact). */
+  /** Disable "play similar". Removes nothing from the queue; when the radio
+   *  replaced a collection queue, the collection's in-order remainder (after
+   *  the track the radio took over from) is appended to the end. */
   stopSimilar: () => void;
   /** Set the remembered "play similar" preference (PlayerBar persists it). */
   setPlaySimilarPref: (on: boolean) => void;
@@ -152,6 +163,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playSimilar: false,
   similarSeedId: null,
   similarSeen: [],
+  similarContext: null,
   playSimilarPref: false,
   pendingSimilarSeed: null,
   settingsOpen: false,
@@ -177,6 +189,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playSimilar: false,
       similarSeedId: null,
       similarSeen: [],
+      similarContext: null,
     };
     // Remembered "play similar": a single-track play (no collection flag), with
     // the pref on and shuffle off, stamps a seed for usePlaySimilarAutoStart to
@@ -364,11 +377,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const s = get();
     log.info("player", `shuffle ${!s.shuffled ? "on" : "off"}`);
     // Shuffle and "play similar" are mutually exclusive ways to order the
-    // queue; turning shuffle on ends the radio.
+    // queue; turning shuffle on ends the radio (and silently drops any stashed
+    // collection remainder — the reshuffled queue supersedes it).
     const stopSim = {
       playSimilar: false,
       similarSeedId: null,
       similarSeen: [],
+      similarContext: null,
     };
     if (!s.shuffled) {
       // Enabling shuffle is an exception that clears the remembered "play
@@ -451,7 +466,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (s.index < 0) return;
     log.info("player", `startSimilar seed=${seedId} +${tracks.length}`);
     // Keep the current track playing (don't reset isPlaying/currentTime); drop
-    // the rest of the queue and seed it with the first similar batch.
+    // the rest of the queue and seed it with the first similar batch. The
+    // outgoing collection context is stashed so stopSimilar can append its
+    // in-order remainder (when context is set, the current item is always one
+    // of its objects — hand-edits null the context).
     set({
       queue: [s.queue[s.index], ...wrap(tracks)],
       index: 0,
@@ -461,6 +479,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       playSimilar: true,
       similarSeedId: seedId,
       similarSeen: [seedId, ...tracks.map((t) => t.id)],
+      similarContext: s.context
+        ? { items: s.context, afterUid: s.queue[s.index].uid }
+        : null,
       pendingSimilarSeed: null,
     });
   },
@@ -476,7 +497,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   stopSimilar: () => {
     log.info("player", "stopSimilar");
-    set({ playSimilar: false, similarSeedId: null, similarSeen: [] });
+    const s = get();
+    const off = {
+      playSimilar: false,
+      similarSeedId: null,
+      similarSeen: [],
+      similarContext: null,
+    };
+    if (!s.playSimilar || !s.similarContext) {
+      set(off);
+      return;
+    }
+    // Remove nothing: the served similar tracks (and any manual inserts) stay;
+    // the collection's remainder after the takeover point resumes at the end.
+    const { items, afterUid } = s.similarContext;
+    const pos = items.findIndex((it) => it.uid === afterUid);
+    const remainder = pos >= 0 ? items.slice(pos + 1) : [];
+    set({ ...off, queue: [...s.queue, ...remainder] });
   },
 
   setPlaySimilarPref: (on) => set({ playSimilarPref: on }),
