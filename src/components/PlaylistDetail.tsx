@@ -31,6 +31,16 @@ export default function PlaylistDetail({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
+  // Total listen time: sum of known track durations, rounded to minutes,
+  // shown as "Xh Ymin" past the hour mark.
+  const totalMinutes = Math.round(
+    tracks.reduce((sum, t) => sum + (t.durationSec ?? 0), 0) / 60
+  );
+  const listenTime =
+    totalMinutes >= 60
+      ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}min`
+      : `${totalMinutes} min`;
+
   const rename = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -182,6 +192,7 @@ export default function PlaylistDetail({
           <p className="mt-1 text-sm text-fg-muted">
             {!isOwner && playlist.ownerName ? `by ${playlist.ownerName} · ` : ""}
             {tracks.length} track{tracks.length === 1 ? "" : "s"}
+            {totalMinutes > 0 && ` · ${listenTime}`}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button
