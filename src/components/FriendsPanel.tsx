@@ -260,6 +260,10 @@ export default function FriendsPanel({
                   >
                     {f.name}
                   </Link>
+                  <span className="text-xs text-fg-subtle">
+                    {f.friendListens ?? 0} friend listen
+                    {(f.friendListens ?? 0) === 1 ? "" : "s"}
+                  </span>
                 </div>
                 <button
                   onClick={() => unfriend(f)}

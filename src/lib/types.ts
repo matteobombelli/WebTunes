@@ -42,6 +42,12 @@ export type PlaylistDTO = {
 export type FriendDTO = {
   id: string;
   name: string;
+  /**
+   * Total ≥30s plays by non-owners across this friend's whole library
+   * (sum of tracks.friend_play_count). Only set by `friendsOf`; absent in
+   * username search results and friend-request users.
+   */
+  friendListens?: number;
 };
 
 export type FriendRequestDTO = {

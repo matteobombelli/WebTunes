@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { cache } from "react";
 import { db } from "@/db";
-import { friendships, users } from "@/db/schema";
+import { friendships, tracks, users } from "@/db/schema";
 import type {
   FriendDTO,
   FriendRequestDTO,
@@ -65,9 +65,15 @@ export async function friendsOf(userId: string): Promise<FriendDTO[]> {
   const ids = await friendIdsOf(userId);
   if (ids.length === 0) return [];
   return db
-    .select({ id: users.id, name: users.name })
+    .select({
+      id: users.id,
+      name: users.name,
+      friendListens: sql<number>`coalesce(sum(${tracks.friendPlayCount}), 0)::int`,
+    })
     .from(users)
-    .where(inArray(users.id, ids));
+    .leftJoin(tracks, eq(tracks.ownerId, users.id))
+    .where(inArray(users.id, ids))
+    .groupBy(users.id);
 }
 
 /**
