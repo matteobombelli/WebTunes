@@ -425,6 +425,27 @@ export default function PlayerBar({
     navigator.mediaSession.playbackState = state;
   };
 
+  // EXPERIMENT (iOS session hold): start the silent loop so the iOS audio
+  // session stays held while the track element isn't playing — through a pause,
+  // or the track-end gap while the next source loads (with nothing playing iOS
+  // releases the session and freezes the page, so an un-prefetched next track's
+  // fetch never completes and the owed play() never fires). onPlaying stops it
+  // once a track holds the session again. No-op (and unstarted) anywhere but an
+  // installed iOS PWA (navigator.standalone).
+  const startSilenceLoop = (onStarted?: () => void) => {
+    if ((navigator as unknown as { standalone?: boolean }).standalone !== true)
+      return;
+    const s = silenceRef.current;
+    if (!s) return;
+    s.currentTime = 0;
+    s.play()
+      .then(() => {
+        logAudio("silence:play");
+        onStarted?.();
+      })
+      .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
+  };
+
   // Re-assert a pending restore target (set by the cold-mount discard restore, or
   // by a warm same-track reload that lost its position) until the element really
   // reaches it, then clear. A single seek at loadedmetadata is NOT enough on iOS:
@@ -547,25 +568,15 @@ export default function PlayerBar({
       // Bluetooth cost.)
       autoAdvanceRef.current = false;
       pausedPosRef.current = audio.currentTime; // frozen position for the OS scrubber
-      // EXPERIMENT: in an installed iOS PWA, start the silent loop in-gesture
-      // BEFORE pausing the track so the audio session stays held across the
-      // pause — the bet for enabling a locked-screen resume. onPlaying stops it
-      // once the track resumes. No-op (and unstarted) anywhere but an iOS PWA.
-      if ((navigator as unknown as { standalone?: boolean }).standalone === true) {
-        const s = silenceRef.current;
-        if (s) {
-          s.currentTime = 0;
-          s.play()
-            .then(() => {
-              logAudio("silence:play");
-              // Re-assert the paused display AFTER the silence element starts:
-              // iOS otherwise derives "playing" from the actively-playing loop.
-              setPlaybackState("paused");
-              updatePositionState(pausedPosRef.current ?? undefined);
-            })
-            .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
-        }
-      }
+      // EXPERIMENT: start the silent loop in-gesture BEFORE pausing the track so
+      // the audio session stays held across the pause — the bet for enabling a
+      // locked-screen resume (see startSilenceLoop).
+      startSilenceLoop(() => {
+        // Re-assert the paused display AFTER the silence element starts:
+        // iOS otherwise derives "playing" from the actively-playing loop.
+        setPlaybackState("paused");
+        updatePositionState(pausedPosRef.current ?? undefined);
+      });
       if (!audio.paused) expectedPauseRef.current = true;
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
@@ -746,13 +757,15 @@ export default function PlayerBar({
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lock-screen / hardware-key controls (MediaSession API). Wire play/pause/
-  // previous/next and explicitly null the seek actions. iOS/WebKit auto-enables
-  // the ±10/15s skip commands when the <audio> element becomes *seekable*, and
-  // that re-enable happens at playback time, AFTER a one-time mount registration
-  // has run — so nulling once at mount doesn't stick and the lock screen reverts
-  // to skip buttons. We therefore re-assert this set on every play start (when
-  // the element is seekable), which is when WebKit would otherwise have brought
-  // the seek buttons back, so the previous/next-track arrows win.
+  // previous/next/seekto and explicitly null the ±10/15s skip actions (seekto —
+  // the scrubber drag — is a separate action and doesn't affect the arrows).
+  // iOS/WebKit auto-enables the ±10/15s skip commands when the <audio> element
+  // becomes *seekable*, and that re-enable happens at playback time, AFTER a
+  // one-time mount registration has run — so nulling once at mount doesn't stick
+  // and the lock screen reverts to skip buttons. We therefore re-assert this set
+  // on every play start (when the element is seekable), which is when WebKit
+  // would otherwise have brought the seek buttons back, so the previous/next-
+  // track arrows win.
   const applyMediaSessionHandlers = useCallback(() => {
     if (!("mediaSession" in navigator)) return;
     const session = navigator.mediaSession;
@@ -775,7 +788,29 @@ export default function PlayerBar({
     });
     session.setActionHandler("previoustrack", prev);
     session.setActionHandler("nexttrack", next);
-    for (const seek of ["seekbackward", "seekforward", "seekto"] as const) {
+    // seekto is what the OS Now Playing scrubber dispatches on a drag. Routed
+    // through the store's seekTo so the existing seek effect applies it (and
+    // cancels any pending restore) — no separate seek path.
+    try {
+      session.setActionHandler("seekto", (d) => {
+        logAudio("mediasession:seekto", String(d.seekTime));
+        if (d.seekTime == null) return;
+        const dur = audioRef.current?.duration;
+        // Clamp short of the end so a full-right drag can't fire 'ended' and
+        // auto-advance instead of seeking.
+        const t = Math.max(
+          0,
+          Number.isFinite(dur) ? Math.min(d.seekTime, dur! - 0.25) : d.seekTime
+        );
+        // While paused the silence loop re-pins the OS scrubber to pausedPosRef
+        // on every tick — move the pin so it doesn't snap the scrub back.
+        if (pausedPosRef.current != null) pausedPosRef.current = t;
+        usePlayerStore.getState().seekTo(t);
+      });
+    } catch {
+      // Unsupported action on this browser.
+    }
+    for (const seek of ["seekbackward", "seekforward"] as const) {
       try {
         session.setActionHandler(seek, null);
       } catch {
@@ -793,7 +828,13 @@ export default function PlayerBar({
     return () => {
       if (!("mediaSession" in navigator)) return;
       const session = navigator.mediaSession;
-      for (const action of ["play", "pause", "previoustrack", "nexttrack"] as const) {
+      for (const action of [
+        "play",
+        "pause",
+        "previoustrack",
+        "nexttrack",
+        "seekto",
+      ] as const) {
         try {
           session.setActionHandler(action, null);
         } catch {
@@ -968,6 +1009,11 @@ export default function PlayerBar({
         onError={onAudioError}
         onEnded={() => {
           logAudio("ended");
+          // Hold the audio session across the track-end gap: past the prefetch
+          // window the next track needs a live fetch, which a frozen locked page
+          // never completes — the silence loop keeps the page running until
+          // onPlaying stops it.
+          startSilenceLoop();
           autoAdvanceRef.current = true; // mark the upcoming load as automatic
           next();
         }}
