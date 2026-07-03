@@ -8,6 +8,7 @@ import type { ExtensionTokenDTO } from "@/lib/types";
 import { useUsernameAvailability } from "@/lib/use-username-availability";
 import { usePlayerStore } from "@/stores/player";
 import { useExclusionsStore } from "@/stores/exclusions";
+import { useToastStore } from "@/stores/toast";
 import Dialog from "@/components/Dialog";
 import ExcludedSongsList from "@/components/ExcludedSongsList";
 import { ChevronDownIcon } from "@/components/icons";
@@ -85,6 +86,14 @@ export default function SettingsModal({
     } finally {
       setGeneratingCode(false);
     }
+  };
+
+  const copyPairCode = () => {
+    if (!pairCode) return;
+    navigator.clipboard.writeText(pairCode).then(
+      () => useToastStore.getState().show("Copied pairing code to clipboard!"),
+      () => useToastStore.getState().show("Couldn’t copy code")
+    );
   };
 
   const revokeImporter = async (id: string) => {
@@ -252,8 +261,8 @@ export default function SettingsModal({
               <p className="mt-1 text-xs text-accent-bright">Username updated.</p>
             ) : (
               <p className="mt-1 text-xs text-fg-muted">
-                Your unique username — friends find you by this. Your email stays
-                private.
+                Your unique username. Friends find you by this. Your email
+                stays private.
               </p>
             )}
           </div>
@@ -354,9 +363,17 @@ export default function SettingsModal({
                 {generatingCode ? "Generating…" : "Generate pairing code"}
               </button>
               {pairCode && (
-                <span className="select-all font-mono text-base tracking-widest text-accent-bright">
-                  {pairCode}
-                </span>
+                <>
+                  <span className="select-all font-mono text-base tracking-widest text-accent-bright">
+                    {pairCode}
+                  </span>
+                  <button
+                    onClick={copyPairCode}
+                    className="rounded-md border border-border px-2.5 py-1 text-xs text-fg hover:bg-surface-2"
+                  >
+                    Copy
+                  </button>
+                </>
               )}
             </div>
             {pairCode && (
