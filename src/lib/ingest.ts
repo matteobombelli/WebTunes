@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { db, isUniqueViolation } from "@/db";
 import { tracks, type Track } from "@/db/schema";
+import { fetchCoverArt } from "@/lib/art-fetch";
 import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { log } from "@/lib/log";
@@ -37,22 +38,48 @@ export type IngestResult =
   | { status: "duplicate"; message: string };
 
 /**
+ * Caller-supplied metadata that wins over whatever is embedded in the file.
+ * The extension importer sends these: title/artist/album come from the source
+ * (the YouTube video, or the Spotify/Apple track it matched), and `artUrl` is
+ * that source's cover — a YouTube thumbnail (cropSquare) or Spotify/Apple
+ * artwork. Mirrors the reference exporter tagging every file with title/
+ * artist/album + embedded cover.
+ */
+export type IngestOverrides = {
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  artUrl?: string | null;
+  artCropSquare?: boolean;
+};
+
+function clean(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
  * The whole track-ingest pipeline, shared by the session-auth upload route
  * (POST /api/tracks) and the extension-import route: dedupe on content hash,
  * metadata/loudness/re-mux, S3 upload (audio + art + thumbnail), row insert,
  * and the background CLAP/recognition enqueues. Callers have already validated
  * type and size; they map the result to their HTTP responses.
+ *
+ * `overrides` (extension importer) take precedence over file-embedded tags and
+ * supply a cover-art URL to fetch when the file carries no embedded art.
  */
 export async function ingestTrack({
   userId,
   buffer,
   filename,
   mimeType,
+  overrides,
 }: {
   userId: string;
   buffer: Buffer;
   filename: string;
   mimeType: string;
+  overrides?: IngestOverrides;
 }): Promise<IngestResult> {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
 
@@ -81,14 +108,33 @@ export async function ingestTrack({
     remuxOpusToMp4(buffer, ext, mimeType),
   ]);
 
-  // Cover art on the upload path now comes only from the file's embedded art.
-  // Online/acoustic cover-art lookup (and artist/album recognition) is handled
-  // afterwards by the background recognition worker (lib/recognize-queue.ts), so
-  // an artless upload returns immediately instead of waiting on a network call.
-  const cover: { body: Buffer; contentType: string; ext: string } | null =
+  // Caller overrides (extension importer) win over the file's embedded tags;
+  // fall back to what the file carried. title keeps ingest's non-empty invariant.
+  const title = clean(overrides?.title) ?? meta.title;
+  const artist = clean(overrides?.artist) ?? meta.artist;
+  const album = clean(overrides?.album) ?? meta.album;
+
+  // Cover art: prefer the file's embedded art; otherwise fetch the caller's art
+  // URL (Spotify/Apple artwork, or a YouTube thumbnail cropped square). Both are
+  // untrusted — the fetch sniffs the bytes for the stored kind. Anything still
+  // missing (no embedded art, no/failed URL) is left to the background
+  // recognition worker, exactly as before.
+  let cover: { body: Buffer; contentType: string; ext: string } | null =
     meta.artBuffer
       ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
       : null;
+  if (!cover && overrides?.artUrl) {
+    const fetched = await fetchCoverArt(overrides.artUrl, {
+      cropSquare: overrides.artCropSquare,
+    });
+    if (fetched) {
+      cover = {
+        body: fetched.body,
+        contentType: fetched.kind.contentType,
+        ext: fetched.kind.ext,
+      };
+    }
+  }
 
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
@@ -155,9 +201,9 @@ export async function ingestTrack({
       .values({
         id: trackId,
         ownerId: userId,
-        title: meta.title,
-        artist: meta.artist,
-        album: meta.album,
+        title,
+        artist,
+        album,
         durationSec: meta.durationSec,
         loudnessLufs,
         s3Key,
@@ -178,7 +224,8 @@ export async function ingestTrack({
     // Fill any MISSING artist/album/cover-art in the background via acoustic
     // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup
     // as the fallback. Never overwrites existing data; the title is left alone.
-    if (!meta.artist || !meta.album || !artS3Key) {
+    // Overrides that filled these (extension importer) suppress the lookup.
+    if (!artist || !album || !artS3Key) {
       enqueueRecognition({ trackId, s3Key, ext: audioExt });
     }
     return { status: "created", track };

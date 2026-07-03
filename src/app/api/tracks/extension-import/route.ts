@@ -37,12 +37,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The extension resolves title/artist/album + a cover-art URL client-side
+  // (from the YouTube video, or the Spotify/Apple track it matched) and sends
+  // them so the stored track is tagged deterministically. All untrusted:
+  // strings become overrides, artUrl is fetched + byte-sniffed server-side.
+  const str = (key: string) => {
+    const v = form.get(key);
+    return typeof v === "string" ? v : undefined;
+  };
   const buffer = Buffer.from(await file.arrayBuffer());
   const result = await ingestTrack({
     userId: user.id,
     buffer,
     filename: file.name,
     mimeType: file.type,
+    overrides: {
+      title: str("title"),
+      artist: str("artist"),
+      album: str("album"),
+      artUrl: str("artUrl"),
+      artCropSquare: str("artCropSquare") === "1",
+    },
   });
   if (result.status === "duplicate") {
     return NextResponse.json({ error: result.message }, { status: 409 });
