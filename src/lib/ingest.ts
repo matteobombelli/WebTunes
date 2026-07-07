@@ -1,15 +1,13 @@
 import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
 import { db, isUniqueViolation } from "@/db";
-import { tracks } from "@/db/schema";
-import { requireUser, unauthorized } from "@/lib/auth-helpers";
-<<<<<<< Updated upstream
+import { tracks, type Track } from "@/db/schema";
+import { fetchCoverArt } from "@/lib/art-fetch";
 import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { log } from "@/lib/log";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
-import { extractTrackMetadata } from "@/lib/metadata";
+import { cleanTag, extractTrackMetadata } from "@/lib/metadata";
 import { enqueueRecognition } from "@/lib/recognize-queue";
 import { remuxOpusToMp4 } from "@/lib/remux";
 import { deleteObject, uploadObject } from "@/lib/s3";
@@ -18,22 +16,13 @@ import {
   THUMBNAIL_CONTENT_TYPE,
   thumbnailS3Key,
 } from "@/lib/thumbnail";
-=======
-import { ingestTrack, validateAudioUpload } from "@/lib/ingest";
->>>>>>> Stashed changes
-import {
-  listAccessibleTracks,
-  listFriendsTracks,
-  listOwnTracks,
-  toTrackDTO,
-} from "@/lib/tracks";
-import { getUserSettings } from "@/lib/users";
 
-// Matches proxyClientMaxBodySize in next.config.ts: the proxy truncates bodies
-// past this, so reject here for a clean error instead of a corrupt upload.
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
+// The user-facing upload limit. proxyClientMaxBodySize in next.config.ts sits
+// ABOVE this (110mb) so a file near the limit plus multipart overhead isn't
+// silently truncated by the proxy before the route can reject it cleanly.
+export const MAX_FILE_BYTES = 100 * 1024 * 1024;
 
-const AUDIO_EXTENSIONS = new Set([
+export const AUDIO_EXTENSIONS = new Set([
   "mp3",
   "m4a",
   "aac",
@@ -44,53 +33,80 @@ const AUDIO_EXTENSIONS = new Set([
   "webm",
 ]);
 
-export async function GET(req: NextRequest) {
-  const user = await requireUser();
-  if (!user) return unauthorized();
+export type IngestResult =
+  | { status: "created"; track: Track }
+  | { status: "duplicate"; message: string };
 
-  // scope=all adds friends' non-private tracks to the viewer's own; scope=friends
-  // returns only friends' (own excluded) so that view doesn't over-fetch.
-  const scope = req.nextUrl.searchParams.get("scope");
-  if (scope === "all" || scope === "friends") {
-    const { hideFriendDuplicates } = await getUserSettings(user.id);
-    return NextResponse.json(
-      scope === "friends"
-        ? await listFriendsTracks(user.id, hideFriendDuplicates)
-        : await listAccessibleTracks(user.id, hideFriendDuplicates)
-    );
+/**
+ * Validate an uploaded audio file (shape + claimed type + size), shared by the
+ * session-auth upload route and the extension-import route so their rules
+ * can't drift. Returns the File, or the 400 message.
+ */
+export function validateAudioUpload(
+  value: unknown
+): { ok: true; file: File } | { ok: false; error: string } {
+  if (!(value instanceof File)) return { ok: false, error: "Missing file" };
+  const ext = value.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!value.type.startsWith("audio/") && !AUDIO_EXTENSIONS.has(ext)) {
+    return { ok: false, error: `Unsupported file type: ${value.type || ext}` };
   }
-  return NextResponse.json(await listOwnTracks(user.id));
+  if (value.size > MAX_FILE_BYTES) {
+    return { ok: false, error: "File exceeds the 100 MB limit" };
+  }
+  return { ok: true, file: value };
 }
 
-export async function POST(req: NextRequest) {
-  const user = await requireUser();
-  if (!user) return unauthorized();
+/**
+ * Caller-supplied metadata that wins over whatever is embedded in the file.
+ * The extension importer sends these: title/artist/album come from the source
+ * (the YouTube video, or the Spotify/Apple track it matched), and `artUrl` is
+ * that source's cover — a YouTube thumbnail (cropSquare) or Spotify/Apple
+ * artwork. Mirrors the reference exporter tagging every file with title/
+ * artist/album + embedded cover.
+ */
+export type IngestOverrides = {
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  artUrl?: string | null;
+  artCropSquare?: boolean;
+};
 
-  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
-  const form = await req.formData().catch(() => null);
-  if (!form) {
-    return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
-  }
-  const upload = validateAudioUpload(form.get("file"));
-  if (!upload.ok) {
-    return NextResponse.json({ error: upload.error }, { status: 400 });
-  }
-  const file = upload.file;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+/**
+ * The whole track-ingest pipeline, shared by the session-auth upload route
+ * (POST /api/tracks) and the extension-import route: dedupe on content hash,
+ * metadata/loudness/re-mux, S3 upload (audio + art + thumbnail), row insert,
+ * and the background CLAP/recognition enqueues. Callers have already validated
+ * type and size; they map the result to their HTTP responses.
+ *
+ * `overrides` (extension importer) take precedence over file-embedded tags and
+ * supply a cover-art URL to fetch when the file carries no embedded art.
+ */
+export async function ingestTrack({
+  userId,
+  buffer,
+  filename,
+  mimeType,
+  overrides,
+}: {
+  userId: string;
+  buffer: Buffer;
+  filename: string;
+  mimeType: string;
+  overrides?: IngestOverrides;
+}): Promise<IngestResult> {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
 
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   const [duplicate] = await db
     .select({ title: tracks.title })
     .from(tracks)
-    .where(
-      and(eq(tracks.ownerId, user.id), eq(tracks.contentHash, contentHash))
-    );
+    .where(and(eq(tracks.ownerId, userId), eq(tracks.contentHash, contentHash)));
   if (duplicate) {
-    return NextResponse.json(
-      { error: `Already in your library as "${duplicate.title}"` },
-      { status: 409 }
-    );
+    return {
+      status: "duplicate",
+      message: `Already in your library as "${duplicate.title}"`,
+    };
   }
 
   // These three are independent — run them concurrently so the I/O-bound lrclib
@@ -100,33 +116,54 @@ export async function POST(req: NextRequest) {
   // The CLAP embedding used to run here too, but it's the slowest step, so it's
   // deferred to a background queue (enqueueEmbedding, after the row exists).
   const [meta, loudnessLufs, remuxed] = await Promise.all([
-    extractTrackMetadata(buffer, file.type, file.name),
+    extractTrackMetadata(buffer, mimeType, filename),
     analyzeLoudnessLufs(buffer, ext),
     // iOS Safari can't play Opus-in-Ogg; losslessly re-mux Opus to MP4.
-    remuxOpusToMp4(buffer, ext, file.type),
+    remuxOpusToMp4(buffer, ext, mimeType),
   ]);
 
-  // Cover art on the upload path now comes only from the file's embedded art.
-  // Online/acoustic cover-art lookup (and artist/album recognition) is handled
-  // afterwards by the background recognition worker (lib/recognize-queue.ts), so
-  // an artless upload returns immediately instead of waiting on a network call.
-  const cover: { body: Buffer; contentType: string; ext: string } | null =
+  // Caller overrides (extension importer) win over the file's embedded tags;
+  // fall back to what the file carried. title keeps ingest's non-empty
+  // invariant; cleanTag also caps + NFC-normalizes the untrusted overrides.
+  const title = cleanTag(overrides?.title) ?? meta.title;
+  const artist = cleanTag(overrides?.artist) ?? meta.artist;
+  const album = cleanTag(overrides?.album) ?? meta.album;
+
+  // Cover art: prefer the file's embedded art; otherwise fetch the caller's art
+  // URL (Spotify/Apple artwork, or a YouTube thumbnail cropped square). Both are
+  // untrusted — the fetch sniffs the bytes for the stored kind. Anything still
+  // missing (no embedded art, no/failed URL) is left to the background
+  // recognition worker, exactly as before.
+  let cover: { body: Buffer; contentType: string; ext: string } | null =
     meta.artBuffer
       ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
       : null;
+  if (!cover && overrides?.artUrl) {
+    const fetched = await fetchCoverArt(overrides.artUrl, {
+      cropSquare: overrides.artCropSquare,
+    });
+    if (fetched) {
+      cover = {
+        body: fetched.body,
+        contentType: fetched.kind.contentType,
+        ext: fetched.kind.ext,
+      };
+    }
+  }
 
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
   // client-supplied filename is untrusted, so only allowlisted extensions reach
-  // the key; file.type is untrusted too, so we only keep it when it's audio/*
-  // (anything else gets a neutral Content-Type so it can't be served as active
-  // content — the offline service worker replays this from a same-origin cache).
+  // the key; the claimed MIME type is untrusted too, so we only keep it when
+  // it's audio/* (anything else gets a neutral Content-Type so it can't be
+  // served as active content — the offline service worker replays this from a
+  // same-origin cache).
   const originalExt = AUDIO_EXTENSIONS.has(ext) ? ext : "bin";
-  const originalType = file.type.startsWith("audio/") ? file.type : null;
+  const originalType = mimeType.startsWith("audio/") ? mimeType : null;
   const audioBody = remuxed ? remuxed.body : buffer;
   const audioExt = remuxed ? remuxed.ext : originalExt;
   const storedType = remuxed ? remuxed.contentType : originalType;
-  const s3Key = `audio/${user.id}/${trackId}.${audioExt}`;
+  const s3Key = `audio/${userId}/${trackId}.${audioExt}`;
 
   // Upload audio and cover art together. Art is best-effort and must never fail
   // the track — swallow its errors and drop the key so the row isn't orphaned.
@@ -136,7 +173,7 @@ export async function POST(req: NextRequest) {
     uploadObject(s3Key, audioBody, storedType ?? undefined),
   ];
   if (cover) {
-    artS3Key = `art/${user.id}/${trackId}.${cover.ext}`;
+    artS3Key = `art/${userId}/${trackId}.${cover.ext}`;
     uploads.push(
       uploadObject(artS3Key, cover.body, cover.contentType).catch((err) => {
         artS3Key = null; // leave the track artless rather than orphan a row
@@ -149,7 +186,7 @@ export async function POST(req: NextRequest) {
     );
     // Best-effort downscaled thumbnail for <=64px list/queue/mini-bar rows;
     // failure just means those rows fall back to the full art via the /art route.
-    const thumbKey = thumbnailS3Key(user.id, trackId);
+    const thumbKey = thumbnailS3Key(userId, trackId);
     uploads.push(
       makeThumbnail(cover.body, cover.ext)
         .then((thumb) =>
@@ -178,10 +215,10 @@ export async function POST(req: NextRequest) {
       .insert(tracks)
       .values({
         id: trackId,
-        ownerId: user.id,
-        title: meta.title,
-        artist: meta.artist,
-        album: meta.album,
+        ownerId: userId,
+        title,
+        artist,
+        album,
         durationSec: meta.durationSec,
         loudnessLufs,
         s3Key,
@@ -202,10 +239,11 @@ export async function POST(req: NextRequest) {
     // Fill any MISSING artist/album/cover-art in the background via acoustic
     // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup
     // as the fallback. Never overwrites existing data; the title is left alone.
-    if (!meta.artist || !meta.album || !artS3Key) {
+    // Overrides that filled these (extension importer) suppress the lookup.
+    if (!artist || !album || !artS3Key) {
       enqueueRecognition({ trackId, s3Key, ext: audioExt });
     }
-    return NextResponse.json(toTrackDTO(track), { status: 201 });
+    return { status: "created", track };
   } catch (err) {
     // Concurrent upload of the same file slipped past the dedupe check.
     if (isUniqueViolation(err)) {
@@ -216,10 +254,7 @@ export async function POST(req: NextRequest) {
       } catch {
         // Orphaned object is harmless.
       }
-      return NextResponse.json(
-        { error: "Already in your library" },
-        { status: 409 }
-      );
+      return { status: "duplicate", message: "Already in your library" };
     }
     throw err;
   }

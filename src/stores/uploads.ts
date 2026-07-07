@@ -4,10 +4,11 @@ import { create } from "zustand";
 import { BASE_PATH } from "@/lib/base-path";
 import { log } from "@/lib/log";
 
-export type UploadItem = {
+type UploadItem = {
   name: string;
   status: "uploading" | "done" | "duplicate" | "error" | "canceled";
   progress: number; // 0–100, bytes sent for the current file
+  /** Failure reason, surfaced in the progress bar's "failed" tooltip. */
   detail?: string;
 };
 

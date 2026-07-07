@@ -7,7 +7,8 @@ export default function Loading() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
-        <Skeleton className="h-40 w-40 shrink-0 rounded-md" />
+        {/* Matches PlaylistDetail's cover box so the header doesn't jump. */}
+        <Skeleton className="h-28 w-28 shrink-0 rounded-lg sm:h-36 sm:w-36" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-3 w-16" />
           <Skeleton className="mt-2 h-8 w-2/3" />

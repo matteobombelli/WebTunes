@@ -3,6 +3,7 @@ import Link from "next/link";
 import { shareArtSrc, shareStreamSrc } from "@/lib/api";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { resolveShareToken } from "@/lib/shares";
+import { MusicIcon } from "@/components/icons";
 
 // Public, no-auth listen page for a shared track. Lives outside the (app) and
 // (auth) route groups so it inherits only the bare root layout — no
@@ -55,7 +56,7 @@ export default async function SharePage({
         <p className="text-fg-muted">
           This share link has expired or doesn’t exist.
         </p>
-        <Link href="/" className="text-accent-bright hover:text-white">
+        <Link href="/" className="text-accent-bright hover:text-fg">
           Go to WebTunes
         </Link>
       </main>
@@ -64,7 +65,7 @@ export default async function SharePage({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-2xl border border-border bg-surface-1 p-6 shadow-2xl">
+      <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-xl border border-border bg-surface-1 p-6 shadow-2xl">
         {track.artS3Key ? (
           // eslint-disable-next-line @next/next/no-img-element -- presigned R2 redirect target; next/image can't optimize a cross-origin 302.
           <img
@@ -73,8 +74,8 @@ export default async function SharePage({
             className="aspect-square w-48 rounded-xl object-cover shadow-lg"
           />
         ) : (
-          <div className="flex aspect-square w-48 items-center justify-center rounded-xl bg-surface-2 text-5xl text-fg-subtle">
-            ♪
+          <div className="flex aspect-square w-48 items-center justify-center rounded-xl bg-surface-2 text-fg-subtle">
+            <MusicIcon size={48} />
           </div>
         )}
         <div className="flex flex-col items-center gap-1 text-center">

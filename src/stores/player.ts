@@ -262,6 +262,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: (tracks) => {
+    if (tracks.length === 0) return;
     const s = get();
     const items = wrap(tracks);
     if (s.index < 0) {
@@ -293,6 +294,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   addToQueue: (tracks) => {
+    // An empty add must not take the "nothing loaded" branch: queue [] with
+    // index 0 would make every queue[index].track selector throw.
+    if (tracks.length === 0) return;
     const s = get();
     const items = wrap(tracks);
     if (s.index < 0) {

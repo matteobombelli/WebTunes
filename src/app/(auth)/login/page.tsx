@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/Input";
 const initialState: AuthFormState = { error: null };
 
 function ResendVerification({ email }: { email: string }) {
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "failed">(
+    "idle"
+  );
 
   const resend = async () => {
     setStatus("sending");
@@ -20,14 +22,22 @@ function ResendVerification({ email }: { email: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-    } finally {
       setStatus("sent");
+    } catch {
+      // Don't claim a link is on its way when the request failed
+      // (rate-limited, offline) — let the user retry.
+      setStatus("failed");
     }
   };
 
   return (
     <div className="rounded-md border border-amber-700/50 bg-amber-950/30 p-3 text-sm text-amber-200">
       <p>Please verify your email before signing in.</p>
+      {status === "failed" && (
+        <p className="mt-1 text-red-400">
+          Couldn’t send the link — try again in a moment.
+        </p>
+      )}
       {status === "sent" ? (
         <p className="mt-1 text-amber-300/80">
           If that account needs verifying, a new link is on its way.

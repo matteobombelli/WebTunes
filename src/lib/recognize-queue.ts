@@ -8,11 +8,11 @@ import {
   resolveArt,
   type Recognition,
 } from "@/lib/recognize";
-import { getObjectBytes, uploadObject } from "@/lib/s3";
+import { deleteObject, getObjectBytes, uploadObject } from "@/lib/s3";
 import {
   makeThumbnail,
   THUMBNAIL_CONTENT_TYPE,
-  thumbnailS3Key,
+  THUMBNAIL_EXT,
 } from "@/lib/thumbnail";
 
 // Background queue that fills MISSING artist/album/cover-art for a track via
@@ -116,17 +116,29 @@ async function processJob(job: Job): Promise<void> {
         title: row.title,
       });
       if (art) {
-        const artKey = `art/${row.ownerId}/${job.trackId}.${art.kind.ext}`;
+        // Recognition-specific `.rec.` keys, disjoint from the manual-upload
+        // scheme (`art/{owner}/{id}.{ext}` / `….thumb.jpg`): art the owner
+        // uploads while we're out fingerprinting must not be clobbered. The
+        // row is claimed only AFTER the objects exist (leak beats dangling);
+        // a lost claim deletes them best-effort (reconcile script backstops).
+        const artKey = `art/${row.ownerId}/${job.trackId}.rec.${art.kind.ext}`;
         await uploadObject(artKey, art.body, art.kind.contentType);
         const thumb = await makeThumbnail(art.body, art.kind.ext);
-        const thumbKey = thumb ? thumbnailS3Key(row.ownerId, job.trackId) : null;
+        const thumbKey = thumb
+          ? `art/${row.ownerId}/${job.trackId}.rec.${THUMBNAIL_EXT}`
+          : null;
         if (thumb && thumbKey) {
           await uploadObject(thumbKey, thumb, THUMBNAIL_CONTENT_TYPE);
         }
-        await db
+        const claimed = await db
           .update(tracks)
           .set({ artS3Key: artKey, artThumbS3Key: thumbKey })
-          .where(and(eq(tracks.id, job.trackId), isNull(tracks.artS3Key)));
+          .where(and(eq(tracks.id, job.trackId), isNull(tracks.artS3Key)))
+          .returning({ id: tracks.id });
+        if (claimed.length === 0) {
+          await deleteObject(artKey).catch(() => {});
+          if (thumbKey) await deleteObject(thumbKey).catch(() => {});
+        }
       }
     }
   } catch (err) {

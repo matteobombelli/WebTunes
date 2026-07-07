@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getClientIp } from "@/lib/client-ip";
 import { registerInvitedUser } from "@/lib/invites";
-import { rateLimit } from "@/lib/rate-limit";
-import { registerSchema } from "@/lib/users";
+import { registerRateLimit } from "@/lib/rate-limit";
+import { registerSchema, USERNAME_TAKEN_MESSAGE } from "@/lib/users";
 import { sendVerificationEmail } from "@/lib/verification";
-
-const REGISTER_IP_LIMIT = 5;
-const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req.headers);
-  if (!rateLimit(`register-ip:${ip}`, REGISTER_IP_LIMIT, REGISTER_WINDOW_MS)) {
+  if (!registerRateLimit(ip)) {
     return NextResponse.json(
       { error: "Too many sign-up attempts. Please try again later." },
       { status: 429 }
@@ -47,8 +44,12 @@ export async function POST(req: NextRequest) {
 
   const result = await registerInvitedUser({ ...parsed.data, token: invite });
   if ("error" in result) {
-    // Email already taken → 409; full / invalid invite → 403.
-    const status = result.error.includes("already exists") ? 409 : 403;
+    // Email or username already taken → 409; full / invalid invite → 403.
+    const status =
+      result.error.includes("already exists") ||
+      result.error === USERNAME_TAKEN_MESSAGE
+        ? 409
+        : 403;
     return NextResponse.json({ error: result.error }, { status });
   }
 

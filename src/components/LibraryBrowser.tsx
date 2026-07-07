@@ -6,22 +6,11 @@ import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
-import {
-  GlobeIcon,
-  MusicIcon,
-  SearchIcon,
-  UsersIcon,
-  XIcon,
-} from "@/components/icons";
+import { SearchIcon, XIcon } from "@/components/icons";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
-
-const SCOPES = [
-  { value: "own", label: "My library", icon: <MusicIcon size={17} /> },
-  { value: "all", label: "Everything", icon: <GlobeIcon size={17} /> },
-  { value: "friends", label: "Friends", icon: <UsersIcon size={17} /> },
-] as const;
+import { SCOPES } from "@/components/ui/scopes";
 
 // Session cache of the last successful browse fetch per scope (+ the
 // hideFriendDuplicates setting, which changes the server result). Module-level
@@ -44,6 +33,8 @@ export default function LibraryBrowser({
   // Which view `results` belongs to, so a scope/query change can tell fresh
   // results from a previous view's (and fall back to the cache meanwhile).
   const [resultsKey, setResultsKey] = useState<string | null>(null);
+  // The last fetch failed — its empty list means "couldn't load", not "empty".
+  const [loadFailed, setLoadFailed] = useState(false);
   const [searching, setSearching] = useState(false);
   // Owned by the global Settings modal (player store); the server reads it per
   // request, so a change re-fires the fetch effect below to re-filter the list.
@@ -84,11 +75,13 @@ export default function LibraryBrowser({
         if (!query) scopeCache.set(cacheKey, tracks);
         setResults(tracks);
         setResultsKey(viewKey);
+        setLoadFailed(false);
         setSearching(false);
       } catch {
         if (!controller.signal.aborted) {
           setResults([]);
           setResultsKey(viewKey);
+          setLoadFailed(true);
           setSearching(false);
         }
       }
@@ -135,7 +128,7 @@ export default function LibraryBrowser({
               onClick={() => setQ("")}
               aria-label="Clear search"
               title="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg"
             >
               <XIcon size={16} />
             </button>
@@ -163,6 +156,13 @@ export default function LibraryBrowser({
             selectable
             sortable
             onMutated={onMutated}
+            emptyMessage={
+              !browsingOwn && loadFailed && fresh
+                ? "Couldn’t load tracks — check your connection."
+                : query
+                  ? `No matches for “${query}”.`
+                  : undefined
+            }
           />
         </div>
       )}

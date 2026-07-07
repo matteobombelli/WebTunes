@@ -68,6 +68,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     })
     .where(eq(playlists.id, id))
     .returning();
+  // Deleted between the ownership check and the update.
+  if (!updated) {
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
   return NextResponse.json(await toPlaylistDTO(updated));
 }
 

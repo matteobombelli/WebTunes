@@ -1,14 +1,11 @@
-import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { db } from "@/db";
-import { users } from "@/db/schema";
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listUserTopTracks } from "@/lib/discover";
 import { areFriends } from "@/lib/friends";
-import { listFriendTracks } from "@/lib/tracks";
-import { getUserSettings } from "@/lib/users";
+import { listTracksOfFriend } from "@/lib/tracks";
+import { getDisplayName, getUserSettings } from "@/lib/users";
 import { isUuid } from "@/lib/validate";
-import DiscoverSection from "@/components/DiscoverSection";
+import DiscoverSection, { sectionHeadingClass } from "@/components/DiscoverSection";
 import TrackList from "@/components/TrackList";
 
 export default async function FriendLibraryPage({
@@ -22,17 +19,12 @@ export default async function FriendLibraryPage({
   if (!isUuid(userId)) notFound();
   if (!(await areFriends(user.id, userId))) notFound();
 
-  const [friend] = await db
-    .select({ name: users.name })
-    .from(users)
-    .where(eq(users.id, userId));
-  if (!friend) notFound();
-
-  const displayName = friend.name;
+  const displayName = await getDisplayName(userId);
+  if (!displayName) notFound();
   const { hideFriendDuplicates } = await getUserSettings(user.id);
   const [topTracks, trackDTOs] = await Promise.all([
     listUserTopTracks(userId, user.id, hideFriendDuplicates),
-    listFriendTracks(userId, displayName),
+    listTracksOfFriend(userId, displayName),
   ]);
 
   return (
@@ -48,9 +40,7 @@ export default async function FriendLibraryPage({
       />
 
       <div className="mt-8">
-        <h2 className="font-display text-lg font-semibold sm:text-[1.6875rem]">
-          {displayName}&apos;s Library
-        </h2>
+        <h2 className={sectionHeadingClass}>{displayName}&apos;s Library</h2>
         <p className="mb-3 text-sm text-fg-muted">
           {trackDTOs.length} track{trackDTOs.length === 1 ? "" : "s"} shared with you
         </p>

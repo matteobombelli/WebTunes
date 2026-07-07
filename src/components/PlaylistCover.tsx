@@ -46,7 +46,9 @@ export default function PlaylistCover({
       {[0, 1, 2, 3].map((i) => (
         <CoverImage
           key={i}
-          src={ids[i] ? artSrc(ids[i]) : null}
+          // Quarter-tiles render at ~120px — the 256px thumbnail is plenty and
+          // avoids fetching four full-res covers per mosaic.
+          src={ids[i] ? artSrc(ids[i], { thumb: true }) : null}
           iconSize={cellIconSize}
           className="h-full w-full bg-surface-2"
         />

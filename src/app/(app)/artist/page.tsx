@@ -19,10 +19,13 @@ export default async function ArtistPage({
     name,
     settings.hideFriendDuplicates
   );
+  // Artists only exist through their tracks — an unknown/typo'd name is a 404,
+  // not a real-looking empty artist.
+  if (tracks.length === 0) notFound();
 
   return (
     <div className="mx-auto max-w-5xl">
-      <p className="text-sm text-fg-muted">Artist</p>
+      <p className="text-xs uppercase text-fg-subtle">Artist</p>
       <h1 className="mb-6 font-display text-4xl font-bold tracking-tight">{name}</h1>
       <TrackList tracks={tracks} showOwner canDelete selectable />
     </div>

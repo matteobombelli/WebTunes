@@ -6,9 +6,10 @@ import type { TrackDTO } from "@/lib/types";
 
 /**
  * Columns the TrackDTO needs from `tracks`. Deliberately excludes `lyrics` /
- * `lyricsSource` (never read by the client — they only feed `search_vector`) and
- * `contentHash` (a server-side dedupe detail). List queries select this
- * projection so they don't ship KBs of lyrics text per row.
+ * `lyricsSource` (never read by the client — they only feed `search_vector`),
+ * `contentHash` (a server-side dedupe detail), and `s3Key` (playback goes
+ * through the /stream route; the bucket layout stays server-side). List
+ * queries select this projection so they don't ship KBs of lyrics per row.
  */
 export const trackDtoColumns = {
   id: tracks.id,
@@ -18,7 +19,6 @@ export const trackDtoColumns = {
   album: tracks.album,
   durationSec: tracks.durationSec,
   loudnessLufs: tracks.loudnessLufs,
-  s3Key: tracks.s3Key,
   artS3Key: tracks.artS3Key,
   mimeType: tracks.mimeType,
   fileSize: tracks.fileSize,
@@ -46,7 +46,6 @@ export function toTrackDTO(
     album: track.album,
     durationSec: track.durationSec,
     loudnessLufs: track.loudnessLufs,
-    s3Key: track.s3Key,
     artS3Key: track.artS3Key,
     mimeType: track.mimeType,
     fileSize: track.fileSize,
@@ -234,8 +233,9 @@ export function listTracksByArtist(
   );
 }
 
-/** A friend's non-private tracks, newest first. Caller checks the friendship. */
-export async function listFriendTracks(
+/** One friend’s non-private tracks, newest first (distinct from the
+ *  friends-scope listing listFriendsTracks). Caller checks the friendship. */
+export async function listTracksOfFriend(
   friendId: string,
   ownerName: string | null
 ): Promise<TrackDTO[]> {

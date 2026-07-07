@@ -49,8 +49,11 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@huggingface/transformers"],
   experimental: {
     // Proxy buffers request bodies in RAM (default cap 10MB), which truncated
-    // track uploads and broke FormData parsing. 100MB covers lossless audio.
-    proxyClientMaxBodySize: "100mb",
+    // track uploads and broke FormData parsing. The app-level file limit is
+    // 100MB (MAX_FILE_BYTES); the proxy cap sits above it so a file near the
+    // limit — plus multipart boundary/field overhead — isn't silently
+    // truncated into a formData() parse error.
+    proxyClientMaxBodySize: "110mb",
   },
   // Search lives in the Library page now; keep old links working.
   async redirects() {

@@ -1,10 +1,10 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, isUniqueViolation } from "@/db";
 import { playlists, playlistTracks, tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { canAccessTrack } from "@/lib/friends";
+import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import { getOwnPlaylist } from "@/lib/playlists";
 
 type Params = { params: Promise<{ id: string }> };
@@ -45,8 +45,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (candidates.length !== requestedIds.length) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
+  const friendIds = await friendIdsOf(user.id);
   for (const track of candidates) {
-    if (!(await canAccessTrack(user.id, track))) {
+    if (!canAccessTrackWithFriends(user.id, track, friendIds)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
@@ -61,38 +62,48 @@ export async function POST(req: NextRequest, { params }: Params) {
       )
     );
   const existingIds = new Set(existing.map((e) => e.trackId));
-  // Preserve request order; silently skip tracks already in the playlist.
+  // Preserve request order; skip tracks already in the playlist (when nothing
+  // is left to add, that's the 409 below).
   const toAdd = requestedIds.filter((tid) => !existingIds.has(tid));
   if (toAdd.length === 0) {
     return NextResponse.json({ error: "Already in playlist" }, { status: 409 });
   }
 
-  await db.transaction(async (tx) => {
-    const [{ base }] = await tx
-      .select({
-        base: sql<number>`coalesce(max(${playlistTracks.position}) + 1, 0)::int`,
-      })
-      .from(playlistTracks)
-      .where(eq(playlistTracks.playlistId, id));
-    await tx.insert(playlistTracks).values(
-      toAdd.map((trackId, i) => ({
-        playlistId: id,
-        trackId,
-        position: base + i,
-      }))
-    );
-    await tx
-      .update(playlists)
-      .set({ updatedAt: new Date() })
-      .where(eq(playlists.id, id));
-  });
+  try {
+    await db.transaction(async (tx) => {
+      const [{ base }] = await tx
+        .select({
+          base: sql<number>`coalesce(max(${playlistTracks.position}) + 1, 0)::int`,
+        })
+        .from(playlistTracks)
+        .where(eq(playlistTracks.playlistId, id));
+      await tx.insert(playlistTracks).values(
+        toAdd.map((trackId, i) => ({
+          playlistId: id,
+          trackId,
+          position: base + i,
+        }))
+      );
+      await tx
+        .update(playlists)
+        .set({ updatedAt: new Date() })
+        .where(eq(playlists.id, id));
+    });
+  } catch (err) {
+    // Two concurrent adds can both pass the membership check above; the
+    // (playlist_id, track_id) PK catches the loser.
+    if (isUniqueViolation(err)) {
+      return NextResponse.json({ error: "Already in playlist" }, { status: 409 });
+    }
+    throw err;
+  }
   return NextResponse.json({ added: toAdd.length }, { status: 200 });
 }
 
 const reorderSchema = z.object({
-  // Cap the array so one request can't issue millions of sequential UPDATEs in a
-  // single transaction / block the event loop on the JSON+zod pass (the proxy
-  // buffers up to 100mb). Far above any real playlist; adds are capped at 500.
+  // Cap the array so one request can't block the event loop on the JSON+zod
+  // pass (the proxy buffers up to 100mb). Far above any real playlist; adds
+  // are capped at 500.
   trackIds: z.array(z.string().uuid()).min(1).max(10_000),
 });
 
@@ -133,17 +144,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   await db.transaction(async (tx) => {
-    for (const [position, trackId] of parsed.data.trackIds.entries()) {
-      await tx
-        .update(playlistTracks)
-        .set({ position })
-        .where(
-          and(
-            eq(playlistTracks.playlistId, id),
-            eq(playlistTracks.trackId, trackId)
-          )
-        );
-    }
+    // One set-based statement instead of one UPDATE per track: a drag-drop in a
+    // large playlist would otherwise hold the transaction (and row locks) across
+    // hundreds of sequential round-trips.
+    await tx.execute(sql`
+      update ${playlistTracks} set "position" = v.ord - 1
+      from unnest(${parsed.data.trackIds}::uuid[]) with ordinality as v(track_id, ord)
+      where ${playlistTracks.playlistId} = ${id}
+        and ${playlistTracks.trackId} = v.track_id
+    `);
     await tx
       .update(playlists)
       .set({ updatedAt: new Date() })

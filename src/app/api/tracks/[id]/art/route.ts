@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
-import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
+import { imageKindFromUpload, validateImageUpload } from "@/lib/image-upload";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
 import {
   makeThumbnail,
@@ -13,8 +13,6 @@ import {
 } from "@/lib/thumbnail";
 import { toTrackDTO } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // Stable per-track cover-art URL (mirrors the stream route): the client keys
 // on this URL while the presigned redirect target rotates per request.
@@ -85,40 +83,27 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const form = await req.formData();
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing file" }, { status: 400 });
+  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
+  const form = await req.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
   }
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!file.type.startsWith("image/") && !IMAGE_EXTENSIONS.has(ext)) {
-    return NextResponse.json({ error: "Art must be an image" }, { status: 400 });
+  const upload = validateImageUpload(form.get("file"), "Art");
+  if (!upload.ok) {
+    return NextResponse.json({ error: upload.error }, { status: 400 });
   }
-  if (file.size > MAX_IMAGE_BYTES) {
-    return NextResponse.json(
-      { error: "Image exceeds the 5 MB limit" },
-      { status: 400 }
-    );
-  }
+  const { file, ext } = upload;
 
   // Resolve the key extension and stored Content-Type from a server-side
-  // allowlist — never the untrusted filename/MIME. Replace the old object when
-  // the key differs so we don't leak it.
+  // allowlist — never the untrusted filename/MIME.
   const kind = imageKindFromUpload(ext, file.type);
   const s3Key = `art/${user.id}/${id}.${kind.ext}`;
-  if (track.artS3Key && track.artS3Key !== s3Key) {
-    try {
-      await deleteObject(track.artS3Key);
-    } catch {
-      // Orphaned art object is harmless.
-    }
-  }
   const bytes = Buffer.from(await file.arrayBuffer());
   await uploadObject(s3Key, bytes, kind.contentType);
 
   // Regenerate the thumbnail from the new art. The thumb key is deterministic,
-  // so a success overwrites the old one; on failure clear it (and delete any
-  // stale thumb) so the row never points at a thumbnail of the previous cover.
+  // so a success overwrites the old one; on failure clear it so the row never
+  // points at a thumbnail of the previous cover.
   const thumbKey = thumbnailS3Key(user.id, id);
   let artThumbS3Key: string | null = null;
   const thumb = await makeThumbnail(bytes, kind.ext).catch(() => null);
@@ -130,18 +115,24 @@ export async function POST(
       artThumbS3Key = null;
     }
   }
-  if (!artThumbS3Key && track.artThumbS3Key) {
-    try {
-      await deleteObject(track.artThumbS3Key);
-    } catch {
-      // Orphaned thumb object is harmless.
-    }
-  }
 
   const [updated] = await db
     .update(tracks)
     .set({ artS3Key: s3Key, artThumbS3Key })
     .where(eq(tracks.id, id))
     .returning();
+  if (!updated) {
+    // Track deleted between the ownership check and the update; the fresh
+    // objects are orphans the reconcile script sweeps.
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+  }
+  // Only after the row points at the new objects, drop replaced ones (leak
+  // beats dangling: deleting first would break art if the upload then failed).
+  if (track.artS3Key && track.artS3Key !== s3Key) {
+    await deleteObject(track.artS3Key).catch(() => {});
+  }
+  if (track.artThumbS3Key && track.artThumbS3Key !== artThumbS3Key) {
+    await deleteObject(track.artThumbS3Key).catch(() => {});
+  }
   return NextResponse.json(toTrackDTO(updated));
 }

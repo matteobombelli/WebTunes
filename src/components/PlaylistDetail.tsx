@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { BASE_PATH } from "@/lib/base-path";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import { useConfirmStore } from "@/stores/confirm";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
@@ -26,8 +26,10 @@ export default function PlaylistDetail({
   const playQueue = usePlayerStore((s) => s.playQueue);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
+  const [renameBusy, setRenameBusy] = useState(false);
   const [name, setName] = useState(playlist.name);
   const [isPrivate, setIsPrivate] = useState(playlist.isPrivate);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -43,6 +45,8 @@ export default function PlaylistDetail({
 
   const rename = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (renameBusy) return;
+    setRenameBusy(true);
     try {
       await api(`/playlists/${playlist.id}`, {
         method: "PATCH",
@@ -53,6 +57,8 @@ export default function PlaylistDetail({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rename failed");
+    } finally {
+      setRenameBusy(false);
     }
   };
 
@@ -75,28 +81,38 @@ export default function PlaylistDetail({
   const uploadCover = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
+    setCoverBusy(true);
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${BASE_PATH}/api/playlists/${playlist.id}/cover`, {
-      method: "POST",
-      body: form,
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Cover upload failed");
-      return;
+    try {
+      // api() handles the basePath and error extraction; it sets no headers,
+      // so the FormData boundary is preserved.
+      await api(`/playlists/${playlist.id}/cover`, { method: "POST", body: form });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cover upload failed");
+    } finally {
+      setCoverBusy(false);
     }
-    router.refresh();
   };
 
   const deletePlaylist = async () => {
-    if (!confirm(`Delete playlist "${playlist.name}"?`)) return;
-    await api(`/playlists/${playlist.id}`, { method: "DELETE" });
+    const ok = await useConfirmStore
+      .getState()
+      .ask(`Delete playlist “${playlist.name}”?`, { confirmLabel: "Delete" });
+    if (!ok) return;
+    try {
+      await api(`/playlists/${playlist.id}`, { method: "DELETE" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn’t delete playlist");
+      return;
+    }
     router.push("/playlists");
     router.refresh();
   };
 
   const removeTrack = async (track: TrackDTO) => {
+    // Failures surface via TrackList's remove/bulkRemove toasts.
     await api(`/playlists/${playlist.id}/tracks/${track.id}`, { method: "DELETE" });
   };
 
@@ -134,12 +150,16 @@ export default function PlaylistDetail({
               className="group relative shrink-0"
             >
               {cover}
-              <span className="absolute inset-0 hidden items-center justify-center rounded-lg bg-black/60 text-sm text-white group-hover:flex">
-                Change cover
+              <span
+                className={`absolute inset-0 items-center justify-center rounded-lg bg-black/60 text-sm text-fg ${
+                  coverBusy ? "flex" : "hidden group-hover:flex"
+                }`}
+              >
+                {coverBusy ? "Uploading…" : "Change cover"}
               </span>
               {/* Always-visible affordance for touch/mobile, where there's no
                   hover to reveal the overlay above. */}
-              <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white shadow group-hover:hidden">
+              <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-fg shadow group-hover:hidden">
                 <PencilIcon size={14} />
               </span>
             </button>
@@ -159,31 +179,47 @@ export default function PlaylistDetail({
           <p className="text-xs uppercase text-fg-subtle">Playlist</p>
           {isOwner && renaming ? (
             <form onSubmit={rename} className="flex items-center gap-2">
+              {/* Raw input: needs the title's own geometry/size, which would
+                  fight the Input primitive's px/py/text utilities. Focus
+                  treatment matches Input. */}
               <input
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xl font-bold outline-none focus:border-accent"
+                className="min-w-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-xl font-bold text-fg outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30"
               />
-              <button type="submit" className="text-sm text-accent-bright hover:text-white">
-                Save
+              <button
+                type="submit"
+                disabled={renameBusy}
+                className="text-sm text-accent-bright hover:text-fg disabled:opacity-50"
+              >
+                {renameBusy ? "Saving…" : "Save"}
               </button>
               <button
                 type="button"
                 onClick={() => setRenaming(false)}
-                className="text-sm text-fg-muted hover:text-white"
+                className="text-sm text-fg-muted hover:text-fg"
               >
                 Cancel
               </button>
             </form>
           ) : isOwner ? (
-            <h1
-              className="cursor-pointer truncate font-display text-3xl font-bold tracking-tight hover:text-accent-bright"
+            // A real button so renaming is reachable by keyboard, with the
+            // pencil making the affordance visible on touch (no hover there).
+            <button
+              type="button"
               title="Rename"
               onClick={() => setRenaming(true)}
+              className="group/name flex min-w-0 max-w-full items-center gap-2 text-left hover:text-accent-bright"
             >
-              {playlist.name}
-            </h1>
+              <h1 className="truncate font-display text-3xl font-bold tracking-tight">
+                {playlist.name}
+              </h1>
+              <PencilIcon
+                size={16}
+                className="shrink-0 text-fg-subtle group-hover/name:text-accent-bright"
+              />
+            </button>
           ) : (
             <h1 className="truncate font-display text-3xl font-bold tracking-tight">
               {playlist.name}
@@ -237,7 +273,7 @@ export default function PlaylistDetail({
                     ? "Private — only you can see this playlist"
                     : "Shared — friends can see this playlist"
                 }
-                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-white"
+                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
               >
                 {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
                 {isPrivate ? "Private" : "Shared"}

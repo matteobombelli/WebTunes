@@ -7,8 +7,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { Readable } from "stream";
 
-// Works against MinIO in dev (S3_ENDPOINT + path-style) and AWS S3 in prod
-// (S3_ENDPOINT unset) with no code change.
+// Works against MinIO in dev and Cloudflare R2 in prod (both via S3_ENDPOINT)
+// with no code change.
 const s3 = new S3Client({
   region: process.env.S3_REGION,
   endpoint: process.env.S3_ENDPOINT || undefined,

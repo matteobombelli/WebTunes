@@ -5,7 +5,7 @@ import { useUploadsStore } from "@/stores/uploads";
 
 // A single slim bar pinned across the top of the app while an upload batch is
 // running (or waiting to be dismissed). Lives in the app layout so it survives
-// client-side navigation, replacing the old floating per-file dialog.
+// client-side navigation.
 export default function UploadProgressBar() {
   const items = useUploadsStore((s) => s.items);
   const busy = useUploadsStore((s) => s.busy);
@@ -16,7 +16,7 @@ export default function UploadProgressBar() {
 
   const done = items.filter((it) => it.status !== "uploading").length;
   const duplicates = items.filter((it) => it.status === "duplicate").length;
-  const failed = items.filter((it) => it.status === "error").length;
+  const failedItems = items.filter((it) => it.status === "error");
   const overall = items.reduce((sum, it) => sum + it.progress, 0) / items.length;
 
   return (
@@ -32,12 +32,22 @@ export default function UploadProgressBar() {
         <span className="tabular-nums text-fg-muted">
           {done}/{items.length}
           {duplicates > 0 && (
-            <span className="text-yellow-400">
+            <span className="text-amber-300">
               {" "}
               · {duplicates} duplicate{duplicates === 1 ? "" : "s"}
             </span>
           )}
-          {failed > 0 && <span className="text-red-400"> · {failed} failed</span>}
+          {failedItems.length > 0 && (
+            <span
+              className="text-red-400"
+              title={failedItems
+                .map((it) => `${it.name}: ${it.detail ?? "failed"}`)
+                .join("\n")}
+            >
+              {" "}
+              · {failedItems.length} failed
+            </span>
+          )}
         </span>
         <div className="ml-auto">
           {busy ? (
@@ -51,7 +61,7 @@ export default function UploadProgressBar() {
             <button
               onClick={clear}
               aria-label="Dismiss"
-              className="text-fg-subtle hover:text-white"
+              className="text-fg-subtle hover:text-fg"
             >
               <XIcon size={15} />
             </button>

@@ -7,7 +7,7 @@ import { usePlayerStore } from "@/stores/player";
 import {
   CompassIcon,
   DownloadIcon,
-  ListIcon,
+  FolderIcon,
   LogoutIcon,
   MusicIcon,
   SettingsIcon,
@@ -16,7 +16,7 @@ import { NotificationDot } from "@/components/ui/NotificationDot";
 
 const NAV = [
   { href: "/discover", label: "Discover", Icon: CompassIcon },
-  { href: "/playlists", label: "Playlists", Icon: ListIcon },
+  { href: "/playlists", label: "Playlists", Icon: FolderIcon },
   { href: "/library", label: "Library", Icon: MusicIcon },
   { href: "/downloads", label: "Downloads", Icon: DownloadIcon },
 ];
@@ -69,7 +69,7 @@ export function MobileTopBar() {
         <button
           onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
           aria-label="Settings"
-          className="flex items-center text-fg-muted hover:text-white"
+          className="flex items-center text-fg-muted hover:text-fg"
         >
           <SettingsIcon size={22} />
         </button>
@@ -77,7 +77,7 @@ export function MobileTopBar() {
           <button
             type="submit"
             aria-label="Sign out"
-            className="flex items-center text-fg-muted hover:text-white"
+            className="flex items-center text-fg-muted hover:text-fg"
           >
             <LogoutIcon size={22} />
           </button>

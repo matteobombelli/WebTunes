@@ -30,7 +30,7 @@ import {
 } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import CurrentTrackDetails from "@/components/CurrentTrackDetails";
-import { CurrentTrackKebab } from "@/components/TrackList";
+import { CurrentTrackKebab } from "@/components/TrackMenus";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
@@ -327,7 +327,7 @@ export default memo(function QueuePanel({
             {upcoming > 0 && (
               <button
                 onClick={clearUpcoming}
-                className="text-xs text-fg-muted hover:text-white"
+                className="text-xs text-fg-muted hover:text-fg"
               >
                 Clear upcoming
               </button>
@@ -353,7 +353,7 @@ export default memo(function QueuePanel({
                 className={
                   mobile
                     ? "min-h-0 flex-1 overflow-y-auto py-1"
-                    : "max-h-[calc(100dvh-40rem)] overflow-y-auto py-1"
+                    : "max-h-[max(10rem,calc(100dvh-40rem))] overflow-y-auto py-1"
                 }
               >
                 {topPad > 0 && <li aria-hidden style={{ height: topPad }} />}
@@ -400,7 +400,7 @@ export default memo(function QueuePanel({
             onClick={() => setCollapsed((c) => !c)}
             aria-label={collapsed ? "Expand queue" : "Collapse queue"}
             title={collapsed ? "Expand queue" : "Collapse queue"}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-white"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-fg"
           >
             {collapsed ? (
               <ChevronUpIcon size={16} />
@@ -413,7 +413,7 @@ export default memo(function QueuePanel({
         <button
           onClick={onClose}
           aria-label={mobile ? "Back to now playing" : "Close queue"}
-          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-white"
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-fg"
         >
           {mobile ? (
             <>
@@ -538,7 +538,7 @@ const QueueRow = memo(function QueueRow({
           onClick={onRemove}
           aria-label={`Remove ${track.title} from queue`}
           title="Remove from queue"
-          className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+          className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
         >
           <XIcon size={14} />
         </button>
@@ -548,7 +548,7 @@ const QueueRow = memo(function QueueRow({
         {...listeners}
         aria-label={`Reorder ${track.title}`}
         title="Drag to reorder"
-        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100"
+        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
       >
         <GripIcon size={16} />
       </button>

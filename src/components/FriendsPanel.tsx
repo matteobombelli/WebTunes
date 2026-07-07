@@ -13,8 +13,23 @@ import InvitePanel from "@/components/InvitePanel";
 import { XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { cardClass } from "@/components/ui/Card";
+import { cardClass, listRowClass } from "@/components/ui/Card";
 import { NotificationDot } from "@/components/ui/NotificationDot";
+import { useConfirmStore } from "@/stores/confirm";
+import { useToastStore } from "@/stores/toast";
+
+/** The circular initial badge used across the friend/suggestion/search rows. */
+function Avatar({ name, small = false }: { name: string; small?: boolean }) {
+  return (
+    <div
+      className={`flex items-center justify-center rounded-full bg-accent/15 font-semibold text-accent-bright ${
+        small ? "h-8 w-8 text-sm" : "h-10 w-10 font-display text-lg"
+      }`}
+    >
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
 
 export default function FriendsPanel({
   friends,
@@ -40,7 +55,12 @@ export default function FriendsPanel({
     results: [],
   });
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // Request row (accept/decline/cancel) currently awaiting the server, so its
+  // buttons disable instead of double-firing.
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(
+    null
+  );
   const [tab, setTab] = useState<"friends" | "requests" | "invite">("friends");
   // Ids we've just sent a request to, so suggestions disappear immediately
   // (router.refresh() then drops them server-side once the request exists).
@@ -86,7 +106,7 @@ export default function FriendsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: target.id }),
       });
-      setMessage(`Request sent to ${target.name}`);
+      setMessage({ text: `Request sent to ${target.name}`, error: false });
       setSearch((s) => ({
         ...s,
         results: s.results.filter((r) => r.id !== target.id),
@@ -94,29 +114,53 @@ export default function FriendsPanel({
       setRequestedIds((prev) => new Set(prev).add(target.id));
       router.refresh();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed to send request");
+      setMessage({
+        text: err instanceof Error ? err.message : "Failed to send request",
+        error: true,
+      });
     } finally {
       setSendingId(null);
     }
   };
 
   const accept = async (id: string) => {
-    await api(`/friends/requests/${id}`, { method: "PATCH" });
-    router.refresh();
+    setActingId(id);
+    try {
+      await api(`/friends/requests/${id}`, { method: "PATCH" });
+      router.refresh();
+    } catch {
+      useToastStore.getState().show("Couldn’t accept request");
+    } finally {
+      setActingId(null);
+    }
   };
   const dismiss = async (id: string) => {
-    await api(`/friends/requests/${id}`, { method: "DELETE" });
-    router.refresh();
+    setActingId(id);
+    try {
+      await api(`/friends/requests/${id}`, { method: "DELETE" });
+      router.refresh();
+    } catch {
+      useToastStore.getState().show("Couldn’t update request");
+    } finally {
+      setActingId(null);
+    }
   };
   const unfriend = async (friend: FriendDTO) => {
-    if (!confirm(`Remove ${friend.name} as a friend?`)) return;
-    await api(`/friends/${friend.id}`, { method: "DELETE" });
-    router.refresh();
+    const ok = await useConfirmStore
+      .getState()
+      .ask(`Remove ${friend.name} as a friend?`, { confirmLabel: "Remove" });
+    if (!ok) return;
+    try {
+      await api(`/friends/${friend.id}`, { method: "DELETE" });
+      router.refresh();
+    } catch {
+      useToastStore.getState().show("Couldn’t remove friend");
+    }
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex gap-1 border-b border-border-subtle">
+      <div role="tablist" className="flex gap-1 border-b border-border-subtle">
         {(
           [
             ["friends", `Friends (${friends.length})`],
@@ -126,10 +170,12 @@ export default function FriendsPanel({
         ).map(([value, label]) => (
           <button
             key={value}
+            role="tab"
+            aria-selected={tab === value}
             onClick={() => setTab(value)}
             className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium ${
               tab === value
-                ? "border-accent text-white"
+                ? "border-accent text-fg"
                 : "border-transparent text-fg-muted hover:text-fg"
             }`}
           >
@@ -149,17 +195,18 @@ export default function FriendsPanel({
             aria-label="Search users by username"
             className="w-72"
           />
-          {message && <span className="text-sm text-fg-muted">{message}</span>}
+          {message && (
+            <span
+              className={`text-sm ${message.error ? "text-red-400" : "text-fg-muted"}`}
+            >
+              {message.text}
+            </span>
+          )}
           {query.trim() && (
             <ul className="flex max-w-md flex-col gap-1">
               {results.map((u) => (
-                <li
-                  key={u.id}
-                  className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent-bright">
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
+                <li key={u.id} className={listRowClass}>
+                  <Avatar name={u.name} small />
                   <span className="flex-1 truncate text-sm">{u.name}</span>
                   <Button
                     size="sm"
@@ -171,7 +218,7 @@ export default function FriendsPanel({
                 </li>
               ))}
               {!searching && results.length === 0 && (
-                <li className="px-1 text-sm text-fg-subtle">No users found.</li>
+                <li className="px-1 text-sm text-fg-muted">No users found.</li>
               )}
             </ul>
           )}
@@ -190,17 +237,19 @@ export default function FriendsPanel({
           </h2>
           <ul className="flex flex-col gap-2">
             {incoming.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
-              >
+              <li key={r.id} className={listRowClass}>
                 <span className="flex-1 truncate text-sm">{r.user.name}</span>
-                <Button size="sm" onClick={() => accept(r.id)}>
+                <Button
+                  size="sm"
+                  disabled={actingId === r.id}
+                  onClick={() => accept(r.id)}
+                >
                   Accept
                 </Button>
                 <button
+                  disabled={actingId === r.id}
                   onClick={() => dismiss(r.id)}
-                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400"
+                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400 disabled:opacity-50"
                 >
                   Decline
                 </button>
@@ -217,17 +266,15 @@ export default function FriendsPanel({
           </h2>
           <ul className="flex flex-col gap-2">
             {outgoing.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
-              >
+              <li key={r.id} className={listRowClass}>
                 <span className="flex-1 text-sm">
                   {r.user.name}
                   <span className="ml-2 text-xs text-fg-subtle">pending</span>
                 </span>
                 <button
+                  disabled={actingId === r.id}
                   onClick={() => dismiss(r.id)}
-                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400"
+                  className="rounded-md px-3 py-1 text-xs text-fg-muted hover:text-red-400 disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -257,9 +304,7 @@ export default function FriendsPanel({
                 style={{ animationDelay: `${Math.min(i, 8) * 0.03}s` }}
                 className={`relative flex animate-fade-in-up items-center gap-3 p-4 ${cardClass}`}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 font-display text-lg font-semibold text-accent-bright">
-                  {f.name.charAt(0).toUpperCase()}
-                </div>
+                <Avatar name={f.name} />
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/discover/${f.id}`}
@@ -297,9 +342,7 @@ export default function FriendsPanel({
                 key={s.id}
                 className={`flex items-center gap-3 p-4 ${cardClass}`}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 font-display text-lg font-semibold text-accent-bright">
-                  {s.name.charAt(0).toUpperCase()}
-                </div>
+                <Avatar name={s.name} />
                 <div className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">
                     {s.name}

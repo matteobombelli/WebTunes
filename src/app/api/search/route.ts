@@ -10,7 +10,7 @@ import {
   toTrackDTO,
   trackDtoColumns,
 } from "@/lib/tracks";
-import { getUserSettings } from "@/lib/users";
+import { escapeLike, getUserSettings } from "@/lib/users";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
   }
   if (ownerIds.length === 0) return NextResponse.json([]);
 
-  const pattern = `%${q}%`;
+  // Escape %/_ so searching for them matches literally (the tsquery branch
+  // already treats the input as plain words).
+  const pattern = `%${escapeLike(q)}%`;
   // tsquery covers lyrics (and ranked word matches); ILIKE covers substring
   // matches on the short fields that FTS cannot do.
   const matches = or(

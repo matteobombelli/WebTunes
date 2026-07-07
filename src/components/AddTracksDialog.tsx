@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 import TrackArt from "@/components/TrackArt";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 // Stays mounted so the Dialog can animate out; the body mounts per open so
 // the filter and selection start fresh each time.
@@ -44,6 +46,7 @@ function AddTracksBody({
 }) {
   const router = useRouter();
   const [all, setAll] = useState<TrackDTO[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -56,7 +59,11 @@ function AddTracksBody({
         if (!cancelled) setAll(tracks);
       })
       .catch(() => {
-        if (!cancelled) setAll([]);
+        // Distinguish "couldn't load" from "nothing to add".
+        if (!cancelled) {
+          setAll([]);
+          setLoadFailed(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -107,20 +114,21 @@ function AddTracksBody({
 
   return (
     <div className="flex flex-col gap-3">
-      <input
+      <Input
         autoFocus
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter by title, artist, or album"
-        className="rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <div className="max-h-80 overflow-y-auto rounded-md border border-border-subtle">
         {candidates === null && (
-          <p className="p-4 text-sm text-fg-subtle">Loading…</p>
+          <p className="p-4 text-sm text-fg-muted">Loading…</p>
         )}
         {candidates?.length === 0 && (
-          <p className="p-4 text-sm text-fg-subtle">
-            No more songs available to add.
+          <p className="p-4 text-sm text-fg-muted">
+            {loadFailed
+              ? "Couldn’t load your songs — check your connection."
+              : "No more songs available to add."}
           </p>
         )}
         {candidates?.map((t) => (
@@ -147,21 +155,14 @@ function AddTracksBody({
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button
-          onClick={onClose}
-          className="rounded-md px-4 py-2 text-sm text-fg-muted hover:text-white"
-        >
+        <Button variant="ghost" onClick={onClose}>
           Cancel
-        </button>
-        <button
-          onClick={addSelected}
-          disabled={busy || selected.size === 0}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
-        >
+        </Button>
+        <Button onClick={addSelected} disabled={busy || selected.size === 0}>
           {busy
             ? "Adding…"
             : `Add ${selected.size} song${selected.size === 1 ? "" : "s"}`}
-        </button>
+        </Button>
       </div>
     </div>
   );

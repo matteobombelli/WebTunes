@@ -1,6 +1,7 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { pendingRequestsFor } from "@/lib/friends";
 import { getUserSettings } from "@/lib/users";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { MobileNav, MobileTopBar } from "@/components/MobileNav";
 import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
@@ -47,6 +48,7 @@ export default async function AppLayout({
       />
       <MobileNav hasIncomingRequests={hasIncomingRequests} />
       <Toast />
+      <ConfirmDialog />
       <SettingsModal
         initialSimilarVariation={similarVariation}
         userEmail={user.email}

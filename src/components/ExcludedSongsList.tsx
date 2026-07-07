@@ -1,7 +1,8 @@
 "use client";
 
 import TrackArt from "@/components/TrackArt";
-import { ChevronDownIcon, XIcon } from "@/components/icons";
+import { ChevronLeftIcon, XIcon } from "@/components/icons";
+import { IconButton } from "@/components/ui/IconButton";
 import { useExclusionsStore } from "@/stores/exclusions";
 
 /**
@@ -21,10 +22,9 @@ export default function ExcludedSongsList({
     <div>
       <button
         onClick={onBack}
-        className="mb-3 flex items-center gap-1 text-sm text-fg-muted hover:text-white"
+        className="mb-3 flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
       >
-        {/* No left-chevron glyph exists; the down chevron rotated points left. */}
-        <ChevronDownIcon size={14} className="rotate-90" />
+        <ChevronLeftIcon size={14} />
         Back
       </button>
       <p className="mb-3 text-xs text-fg-muted">
@@ -32,7 +32,7 @@ export default function ExcludedSongsList({
         let it back in.
       </p>
       {tracks.length === 0 ? (
-        <p className="py-6 text-center text-sm text-fg-subtle">
+        <p className="py-8 text-center text-sm text-fg-muted">
           No excluded songs.
         </p>
       ) : (
@@ -50,14 +50,14 @@ export default function ExcludedSongsList({
                   {track.ownerName ? ` · ${track.ownerName}` : ""}
                 </p>
               </div>
-              <button
+              <IconButton
                 onClick={() => include(track.id)}
                 aria-label={`Include ${track.title} in Play Similar`}
                 title="Include in Play Similar"
-                className="rounded p-1.5 text-fg-muted hover:bg-surface-3 hover:text-white"
+                className="text-fg-muted"
               >
                 <XIcon size={16} />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

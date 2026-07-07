@@ -6,7 +6,7 @@ import { signIn, signOut } from "@/lib/auth";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { getClientIp } from "@/lib/client-ip";
 import { registerInvitedUser } from "@/lib/invites";
-import { rateLimit } from "@/lib/rate-limit";
+import { registerRateLimit } from "@/lib/rate-limit";
 import { registerSchema } from "@/lib/users";
 import { sendVerificationEmail } from "@/lib/verification";
 
@@ -18,9 +18,6 @@ export type AuthFormState = {
   notice?: string;
   unverifiedEmail?: string;
 };
-
-const REGISTER_IP_LIMIT = 5;
-const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 
 export async function loginAction(
   _prev: AuthFormState,
@@ -50,7 +47,7 @@ export async function registerAction(
   formData: FormData
 ): Promise<AuthFormState> {
   const ip = getClientIp(await headers());
-  if (!rateLimit(`register-ip:${ip}`, REGISTER_IP_LIMIT, REGISTER_WINDOW_MS)) {
+  if (!registerRateLimit(ip)) {
     return { error: "Too many sign-up attempts. Please try again later." };
   }
 
@@ -73,6 +70,7 @@ export async function registerAction(
   if ("error" in result) return { error: result.error };
 
   // Send the verification link; don't sign in until the email is confirmed.
+  let emailSent = true;
   try {
     await sendVerificationEmail(
       result.user.id,
@@ -80,12 +78,16 @@ export async function registerAction(
       getAppBaseUrl(await headers())
     );
   } catch (err) {
+    emailSent = false;
     console.error("Verification email failed:", err);
   }
+  // Don't claim an email is on its way when the send failed — point at the
+  // resend path (sign-in blocks unverified accounts and offers a resend).
   return {
     error: null,
-    notice:
-      "Account created. Check your email for a verification link to activate your account.",
+    notice: emailSent
+      ? "Account created. Check your email for a verification link to activate your account."
+      : "Account created, but the verification email could not be sent. Try signing in to request a new link.",
   };
 }
 

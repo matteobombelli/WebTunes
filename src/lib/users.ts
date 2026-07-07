@@ -34,8 +34,8 @@ export async function isNameTaken(
 }
 
 // Escape LIKE wildcards so a query like "a_b" matches literally, not as a
-// pattern (default escape char is backslash).
-function escapeLike(s: string): string {
+// pattern (default escape char is backslash). Shared with track search.
+export function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 

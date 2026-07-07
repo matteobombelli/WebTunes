@@ -19,33 +19,33 @@ export async function POST(req: NextRequest) {
   const tokenHash = createHash("sha256")
     .update(parsed.data.token)
     .digest("hex");
-  const [row] = await db
-    .select()
-    .from(emailVerificationTokens)
-    .where(
-      and(
-        eq(emailVerificationTokens.tokenHash, tokenHash),
-        isNull(emailVerificationTokens.usedAt),
-        gt(emailVerificationTokens.expiresAt, new Date())
+  // Burning the token is also the validity check — atomic, so two concurrent
+  // posts of the same token can't both pass the usedAt guard.
+  const consumed = await db.transaction(async (tx) => {
+    const [claim] = await tx
+      .update(emailVerificationTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(emailVerificationTokens.tokenHash, tokenHash),
+          isNull(emailVerificationTokens.usedAt),
+          gt(emailVerificationTokens.expiresAt, new Date())
+        )
       )
-    );
-  if (!row) {
+      .returning({ userId: emailVerificationTokens.userId });
+    if (!claim) return false;
+    await tx
+      .update(users)
+      .set({ emailVerified: new Date() })
+      .where(eq(users.id, claim.userId));
+    return true;
+  });
+  if (!consumed) {
     return NextResponse.json(
       { error: "This verification link is invalid or has expired" },
       { status: 400 }
     );
   }
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(users)
-      .set({ emailVerified: new Date() })
-      .where(eq(users.id, row.userId));
-    await tx
-      .update(emailVerificationTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(emailVerificationTokens.tokenHash, tokenHash));
-  });
 
   return NextResponse.json({ ok: true });
 }

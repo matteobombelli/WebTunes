@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { log } from "@/lib/log";
+import { useToastStore } from "@/stores/toast";
 import type { TrackDTO } from "@/lib/types";
 import {
   getDownloadedPlaylists,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/offline/db";
 import * as offline from "@/lib/offline/downloads";
 
-type QueueItem = { track: TrackDTO; pin: boolean };
+type DownloadQueueItem = { track: TrackDTO; pin: boolean };
 
 type DownloadsState = {
   /** False until init() has hydrated from IndexedDB. */
@@ -20,7 +21,7 @@ type DownloadsState = {
   tracks: Record<string, DownloadedTrack>;
   playlists: Record<string, DownloadedPlaylist>;
   /** Tracks waiting to download (excludes the one in flight). */
-  queue: QueueItem[];
+  queue: DownloadQueueItem[];
   current: { trackId: string; loaded: number; total: number } | null;
   storage: { usage: number; quota: number } | null;
 
@@ -37,10 +38,14 @@ type DownloadsState = {
   purgeForAccountSwitch: () => Promise<void>;
 };
 
-export type DownloadStatus = "none" | "queued" | "downloading" | "downloaded";
+type DownloadStatus = "none" | "queued" | "downloading" | "downloaded";
 
 let initStarted = false;
 let processing = false;
+// Bumped by removeAll/purgeForAccountSwitch: a download that was in flight
+// when the wipe ran must not write its result back afterwards (worst case the
+// PREVIOUS account's track resurrecting into the next account's storage).
+let purgeGeneration = 0;
 
 async function requestPersistentStorage() {
   try {
@@ -78,6 +83,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
   const processQueue = async () => {
     if (processing) return;
     processing = true;
+    const failedTitles: string[] = [];
     try {
       for (;;) {
         const [next, ...rest] = get().queue;
@@ -86,6 +92,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
           queue: rest,
           current: { trackId: next.track.id, loaded: 0, total: next.track.fileSize ?? 0 },
         });
+        const gen = purgeGeneration;
         try {
           let lastReported = 0;
           await offline.downloadTrack(next.track, next.pin, (loaded, total) => {
@@ -94,6 +101,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
             lastReported = loaded;
             set({ current: { trackId: next.track.id, loaded, total } });
           });
+          // A wipe ran while this download was in flight: discard what it just
+          // wrote instead of letting deleted (or another account's) data
+          // resurrect.
+          if (gen !== purgeGeneration) {
+            await offline.removeTrack(next.track.id).catch(() => {});
+            continue;
+          }
           // Delta-merge just this track instead of re-reading all of IndexedDB
           // after every item (a 50-track playlist would otherwise do 50 full
           // scans). Playlists don't change here; storage updates once at drain.
@@ -102,6 +116,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
         } catch (err) {
           // Skip the failed track and keep draining; it stays undownloaded
           // and the button returns to its download state.
+          failedTitles.push(next.track.title);
           log.warn(
             "downloads",
             `track ${next.track.id} failed`,
@@ -113,6 +128,11 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
       processing = false;
       set({ current: null });
       void updateStorage();
+      if (failedTitles.length === 1) {
+        useToastStore.getState().show(`Couldn't download “${failedTitles[0]}”`);
+      } else if (failedTitles.length > 1) {
+        useToastStore.getState().show(`Couldn't download ${failedTitles.length} tracks`);
+      }
     }
   };
 
@@ -170,6 +190,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
 
     removeAll: async () => {
       log.info("downloads", "removeAll");
+      purgeGeneration++;
       set({ queue: [] });
       await offline.removeAll();
       await refresh();
@@ -177,6 +198,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
 
     purgeForAccountSwitch: async () => {
       log.info("downloads", "purgeForAccountSwitch");
+      purgeGeneration++;
       // Reset in-memory state synchronously so the UI can't flash the previous
       // user's downloads while the async storage clear runs.
       set({ tracks: {}, playlists: {}, queue: [], current: null, storage: null });

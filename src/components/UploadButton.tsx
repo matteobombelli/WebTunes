@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { Button } from "@/components/ui/Button";
 import { useUploadsStore } from "@/stores/uploads";
 
-export default function UploadDialog() {
+export default function UploadButton() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const busy = useUploadsStore((s) => s.busy);
@@ -32,13 +33,9 @@ export default function UploadDialog() {
           e.target.value = ""; // allow re-selecting the same file
         }}
       />
-      <button
-        onClick={() => inputRef.current?.click()}
-        disabled={busy}
-        className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
-      >
+      <Button onClick={() => inputRef.current?.click()} disabled={busy}>
         {busy ? "Uploading…" : "Upload"}
-      </button>
+      </Button>
     </>
   );
 }

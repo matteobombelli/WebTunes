@@ -12,7 +12,7 @@ import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
 import { usePlaySimilarAutoStart } from "@/components/usePlaySimilarAutoStart";
 import PlayerProgress from "@/components/PlayerProgress";
-import { AddToPlaylistMenu } from "@/components/TrackList";
+import { AddToPlaylistMenu } from "@/components/TrackMenus";
 import TrackArt from "@/components/TrackArt";
 import {
   NextIcon,
@@ -289,16 +289,29 @@ export default function PlayerBar({
       // Load the closest matches, excluding only the seed itself — no-repeat is
       // enforced within the session by the store's similarSeen.
       const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
+      // The user may have toggled the radio back off (or moved to another
+      // track) while the fetch was in flight — a stale response must not
+      // re-arm it and hijack the queue. Mirrors usePlaySimilarAutoStart.
+      const now = usePlayerStore.getState();
+      if (!now.playSimilarPref || now.queue[now.index]?.track.id !== seed.id) {
+        return;
+      }
       // Nothing to play (tiny library, everything excluded, or no embedding):
       // an explicit toggle shouldn't sit lit-but-dead — tell the user and clear.
       if (similar.length === 0) {
         useToastStore.getState().show("No similar tracks for this song");
-        usePlayerStore.getState().setPlaySimilarPref(false);
+        now.setPlaySimilarPref(false);
         return;
       }
-      usePlayerStore.getState().startSimilar(seed.id, similar);
+      now.startSimilar(seed.id, similar);
     } catch {
-      // Leave the mode off on failure.
+      // A failed fetch shouldn't sit lit-but-dead either — mirror the
+      // empty-result branch (unless the user already toggled off meanwhile).
+      const now = usePlayerStore.getState();
+      if (now.playSimilarPref) {
+        useToastStore.getState().show("Couldn’t load similar tracks");
+        now.setPlaySimilarPref(false);
+      }
     }
   };
   const {
@@ -659,15 +672,20 @@ export default function PlayerBar({
         localStorage.removeItem(SESSION_KEY);
         return;
       }
-      localStorage.setItem(
-        SESSION_KEY,
-        JSON.stringify({
-          tracks: s.queue.map((q) => q.track),
-          index: s.index,
-          currentTime: audioRef.current?.currentTime ?? s.currentTime,
-          savedAt: Date.now(),
-        })
-      );
+      try {
+        localStorage.setItem(
+          SESSION_KEY,
+          JSON.stringify({
+            tracks: s.queue.map((q) => q.track),
+            index: s.index,
+            currentTime: audioRef.current?.currentTime ?? s.currentTime,
+            savedAt: Date.now(),
+          })
+        );
+      } catch {
+        // Quota/private-mode failure: keep the previous snapshot rather than
+        // throwing inside the visibilitychange/pagehide listener.
+      }
     };
     const onHide = () => {
       if (document.visibilityState === "hidden") save();
@@ -1076,7 +1094,7 @@ export default function PlayerBar({
               toggle,
               isPlaying ? "Pause" : "Play",
               isPlaying ? <PauseIcon size={22} /> : <PlayIcon size={22} />,
-              "h-12 w-12 bg-accent text-white shadow-lg shadow-accent/40 active:bg-accent-hover"
+              "h-12 w-12 bg-accent text-accent-fg shadow-lg shadow-accent/40 active:bg-accent-hover"
             )}
             {transportButton(
               next,
@@ -1110,7 +1128,7 @@ export default function PlayerBar({
           <AddToPlaylistMenu
             trackIds={[track.id]}
             floating
-            triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-white"
+            triggerClassName="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-muted hover:bg-surface-2 hover:text-fg"
           />
           {transportButton(
             toggleQueue,
@@ -1119,7 +1137,7 @@ export default function PlayerBar({
             `h-10 w-10 hover:bg-surface-2 ${
               queueOpen
                 ? "text-accent-bright hover:text-accent-bright"
-                : "text-fg-muted hover:text-white"
+                : "text-fg-muted hover:text-fg"
             }`
           )}
           {transportButton(
@@ -1129,7 +1147,7 @@ export default function PlayerBar({
             `h-10 w-10 hover:bg-surface-2 ${
               shuffled
                 ? "text-accent-bright hover:text-accent-bright"
-                : "text-fg-muted hover:text-white"
+                : "text-fg-muted hover:text-fg"
             }`
           )}
           {transportButton(
@@ -1139,26 +1157,26 @@ export default function PlayerBar({
             `h-10 w-10 hover:bg-surface-2 ${
               playSimilarOn
                 ? "text-accent-bright hover:text-accent-bright"
-                : "text-fg-muted hover:text-white"
+                : "text-fg-muted hover:text-fg"
             }`
           )}
           {transportButton(
             prev,
             "Previous",
             <PrevIcon size={18} />,
-            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-white"
+            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-fg"
           )}
           {transportButton(
             toggle,
             isPlaying ? "Pause" : "Play",
             isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />,
-            "h-10 w-10 bg-accent text-white shadow-md shadow-accent/40 hover:bg-accent-hover"
+            "h-10 w-10 bg-accent text-accent-fg shadow-md shadow-accent/40 hover:bg-accent-hover"
           )}
           {transportButton(
             next,
             "Next",
             <NextIcon size={18} />,
-            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-white"
+            "h-10 w-10 text-fg-muted hover:bg-surface-2 hover:text-fg"
           )}
         </div>
 

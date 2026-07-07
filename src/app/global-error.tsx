@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { log } from "@/lib/log";
+import { Button } from "@/components/ui/Button";
 
 // Last-resort net for errors thrown in the root layout itself. It replaces the
 // root layout, so it must render its own <html>/<body>. Active in production
@@ -25,12 +26,7 @@ export default function GlobalError({
       <body className="flex min-h-screen items-center justify-center bg-surface-0 text-fg">
         <div className="text-center">
           <p className="mb-4 text-fg-muted">Something went wrong.</p>
-          <button
-            onClick={reset}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-          >
-            Try again
-          </button>
+          <Button onClick={reset}>Try again</Button>
         </div>
       </body>
     </html>

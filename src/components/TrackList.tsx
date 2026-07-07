@@ -2,16 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   closestCenter,
   DndContext,
@@ -31,8 +22,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { api, playlistCoverSrc } from "@/lib/api";
-import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import { api } from "@/lib/api";
+import type { TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
   CheckIcon,
@@ -40,26 +31,20 @@ import {
   ChevronUpIcon,
   ClockIcon,
   DownloadIcon,
-  EllipsisIcon,
   GripIcon,
   HeadphonesIcon,
   LockIcon,
-  PencilIcon,
   PlayNextIcon,
-  PlusIcon,
   QueueIcon,
-  ShareIcon,
-  SimilarIcon,
   TrashIcon,
   XIcon,
 } from "@/components/icons";
-import CoverImage from "@/components/CoverImage";
-import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
 import TrackArt from "@/components/TrackArt";
+import { AddToPlaylistMenu, TrackActionsMenu } from "@/components/TrackMenus";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
+import { useConfirmStore } from "@/stores/confirm";
 import { useDownloadsStore } from "@/stores/downloads";
-import { useExclusionsStore, useIsExcluded } from "@/stores/exclusions";
 import { useToastStore } from "@/stores/toast";
 
 function formatDuration(seconds: number | null): string {
@@ -107,566 +92,19 @@ function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
   return copy;
 }
 
-// Shared style for a full-width action row inside the three-dot menu: label on
-// the left, icon on the right, clickable across its whole width.
-const MENU_ROW =
-  "flex w-full items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 text-left hover:bg-surface-3/60";
 
-// Create-or-fetch the track's public share link, copy it to the clipboard, then
-// flash a toast. Must be CALLED synchronously from the click gesture: Safari/iOS
-// only allow a clipboard write tied to a user gesture, so when ClipboardItem is
-// available we hand it a *promise* of the link — the async POST resolves without
-// losing the gesture's permission — and only fall back to writeText otherwise.
-function copyShareLink(trackId: string) {
-  const { show } = useToastStore.getState();
-  const fetchUrl = () =>
-    api<{ url: string }>(`/tracks/${trackId}/shares`, { method: "POST" }).then(
-      (r) => r.url
-    );
-  const copied =
-    typeof ClipboardItem !== "undefined" && navigator.clipboard?.write
-      ? navigator.clipboard.write([
-          new ClipboardItem({
-            "text/plain": fetchUrl().then(
-              (url) => new Blob([url], { type: "text/plain" })
-            ),
-          }),
-        ])
-      : fetchUrl().then((url) => navigator.clipboard.writeText(url));
-  copied.then(
-    () => show("Copied link to clipboard!"),
-    () => show("Couldn’t copy link")
-  );
-}
+// The "Select…" / "Reorder" mode toggles above the table.
+const MODE_TOGGLE_BTN =
+  "flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-fg";
 
-// Decide the vertical anchor for a portalled (position: fixed) menu of measured
-// height `menuH`: open downward from the trigger, but flip above it when it
-// wouldn't fit below and there's more room above — like an OS right-click menu.
-// Flipping anchors by the bottom edge (just above the trigger) so the resting
-// spot is already correct and the pop-in animation doesn't fight a shift.
-const MENU_GAP = 4;
-const MENU_MARGIN = 8; // keep the menu at least this far from the viewport edges
-function menuVerticalAnchor(
-  rect: DOMRect,
-  menuH: number
-): { top: number } | { bottom: number } {
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const spaceAbove = rect.top;
-  // Flip above the trigger only when the menu actually fits there — otherwise a
-  // tall menu would run off the top of the screen. Default to opening downward.
-  if (menuH + MENU_GAP > spaceBelow && menuH + MENU_GAP <= spaceAbove) {
-    return { bottom: window.innerHeight - rect.top + MENU_GAP };
-  }
-  // Anchored below: clamp the top so a menu taller than the space below stays
-  // on-screen instead of overflowing the bottom edge (never above MENU_MARGIN).
-  const top = Math.min(
-    rect.bottom + MENU_GAP,
-    Math.max(MENU_MARGIN, window.innerHeight - menuH - MENU_MARGIN)
-  );
-  return { top };
-}
+// A labeled action in the bulk-selection bar.
+const BULK_BAR_BTN =
+  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-40";
 
-export function AddToPlaylistMenu({
-  trackIds,
-  align = "right",
-  bulk = false,
-  label,
-  onAdded,
-  floating = false,
-  triggerClassName,
-  iconSize = 16,
-}: {
-  trackIds: string[];
-  align?: "left" | "right";
-  /** Bulk style: labeled button and per-count feedback. */
-  bulk?: boolean;
-  /** Non-bulk: when set, the trigger is a full-width labelled menu row. */
-  label?: string;
-  onAdded?: () => void;
-  /** Anchor the dropdown to <body> with outside-click dismissal (like bulk),
-   *  but keep the plain "+" icon trigger — for use outside the track table. */
-  floating?: boolean;
-  /** Overrides the default icon-trigger classes (no label, non-bulk). */
-  triggerClassName?: string;
-  /** Size of the "+" trigger icon (non-bulk, no label). Default 16. */
-  iconSize?: number;
-}) {
-  // Floating shares the portal + outside-click machinery the bulk menu uses.
-  const portalled = bulk || floating;
-  const [open, setOpen] = useState(false);
-  // Keeps the menu mounted briefly after close so it can animate out.
-  const [menuClosing, setMenuClosing] = useState(false);
-  const [playlists, setPlaylists] = useState<PlaylistDTO[] | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  // The bulk menu is portalled to <body> so the selection bar's overflow-x
-  // can't clip it; triggerRef anchors its fixed position, menuRef scopes
-  // outside-click dismissal.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 100);
-  }, []);
-
-  // A portalled menu is detached from the trigger, so dismiss it on outside
-  // clicks and on scroll/resize instead of letting it drift.
-  useEffect(() => {
-    if (!open || !portalled) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("resize", close, { passive: true });
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open, portalled, close]);
-
-  // Once mounted (and again when the playlist list loads and changes its
-  // height), flip the menu above the trigger if it would overflow the bottom.
-  // useLayoutEffect so the flip is applied before the browser paints — otherwise
-  // the provisional downward anchor flashes for a frame before snapping up.
-  useLayoutEffect(() => {
-    if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos({
-      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
-      left: rect.left,
-    });
-  }, [open, portalled, playlists]);
-
-  const load = async () => {
-    if (open) {
-      close();
-      return;
-    }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    // Provisional downward anchor; the effect below flips it up once the menu
-    // has mounted and its real height is known.
-    if (rect) setPos({ top: rect.bottom + MENU_GAP, left: rect.left });
-    setOpen(true);
-    setMessage(null);
-    if (!playlists) {
-      try {
-        setPlaylists(await api<PlaylistDTO[]>("/playlists"));
-      } catch {
-        setPlaylists([]);
-      }
-    }
-  };
-
-  const add = async (playlistId: string) => {
-    try {
-      const res = await api<{ added: number }>(`/playlists/${playlistId}/tracks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackIds }),
-      });
-      setMessage(bulk ? `Added ${res.added}` : "Added");
-      if (onAdded) setTimeout(onAdded, 600);
-      // Portalled menus dismiss once the feedback has shown.
-      if (portalled) setTimeout(close, 600);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
-    }
-  };
-
-  const items = (
-    <>
-      {message && <p className="px-3 py-1 text-accent-bright">{message}</p>}
-      {playlists === null && (
-        <p className="px-3 py-1 text-fg-muted">Loading…</p>
-      )}
-      {playlists?.length === 0 && (
-        <p className="px-3 py-1 text-fg-muted">No playlists yet</p>
-      )}
-      {playlists?.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => add(p.id)}
-          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-fg hover:bg-surface-3"
-        >
-          <CoverImage
-            src={p.coverS3Key ? playlistCoverSrc(p.id) : null}
-            iconSize={16}
-            className="h-8 w-8 shrink-0 rounded bg-surface-3"
-          />
-          <span className="truncate">{p.name}</span>
-        </button>
-      ))}
-    </>
-  );
-
-  return (
-    <div className="relative">
-      {bulk ? (
-        <button
-          ref={triggerRef}
-          onClick={load}
-          aria-label="Add to playlist"
-          title="Add to playlist"
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
-        >
-          <PlusIcon size={18} />
-          <span className="hidden md:inline">Add to playlist</span>
-        </button>
-      ) : (
-        <button
-          ref={triggerRef}
-          onClick={load}
-          aria-label="Add to playlist"
-          className={
-            label
-              ? MENU_ROW
-              : triggerClassName ??
-                "rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-white"
-          }
-          title="Add to playlist"
-        >
-          {label && <span>{label}</span>}
-          <PlusIcon size={iconSize} className={label ? "shrink-0 text-fg-muted" : undefined} />
-        </button>
-      )}
-      {portalled
-        ? (open || menuClosing) &&
-          pos &&
-          createPortal(
-            <div
-              ref={menuRef}
-              style={{
-                position: "fixed",
-                top: pos.top,
-                bottom: pos.bottom,
-                left: pos.left,
-              }}
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} z-50 max-h-[80vh] w-56 overflow-y-auto rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
-            >
-              {items}
-            </div>,
-            document.body,
-          )
-        : (open || menuClosing) && (
-            <div
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-56 rounded-md border border-border bg-surface-2 py-1 text-sm shadow-lg`}
-            >
-              {items}
-            </div>
-          )}
-    </div>
-  );
-}
-
-type TrackActionsProps = {
-  track: TrackDTO;
-  canEdit: boolean;
-  canDelete: boolean;
-  onRemove?: (track: TrackDTO) => Promise<void>;
-  removeLabel?: string;
-  onEdit: (track: TrackDTO) => void;
-  onDelete: (track: TrackDTO) => void;
-  /** Fires alongside onClose when an artist/album link is tapped, so a
-   *  containing overlay (now-playing sheet, queue panel) can dismiss first. */
-  onNavigate?: () => void;
-  /** Current-track surfaces (queue header, now-playing sheet): drop the
-   *  mobile-only Play next / Add to queue rows (the player already does that),
-   *  and keep Edit desktop-only. */
-  playerContext?: boolean;
-  onClose: () => void;
-};
-
-// The consolidated set of per-track actions, shared by the mobile kebab dialog
-// and the desktop three-dot dropdown.
-function TrackActions({
-  track,
-  canEdit,
-  canDelete,
-  onRemove,
-  removeLabel,
-  onEdit,
-  onDelete,
-  onNavigate,
-  playerContext = false,
-  onClose,
-}: TrackActionsProps) {
-  const excluded = useIsExcluded(track.id);
-  return (
-    <div className="flex flex-col gap-2 text-sm">
-      {track.artist && (
-        <Link
-          href={`/artist?name=${encodeURIComponent(track.artist)}`}
-          onClick={() => {
-            onNavigate?.();
-            onClose();
-          }}
-          className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
-        >
-          <span className="shrink-0">Go to artist</span>
-          <span className="truncate text-fg-muted">{track.artist}</span>
-        </Link>
-      )}
-      {track.album && (
-        <Link
-          href={`/album?name=${encodeURIComponent(track.album)}`}
-          onClick={() => {
-            onNavigate?.();
-            onClose();
-          }}
-          className="flex items-center justify-between gap-3 rounded-md bg-surface-2/40 px-3 py-2.5 hover:bg-surface-3/60"
-        >
-          <span className="shrink-0">Go to album</span>
-          <span className="truncate text-fg-muted">{track.album}</span>
-        </Link>
-      )}
-      {/* Desktop hosts Play next / Add to queue as single-click icons on the
-          row itself; the menu only needs them on mobile (no hover row). The
-          player surfaces (queue/now-playing) drop them entirely. */}
-      <div className={`flex-col gap-2 md:hidden ${playerContext ? "hidden" : "flex"}`}>
-        <button
-          onClick={() => {
-            usePlayerStore.getState().playNext([track]);
-            onClose();
-          }}
-          className={MENU_ROW}
-        >
-          <span>Play next</span>
-          <PlayNextIcon size={16} className="shrink-0 text-fg-muted" />
-        </button>
-        <button
-          onClick={() => {
-            usePlayerStore.getState().addToQueue([track]);
-            onClose();
-          }}
-          className={MENU_ROW}
-        >
-          <span>Add to queue</span>
-          <QueueIcon size={16} className="shrink-0 text-fg-muted" />
-        </button>
-      </div>
-      <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
-      <DownloadButton track={track} label="Download" />
-      <button
-        onClick={() => {
-          const s = useExclusionsStore.getState();
-          if (excluded) s.include(track.id);
-          else s.exclude(track);
-          onClose();
-        }}
-        className={MENU_ROW}
-      >
-        <span>
-          {excluded ? "Include in Play Similar" : "Exclude from Play Similar"}
-        </span>
-        <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
-      </button>
-      {/* Share any accessible track — your own OR a friend's (the server checks
-          canAccessTrack). Kept on mobile too (unlike Edit), since copying a link
-          matters there most. Click copies the public link straight to the
-          clipboard (no dialog). */}
-      <button
-        onClick={() => {
-          copyShareLink(track.id);
-          onClose();
-        }}
-        className={MENU_ROW}
-      >
-        <span>Share</span>
-        <ShareIcon size={16} className="shrink-0 text-fg-muted" />
-      </button>
-      {/* Edit is desktop-only: no edit affordance in the mobile kebab. */}
-      {canEdit && !track.ownerName && (
-        <button
-          onClick={() => {
-            onEdit(track);
-            onClose();
-          }}
-          aria-label="Edit track"
-          className={`${MENU_ROW} hidden md:flex`}
-        >
-          <span>Edit details</span>
-          <PencilIcon size={16} className="shrink-0 text-fg-muted" />
-        </button>
-      )}
-      {(onRemove || (canDelete && !track.ownerName)) && (
-        <button
-          onClick={() => {
-            onDelete(track);
-            onClose();
-          }}
-          className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
-        >
-          <span>{removeLabel ?? "Delete"}</span>
-          <TrashIcon size={16} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// Desktop: a single three-dot button revealing the actions in an anchored
-// dropdown (replaces the old hover-revealed row of buttons). Reused outside the
-// table (queue header, now-playing sheet) with `alwaysVisible` so the trigger
-// isn't hidden behind a row-hover that doesn't exist there.
-export function TrackActionsMenu({
-  alwaysVisible = false,
-  ...props
-}: Omit<TrackActionsProps, "onClose"> & { alwaysVisible?: boolean }) {
-  const [open, setOpen] = useState(false);
-  // Keeps the menu mounted briefly after close so it can animate out.
-  const [menuClosing, setMenuClosing] = useState(false);
-  // Portalled to <body>: inside the table the dropdown rendered behind later
-  // rows (looked transparent and let clicks fall through to them). triggerRef
-  // anchors the fixed position; menuRef scopes outside-click dismissal.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{
-    top?: number;
-    bottom?: number;
-    right: number;
-  } | null>(null);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 150);
-  }, []);
-
-  const toggle = () => {
-    if (open) {
-      close();
-      return;
-    }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    // Right-align the menu under the button; the effect below flips it above
-    // the button once its real height is known if it would overflow.
-    if (rect) {
-      setPos({ top: rect.bottom + MENU_GAP, right: window.innerWidth - rect.right });
-    }
-    setOpen(true);
-  };
-
-  // After the menu mounts, flip it above the trigger if it would overflow the
-  // bottom of the viewport (OS-style). Scrolling/resizing dismisses it instead.
-  // useLayoutEffect so the flip lands before paint — otherwise the provisional
-  // downward anchor flashes for a frame before snapping up (most visible on
-  // mobile, where the kebab usually sits low enough to need the flip).
-  useLayoutEffect(() => {
-    if (!open || !menuRef.current || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos({
-      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
-      right: window.innerWidth - rect.right,
-    });
-  }, [open]);
-
-  // Detached from the trigger, so dismiss on outside click and on
-  // scroll/resize instead of letting it drift. Selecting an option closes
-  // via onClose.
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("resize", close, { passive: true });
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open, close]);
-
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        onClick={toggle}
-        aria-label="Track actions"
-        title="Track actions"
-        className={`flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white ${
-          open || alwaysVisible ? "" : "md:opacity-0 md:group-hover:opacity-100"
-        }`}
-      >
-        <EllipsisIcon size={20} />
-      </button>
-      {(open || menuClosing) &&
-        pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
-            className={`${open ? "animate-pop-in" : "animate-pop-out"} z-[70] max-h-[80vh] w-60 overflow-y-auto rounded-md border border-border bg-surface-2 p-2 text-sm shadow-lg`}
-          >
-            <TrackActions {...props} onClose={close} />
-          </div>,
-          document.body,
-        )}
-    </div>
-  );
-}
-
-// A self-contained song-options kebab for the "current track" surfaces (queue
-// header, now-playing sheet) that aren't backed by a table row. It wires
-// Edit/Delete against the library and, via `playerContext`, drops the queue
-// actions and keeps Edit desktop-only. The edit dialog is portalled to <body>
-// so an ancestor's transform/overflow (the queue popover) can't clip it.
-export function CurrentTrackKebab({
-  track,
-  onNavigate,
-}: {
-  track: TrackDTO;
-  onNavigate?: () => void;
-}) {
-  const router = useRouter();
-  const [editing, setEditing] = useState<TrackDTO | null>(null);
-
-  const remove = async (t: TrackDTO) => {
-    if (!confirm(`Are you sure you want to delete "${t.title}"?`)) return;
-    await api(`/tracks/${t.id}`, { method: "DELETE" });
-    router.refresh();
-  };
-
-  return (
-    <>
-      <TrackActionsMenu
-        track={track}
-        canEdit
-        canDelete
-        playerContext
-        alwaysVisible
-        onEdit={setEditing}
-        onDelete={remove}
-        onNavigate={onNavigate}
-      />
-      {/* Portalled to <body> so the queue popover's transform/overflow can't
-          clip it. Guarded since the portal target is client-only (this kebab
-          isn't server-rendered — there's no current track during SSR). */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <EditTrackDialog
-            track={editing}
-            onClose={() => setEditing(null)}
-            onSaved={() => router.refresh()}
-          />,
-          document.body,
-        )}
-    </>
-  );
-}
+// The per-row queue actions: hover-revealed on desktop, but also revealed for
+// keyboard users (focus-visible / any focus inside the row).
+const ROW_HOVER_BTN =
+  "hidden h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-fg md:flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100";
 
 type TrackRowProps = {
   track: TrackDTO;
@@ -753,9 +191,7 @@ const TrackRow = memo(function TrackRow({
               </span>
             )}
           </span>
-          <span className="truncate text-base hover:text-accent-bright sm:text-sm">
-            {track.title}
-          </span>
+          <span className="truncate text-base sm:text-sm">{track.title}</span>
           {track.isPrivate && !track.ownerName && (
             <LockIcon size={12} className="shrink-0 text-fg-subtle" />
           )}
@@ -798,12 +234,13 @@ const TrackRow = memo(function TrackRow({
       </td>
       <td className="py-2">
         <div className="flex items-center justify-end gap-0.5">
-          {/* Desktop: single-click queue actions, revealed on row hover. */}
+          {/* Desktop: single-click queue actions, revealed on row hover (and on
+              keyboard focus, so tab stops are never invisible). */}
           <button
             onClick={() => usePlayerStore.getState().playNext([track])}
             aria-label="Play next"
             title="Play next"
-            className="hidden h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white md:flex md:opacity-0 md:group-hover:opacity-100"
+            className={ROW_HOVER_BTN}
           >
             <PlayNextIcon size={20} />
           </button>
@@ -811,7 +248,7 @@ const TrackRow = memo(function TrackRow({
             onClick={() => usePlayerStore.getState().addToQueue([track])}
             aria-label="Add to queue"
             title="Add to queue"
-            className="hidden h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-white md:flex md:opacity-0 md:group-hover:opacity-100"
+            className={ROW_HOVER_BTN}
           >
             <QueueIcon size={20} />
           </button>
@@ -858,7 +295,7 @@ const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
         {...listeners}
         aria-label={`Reorder ${track.title}`}
         title="Drag to reorder"
-        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-white active:cursor-grabbing"
+        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg active:cursor-grabbing"
       >
         <GripIcon size={18} />
       </button>
@@ -942,6 +379,7 @@ export default function TrackList({
   removeLabel,
   onReorder,
   onMutated,
+  emptyMessage,
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
@@ -960,6 +398,8 @@ export default function TrackList({
   onReorder?: (trackIds: string[]) => Promise<void>;
   /** Called after a track is deleted or edited (for client-state parents). */
   onMutated?: () => void;
+  /** Replaces the default "No tracks here yet." empty state (e.g. searches). */
+  emptyMessage?: string;
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
@@ -1030,6 +470,13 @@ export default function TrackList({
           ? { key, dir: -1 }
           : null
     );
+
+  const ariaSort = (key: SortKey) =>
+    sortable && sort?.key === key
+      ? sort.dir === 1
+        ? ("ascending" as const)
+        : ("descending" as const)
+      : undefined;
 
   const sortHeader = (key: SortKey, label: React.ReactNode) =>
     sortable ? (
@@ -1119,14 +566,23 @@ export default function TrackList({
 
   const remove = useCallback(
     async (track: TrackDTO) => {
-      if (
-        !onRemove &&
-        !confirm(`Are you sure you want to delete "${track.title}"?`)
-      ) {
+      if (!onRemove) {
+        const ok = await useConfirmStore
+          .getState()
+          .ask(`Delete “${track.title}”? This can’t be undone.`, {
+            confirmLabel: "Delete",
+          });
+        if (!ok) return;
+      }
+      try {
+        if (onRemove) await onRemove(track);
+        else await api(`/tracks/${track.id}`, { method: "DELETE" });
+      } catch {
+        useToastStore
+          .getState()
+          .show(onRemove ? "Couldn’t remove track" : "Couldn’t delete track");
         return;
       }
-      if (onRemove) await onRemove(track);
-      else await api(`/tracks/${track.id}`, { method: "DELETE" });
       router.refresh();
       onMutated?.();
     },
@@ -1146,17 +602,22 @@ export default function TrackList({
   const bulkDelete = async () => {
     const ids = deletableSelectedIds;
     const noun = `${ids.length} song${ids.length === 1 ? "" : "s"}`;
-    if (!confirm(`Are you sure you want to delete ${noun}?`)) return;
+    const ok = await useConfirmStore
+      .getState()
+      .ask(`Delete ${noun}? This can’t be undone.`, { confirmLabel: "Delete" });
+    if (!ok) return;
     setBulkBusy(true);
     try {
       await Promise.all(
         ids.map((id) => api(`/tracks/${id}`, { method: "DELETE" }))
       );
       setSelected(new Set());
-      router.refresh();
-      onMutated?.();
+    } catch {
+      useToastStore.getState().show("Couldn’t delete some tracks");
     } finally {
       setBulkBusy(false);
+      router.refresh();
+      onMutated?.();
     }
   };
 
@@ -1172,15 +633,21 @@ export default function TrackList({
     try {
       for (const t of targets) await onRemove(t);
       setSelected(new Set());
-      router.refresh();
-      onMutated?.();
+    } catch {
+      useToastStore.getState().show("Couldn’t remove some tracks");
     } finally {
       setBulkBusy(false);
+      router.refresh();
+      onMutated?.();
     }
   };
 
   if (tracks.length === 0) {
-    return <p className="py-8 text-center text-sm text-fg-subtle">No tracks here yet.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-fg-muted">
+        {emptyMessage ?? "No tracks here yet."}
+      </p>
+    );
   }
 
   return (
@@ -1204,7 +671,7 @@ export default function TrackList({
                 setSelectMode(true);
                 setReorderMode(false);
               }}
-              className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
+              className={MODE_TOGGLE_BTN}
             >
               <CheckIcon size={16} />
               Select…
@@ -1216,7 +683,7 @@ export default function TrackList({
                 setReorderMode(true);
                 exitSelectMode();
               }}
-              className="flex h-11 items-center gap-1.5 rounded-md border border-border bg-surface-2/60 px-4 text-sm font-semibold text-fg-muted hover:bg-surface-3 hover:text-white"
+              className={MODE_TOGGLE_BTN}
             >
               <GripIcon size={16} />
               Reorder
@@ -1248,9 +715,10 @@ export default function TrackList({
                 .addToQueue(view.filter((t) => validSelected.has(t.id)));
               setSelected(new Set());
             }}
+            disabled={validSelected.size === 0}
             aria-label="Add to queue"
             title="Add to queue"
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+            className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
           >
             <QueueIcon size={18} />
             <span className="hidden md:inline">Add to queue</span>
@@ -1262,9 +730,10 @@ export default function TrackList({
                 .enqueue(view.filter((t) => validSelected.has(t.id)), { pin: true });
               setSelected(new Set());
             }}
+            disabled={validSelected.size === 0}
             aria-label="Download"
             title="Download"
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-3"
+            className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
           >
             <DownloadIcon size={18} />
             <span className="hidden md:inline">Download</span>
@@ -1275,7 +744,7 @@ export default function TrackList({
               disabled={bulkBusy || validSelected.size === 0}
               aria-label={removeLabel ?? "Remove"}
               title={removeLabel ?? "Remove"}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+              className={`${BULK_BAR_BTN} text-red-400 hover:bg-red-500/10`}
             >
               <TrashIcon size={18} />
               <span className="hidden md:inline">
@@ -1288,7 +757,7 @@ export default function TrackList({
               disabled={bulkBusy || deletableSelectedIds.length === 0}
               aria-label="Delete"
               title="Delete"
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+              className={`${BULK_BAR_BTN} text-red-400 hover:bg-red-500/10`}
             >
               <TrashIcon size={18} />
               <span className="hidden md:inline">
@@ -1300,7 +769,7 @@ export default function TrackList({
             onClick={exitSelectMode}
             aria-label="Clear selection"
             title="Clear selection"
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted hover:text-white"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted hover:text-fg"
           >
             <XIcon size={18} />
             <span className="hidden md:inline">Clear</span>
@@ -1318,7 +787,7 @@ export default function TrackList({
           </span>
           <button
             onClick={() => setReorderMode(false)}
-            className="ml-auto flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-accent px-4 text-xs font-semibold text-white hover:bg-accent-hover"
+            className="ml-auto flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-accent px-4 text-xs font-semibold text-accent-fg hover:bg-accent-hover"
           >
             Done
           </button>
@@ -1358,19 +827,30 @@ export default function TrackList({
               />
             </th>
           )}
-          <th className="py-2">{sortHeader("title", "Title")}</th>
-          <th className="hidden w-[18%] py-2 sm:table-cell">
+          <th className="py-2" aria-sort={ariaSort("title")}>
+            {sortHeader("title", "Title")}
+          </th>
+          <th
+            className="hidden w-[18%] py-2 sm:table-cell"
+            aria-sort={ariaSort("artist")}
+          >
             {sortHeader("artist", "Artist")}
           </th>
-          <th className="hidden w-[18%] py-2 md:table-cell">
+          <th
+            className="hidden w-[18%] py-2 md:table-cell"
+            aria-sort={ariaSort("album")}
+          >
             {sortHeader("album", "Album")}
           </th>
           {showOwner && (
-            <th className="hidden w-24 py-2 md:table-cell">
+            <th
+              className="hidden w-24 py-2 md:table-cell"
+              aria-sort={ariaSort("owner")}
+            >
               {sortHeader("owner", "Owner")}
             </th>
           )}
-          <th className="w-14 py-2 text-center">
+          <th className="w-14 py-2 text-center" aria-sort={ariaSort("duration")}>
             {sortHeader(
               "duration",
               <span
@@ -1381,7 +861,10 @@ export default function TrackList({
               </span>
             )}
           </th>
-          <th className="hidden w-14 py-2 text-center md:table-cell">
+          <th
+            className="hidden w-14 py-2 text-center md:table-cell"
+            aria-sort={ariaSort("plays")}
+          >
             {sortHeader(
               "plays",
               <span

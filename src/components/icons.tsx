@@ -93,12 +93,6 @@ export const SearchIcon = (p: IconProps) => (
   </Svg>
 );
 
-export const ListIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M4 6a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm0 6a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm1 5a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H5z" />
-  </Svg>
-);
-
 export const UsersIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 19a6 6 0 0 1 12 0v1H3v-1zm13.5-7a3.5 3.5 0 1 0-2.04-6.34 6 6 0 0 1 0 5.68A3.48 3.48 0 0 0 16.5 12zm.5 2c-.45 0-.89.06-1.3.18A7.97 7.97 0 0 1 17 19v1h4v-1a5 5 0 0 0-4-5z" />
@@ -153,6 +147,18 @@ export const ChevronUpIcon = (p: IconProps) => (
 export const ChevronDownIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 17L5 8h14l-7 9z" />
+  </Svg>
+);
+
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 12l9-7v14l-9-7z" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M17 12l-9 7V5l9 7z" />
   </Svg>
 );
 

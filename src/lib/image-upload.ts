@@ -32,6 +32,29 @@ const BY_EXT: Record<string, ImageKind> = {
 /** Extensions accepted from an uploaded filename. */
 export const IMAGE_EXTENSIONS = new Set(Object.keys(BY_EXT));
 
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Validate an explicitly uploaded image file (shape + claimed type + size),
+ * shared by the track-art and playlist-cover routes so their rules can't
+ * drift. Returns the File + filename extension, or the 400 message. The
+ * stored kind still goes through imageKindFromUpload.
+ */
+export function validateImageUpload(
+  value: unknown,
+  noun: "Art" | "Cover"
+): { ok: true; file: File; ext: string } | { ok: false; error: string } {
+  if (!(value instanceof File)) return { ok: false, error: "Missing file" };
+  const ext = value.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!value.type.startsWith("image/") && !IMAGE_EXTENSIONS.has(ext)) {
+    return { ok: false, error: `${noun} must be an image` };
+  }
+  if (value.size > MAX_IMAGE_BYTES) {
+    return { ok: false, error: "Image exceeds the 5 MB limit" };
+  }
+  return { ok: true, file: value, ext };
+}
+
 /**
  * Kind for embedded cover art, where only the tag's MIME is known. Falls back
  * to JPEG, the overwhelmingly common case for embedded art.

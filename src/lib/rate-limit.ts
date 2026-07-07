@@ -27,3 +27,12 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
 export function clearRateLimit(key: string) {
   windows.delete(key);
 }
+
+/**
+ * Shared limiter for BOTH registration entry points (the web registerAction
+ * and POST /api/register) — they count against one bucket, so the limits live
+ * here rather than drifting apart in two files.
+ */
+export function registerRateLimit(ip: string): boolean {
+  return rateLimit(`register-ip:${ip}`, 5, 60 * 60 * 1000);
+}

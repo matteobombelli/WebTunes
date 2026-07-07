@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePlayerStore, useCurrentTrack } from "@/stores/player";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useArtGradient } from "@/lib/use-dominant-color";
 import CurrentTrackDetails from "@/components/CurrentTrackDetails";
 import PlayerProgress from "@/components/PlayerProgress";
-import { AddToPlaylistMenu, CurrentTrackKebab } from "@/components/TrackList";
+import { AddToPlaylistMenu, CurrentTrackKebab } from "@/components/TrackMenus";
 import {
   ChevronDownIcon,
   NextIcon,
@@ -17,7 +18,7 @@ import {
   SimilarIcon,
 } from "@/components/icons";
 
-const EXIT_MS = 220; // matches .animate-slide-up-* / the transition duration
+const EXIT_MS = 220; // matches the sheet's 0.22s inline slide transition
 const DISMISS_PX = 90; // swipe-down past this (on release) dismisses
 
 /**
@@ -103,20 +104,8 @@ export default function NowPlayingScreen({
     };
   }, [open]);
 
-  // Lock body scroll while the sheet is mounted (mirrors Dialog.tsx).
-  useEffect(() => {
-    if (!mounted) return;
-    const { body } = document;
-    const prevOverflow = body.style.overflow;
-    const prevPad = body.style.paddingRight;
-    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
-    body.style.overflow = "hidden";
-    if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
-    return () => {
-      body.style.overflow = prevOverflow;
-      body.style.paddingRight = prevPad;
-    };
-  }, [mounted]);
+  // Lock body scroll while the sheet is mounted (same hook as Dialog).
+  useBodyScrollLock(mounted);
 
   if (!mounted || !track) return null;
 
@@ -212,7 +201,7 @@ export default function NowPlayingScreen({
             toggle,
             isPlaying ? "Pause" : "Play",
             isPlaying ? <PauseIcon size={36} /> : <PlayIcon size={36} />,
-            "h-20 w-20 bg-accent text-white shadow-lg shadow-accent/40 active:bg-accent-hover"
+            "h-20 w-20 bg-accent text-accent-fg shadow-lg shadow-accent/40 active:bg-accent-hover"
           )}
           {iconBtn(
             next,

@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { tracks } from "@/db/schema";
+import { playlists, playlistTracks, tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrack } from "@/lib/friends";
 import { deleteObject } from "@/lib/s3";
@@ -51,6 +51,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .set(updates)
     .where(eq(tracks.id, id))
     .returning();
+  // Deleted between the ownership check and the update.
+  if (!updated) return trackNotFound();
   return NextResponse.json(toTrackDTO(updated));
 }
 
@@ -80,7 +82,19 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await db.delete(tracks).where(eq(tracks.id, id));
+  // Deleting a track cascades rows out of playlists (the owner's and
+  // friends'); bump those playlists' updatedAt first, per the convention that
+  // content changes touch it.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update ${playlists} set updated_at = now()
+      where ${playlists.id} in (
+        select ${playlistTracks.playlistId} from ${playlistTracks}
+        where ${playlistTracks.trackId} = ${id}
+      )
+    `);
+    await tx.delete(tracks).where(eq(tracks.id, id));
+  });
   try {
     await deleteObject(track.s3Key);
     if (track.artS3Key) await deleteObject(track.artS3Key);

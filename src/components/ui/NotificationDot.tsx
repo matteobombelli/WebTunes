@@ -15,6 +15,7 @@ export function NotificationDot({
 }) {
   return (
     <span
+      role="status"
       aria-label="New"
       className={cn(
         "h-2 w-2 shrink-0 rounded-full bg-red-500",

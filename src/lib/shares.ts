@@ -28,8 +28,9 @@ export type ResolvedShare = {
   durationSec: number | null;
 };
 
-// The currently-active (non-expired) link for a track, or null. The dialog reads
-// this on open so it can show an existing link without minting a new one.
+// The currently-active (non-expired) link for a track, or null. Serves the
+// GET /api/tracks/[id]/shares endpoint (unused by the web client, which mints
+// via POST — kept for the future mobile client).
 export async function getActiveShare(trackId: string): Promise<ShareLink | null> {
   const [row] = await db
     .select({ token: trackShares.token, expiresAt: trackShares.expiresAt })

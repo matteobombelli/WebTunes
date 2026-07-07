@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo } from "react";
 import type { DownloadedPlaylist, DownloadedTrack } from "@/lib/offline/db";
+import { useConfirmStore } from "@/stores/confirm";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { DownloadIcon, XIcon } from "@/components/icons";
@@ -88,10 +89,13 @@ const PlaylistSection = memo(function PlaylistSection({
           {tracks.length}/{playlist.trackIds.length} downloaded
         </span>
         <button
-          onClick={() => {
-            if (confirm(`Remove "${playlist.name}" from downloads?`)) {
-              void removePlaylist(playlist.id);
-            }
+          onClick={async () => {
+            const ok = await useConfirmStore
+              .getState()
+              .ask(`Remove “${playlist.name}” from downloads?`, {
+                confirmLabel: "Remove",
+              });
+            if (ok) void removePlaylist(playlist.id);
           }}
           className="ml-auto shrink-0 text-xs text-fg-muted hover:text-red-400"
         >
@@ -170,8 +174,11 @@ export default function DownloadsBrowser() {
         )}
         {(playlists.length > 0 || pinned.length > 0) && (
           <button
-            onClick={() => {
-              if (confirm("Remove all downloads?")) void removeAll();
+            onClick={async () => {
+              const ok = await useConfirmStore
+                .getState()
+                .ask("Remove all downloads?", { confirmLabel: "Remove all" });
+              if (ok) void removeAll();
             }}
             className="ml-auto shrink-0 text-xs text-fg-muted hover:text-red-400"
           >
@@ -189,7 +196,7 @@ export default function DownloadsBrowser() {
       )}
 
       {playlists.length === 0 && pinned.length === 0 ? (
-        <p className="py-8 text-center text-sm text-fg-subtle">
+        <p className="py-8 text-center text-sm text-fg-muted">
           Nothing downloaded yet. Use the <DownloadIcon size={13} className="inline" />{" "}
           button on songs or the Download button on a playlist — everything here
           stays playable offline.

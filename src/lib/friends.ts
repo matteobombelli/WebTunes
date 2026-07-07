@@ -154,8 +154,10 @@ export async function suggestedFriendsFor(
     .limit(limit);
 }
 
-/** Pending friend requests involving a user, tagged with their direction. */
-export async function pendingRequestsFor(
+/** Pending friend requests involving a user, tagged with their direction.
+ *  cache()d: the (app) layout and the discover page both call it on the same
+ *  request (the NotificationDot fan-out). */
+export const pendingRequestsFor = cache(async function pendingRequestsFor(
   userId: string
 ): Promise<FriendRequestDTO[]> {
   const requester = alias(users, "requester");
@@ -192,7 +194,7 @@ export async function pendingRequestsFor(
     user: r.requesterId === userId ? r.addressee : r.requester,
     createdAt: r.createdAt.toISOString(),
   }));
-}
+});
 
 /**
  * A user may access a track they own, or a non-private track owned by an

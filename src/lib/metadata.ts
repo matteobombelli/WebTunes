@@ -7,6 +7,23 @@ import { parseBuffer, type IAudioMetadata } from "music-metadata";
 // allowed a little more headroom for legitimate hi-res covers.
 const MAX_EMBEDDED_ART_BYTES = 10 * 1024 * 1024;
 
+// Field caps: no ingest path may store unbounded tag text. A crafted multi-MB
+// title/USLT tag would otherwise blow past the 1 MB tsvector limit on the
+// search_vector generated column (drizzle/0001) and 500 the upload after the
+// S3 objects are already up (orphaning them) — and a merely-huge value ships
+// in every list/search payload. 200 matches the web PATCH route's cap.
+export const MAX_TAG_CHARS = 200;
+export const MAX_LYRICS_CHARS = 100_000;
+
+/** Trim, NFC-normalize (macOS taggers emit NFD, which breaks the
+ *  title+artist duplicate detection against NFC copies), and cap a tag
+ *  value. Empty/missing → null. */
+export function cleanTag(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().normalize("NFC");
+  if (!trimmed) return null;
+  return trimmed.length > MAX_TAG_CHARS ? trimmed.slice(0, MAX_TAG_CHARS) : trimmed;
+}
+
 export type TrackMetadata = {
   title: string;
   artist: string | null;
@@ -93,9 +110,9 @@ export async function extractTrackMetadata(
   }
 
   const fallbackTitle = filename.replace(/\.[^.]+$/, "");
-  const title = meta?.common.title?.trim() || fallbackTitle;
-  const artist = meta?.common.artist?.trim() || null;
-  const album = meta?.common.album?.trim() || null;
+  const title = cleanTag(meta?.common.title) ?? cleanTag(fallbackTitle) ?? fallbackTitle;
+  const artist = cleanTag(meta?.common.artist);
+  const album = cleanTag(meta?.common.album);
   const durationSec = meta?.format.duration
     ? Math.round(meta.format.duration)
     : null;
@@ -108,6 +125,9 @@ export async function extractTrackMetadata(
   if (!lyrics && artist) {
     lyrics = await fetchLrclibLyrics(artist, title, album, durationSec);
     if (lyrics) lyricsSource = "lrclib";
+  }
+  if (lyrics && lyrics.length > MAX_LYRICS_CHARS) {
+    lyrics = lyrics.slice(0, MAX_LYRICS_CHARS);
   }
 
   const picture = meta?.common.picture?.[0];

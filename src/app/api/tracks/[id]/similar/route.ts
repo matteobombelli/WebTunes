@@ -33,6 +33,11 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
+  // An empty candidate set means "no results", not "unrestricted" (the lib
+  // treats a missing withinIds as no restriction).
+  if (parsed.data.withinIds && parsed.data.withinIds.length === 0) {
+    return NextResponse.json({ tracks: [] });
+  }
 
   const tracks = await findSimilarTracks(user.id, id, parsed.data);
   return NextResponse.json({ tracks });

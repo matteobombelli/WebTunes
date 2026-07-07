@@ -6,6 +6,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import type { InviteDTO } from "@/lib/types";
 import { useToastStore } from "@/stores/toast";
 import { Button } from "@/components/ui/Button";
+import { listRowClass } from "@/components/ui/Card";
 
 function inviteUrl(token: string): string {
   return `${window.location.origin}${BASE_PATH}/register?invite=${token}`;
@@ -25,14 +26,26 @@ function daysLeft(expiresAt: string): number {
  */
 export default function InvitePanel({ canInvite }: { canInvite: boolean }) {
   const [invites, setInvites] = useState<InviteDTO[] | null>(null);
+  // The list fetch failed — its empty list means "couldn't load", not "none".
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!canInvite) return;
     let active = true;
     api<InviteDTO[]>("/invites")
-      .then((rows) => active && setInvites(rows))
-      .catch(() => active && setInvites([]));
+      .then((rows) => {
+        if (active) {
+          setInvites(rows);
+          setLoadFailed(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setInvites([]);
+          setLoadFailed(true);
+        }
+      });
     return () => {
       active = false;
     };
@@ -78,18 +91,17 @@ export default function InvitePanel({ canInvite }: { canInvite: boolean }) {
       </div>
 
       {invites === null ? (
-        <p className="text-sm text-fg-subtle">Loading…</p>
+        <p className="text-sm text-fg-muted">Loading…</p>
       ) : invites.length === 0 ? (
-        <p className="text-sm text-fg-subtle">
-          No invite links yet. Generate one to invite a friend.
+        <p className="text-sm text-fg-muted">
+          {loadFailed
+            ? "Couldn’t load invite links — check your connection."
+            : "No invite links yet. Generate one to invite a friend."}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {invites.map((inv) => (
-            <li
-              key={inv.token}
-              className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-1 px-4 py-2"
-            >
+            <li key={inv.token} className={listRowClass}>
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg-muted">
                 {inviteUrl(inv.token)}
               </span>

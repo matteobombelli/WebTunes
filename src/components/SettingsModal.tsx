@@ -9,7 +9,9 @@ import { usePlayerStore } from "@/stores/player";
 import { useExclusionsStore } from "@/stores/exclusions";
 import Dialog from "@/components/Dialog";
 import ExcludedSongsList from "@/components/ExcludedSongsList";
-import { ChevronDownIcon } from "@/components/icons";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { ChevronRightIcon } from "@/components/icons";
 
 // Indexed by users.similar_variation (0..4); must match SIGMA_BY_VARIATION in
 // lib/similar.ts (0 = most random … 4 = deterministic cosine).
@@ -52,6 +54,62 @@ export default function SettingsModal({
   const [emailInput, setEmailInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+<<<<<<< Updated upstream
+=======
+  // WebTunes Importer pairing section (the desktop-app connector).
+  const [importers, setImporters] = useState<ExtensionTokenDTO[]>([]);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [importerError, setImporterError] = useState<string | null>(null);
+
+  // Refresh the connected-importer list each time the modal opens (a pairing
+  // may have completed since the last look). Stale code/error state is reset
+  // in close(), alongside the view reset.
+  useEffect(() => {
+    if (!open) return;
+    api<ExtensionTokenDTO[]>("/extension/tokens")
+      .then(setImporters)
+      .catch(() => setImporters([]));
+  }, [open]);
+
+  const generatePairCode = async () => {
+    setGeneratingCode(true);
+    setImporterError(null);
+    try {
+      const { code } = await api<{ code: string; expiresAt: string }>(
+        "/extension/pairing-code",
+        { method: "POST" }
+      );
+      setPairCode(code);
+    } catch (err) {
+      setImporterError(
+        err instanceof Error ? err.message : "Could not generate a code"
+      );
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const copyPairCode = () => {
+    if (!pairCode) return;
+    navigator.clipboard.writeText(pairCode).then(
+      () => useToastStore.getState().show("Copied pairing code to clipboard!"),
+      () => useToastStore.getState().show("Couldn’t copy code")
+    );
+  };
+
+  const revokeImporter = async (id: string) => {
+    setImporterError(null);
+    try {
+      await api(`/extension/tokens/${id}`, { method: "DELETE" });
+      setImporters((list) => list.filter((t) => t.id !== id));
+    } catch (err) {
+      setImporterError(
+        err instanceof Error ? err.message : "Could not disconnect"
+      );
+    }
+  };
+>>>>>>> Stashed changes
 
   // Reset to the main view on close so reopening lands on the settings list,
   // not a stale sub-view. Every close path (X / Escape / backdrop) funnels here.
@@ -59,6 +117,11 @@ export default function SettingsModal({
     setView("main");
     usePlayerStore.getState().setSettingsOpen(false);
   };
+
+  // Optimistic toggles: on failure revert AND say so — a checkbox silently
+  // flipping itself back reads as a UI glitch.
+  const revertToast = () =>
+    useToastStore.getState().show("Couldn’t save setting");
 
   const toggleNormalize = async (value: boolean) => {
     usePlayerStore.getState().setNormalizeVolume(value);
@@ -69,7 +132,8 @@ export default function SettingsModal({
         body: JSON.stringify({ normalizeVolume: value }),
       });
     } catch {
-      usePlayerStore.getState().setNormalizeVolume(!value); // revert on failure
+      usePlayerStore.getState().setNormalizeVolume(!value);
+      revertToast();
     }
   };
 
@@ -82,7 +146,8 @@ export default function SettingsModal({
         body: JSON.stringify({ similarDrift: value }),
       });
     } catch {
-      usePlayerStore.getState().setSimilarDrift(!value); // revert on failure
+      usePlayerStore.getState().setSimilarDrift(!value);
+      revertToast();
     }
   };
 
@@ -95,7 +160,8 @@ export default function SettingsModal({
         body: JSON.stringify({ hideFriendDuplicates: value }),
       });
     } catch {
-      usePlayerStore.getState().setHideFriendDuplicates(!value); // revert on failure
+      usePlayerStore.getState().setHideFriendDuplicates(!value);
+      revertToast();
     }
   };
 
@@ -109,7 +175,8 @@ export default function SettingsModal({
         body: JSON.stringify({ similarVariation: value }),
       });
     } catch {
-      setVariation(prev); // revert on failure
+      setVariation(prev);
+      revertToast();
     }
   };
 
@@ -172,8 +239,14 @@ export default function SettingsModal({
             <label htmlFor="display-name" className="block text-sm text-fg">
               Username
             </label>
-            <div className="mt-2 flex gap-2">
-              <input
+            <form
+              className="mt-2 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveName();
+              }}
+            >
+              <Input
                 id="display-name"
                 type="text"
                 value={name}
@@ -184,16 +257,15 @@ export default function SettingsModal({
                   setNameError(null);
                 }}
                 placeholder="Username"
-                className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-fg outline-none focus:border-accent"
+                className="min-w-0 flex-1"
               />
-              <button
-                onClick={saveName}
+              <Button
+                type="submit"
                 disabled={!trimmedName || nameUnchanged || savingName || nameTaken}
-                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {savingName ? "Saving…" : "Save"}
-              </button>
-            </div>
+              </Button>
+            </form>
             {nameError ? (
               <p className="mt-1 text-xs text-red-400">{nameError}</p>
             ) : nameTaken ? (
@@ -215,7 +287,7 @@ export default function SettingsModal({
               type="checkbox"
               checked={normalizeVolume}
               onChange={(e) => toggleNormalize(e.target.checked)}
-              className="h-4 w-4 accent-accent"
+              className="checkbox shrink-0"
             />
             Normalize volume across tracks
           </label>
@@ -225,7 +297,7 @@ export default function SettingsModal({
               type="checkbox"
               checked={similarDrift}
               onChange={(e) => toggleDrift(e.target.checked)}
-              className="h-4 w-4 accent-accent"
+              className="checkbox shrink-0"
             />
             Play similar follows the current track
           </label>
@@ -272,8 +344,7 @@ export default function SettingsModal({
                 <span className="ml-1.5 text-fg-muted">({excludedCount})</span>
               )}
             </span>
-            {/* Down chevron rotated points right — "drill into" the sub-view. */}
-            <ChevronDownIcon size={14} className="-rotate-90 text-fg-muted" />
+            <ChevronRightIcon size={14} className="text-fg-muted" />
           </button>
 
           <label className="mt-5 flex cursor-pointer select-none items-center gap-2 text-sm text-fg">
@@ -281,7 +352,7 @@ export default function SettingsModal({
               type="checkbox"
               checked={hideFriendDuplicates}
               onChange={(e) => toggleHideDuplicates(e.target.checked)}
-              className="h-4 w-4 accent-accent"
+              className="checkbox shrink-0"
             />
             Hide duplicates from friends&apos; libraries
           </label>
@@ -291,52 +362,131 @@ export default function SettingsModal({
           </p>
 
           <div className="mt-6 border-t border-border pt-4">
+<<<<<<< Updated upstream
+=======
+            <h3 className="text-sm font-semibold text-fg">WebTunes Importer</h3>
+            <p className="mt-1 text-xs text-fg-muted">
+              The WebTunes Importer desktop app downloads audio and adds it to
+              your library. Generate a code, then enter it in the importer to
+              connect it.
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={generatePairCode}
+                disabled={generatingCode}
+              >
+                {generatingCode ? "Generating…" : "Generate pairing code"}
+              </Button>
+              {pairCode && (
+                <>
+                  <span className="select-all font-mono text-base tracking-widest text-accent-bright">
+                    {pairCode}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={copyPairCode}>
+                    Copy
+                  </Button>
+                </>
+              )}
+            </div>
+            {pairCode && (
+              <p className="mt-1 text-xs text-fg-muted">
+                Single-use, valid for 10 minutes.
+              </p>
+            )}
+            {importerError && (
+              <p className="mt-1 text-xs text-red-400">{importerError}</p>
+            )}
+            {importers.length > 0 && (
+              <ul className="mt-3 flex flex-col gap-2">
+                {importers.map((importer) => (
+                  <li
+                    key={importer.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-fg">
+                        {importer.label || "Importer"}
+                      </p>
+                      <p className="text-xs text-fg-muted">
+                        Connected{" "}
+                        {new Date(importer.createdAt).toLocaleDateString()}
+                        {importer.lastUsedAt &&
+                          ` · last import ${new Date(
+                            importer.lastUsedAt
+                          ).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="shrink-0 border border-red-500/40"
+                      onClick={() => revokeImporter(importer.id)}
+                    >
+                      Disconnect
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-border pt-4">
+>>>>>>> Stashed changes
             <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>
             {!confirming ? (
-              <button
+              <Button
+                variant="destructive"
+                className="mt-2 border border-red-500/40"
                 onClick={() => setConfirming(true)}
-                className="mt-2 rounded-md border border-red-500/40 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
               >
                 Delete account
-              </button>
+              </Button>
             ) : (
-              <div className="mt-2 flex flex-col gap-2">
+              <form
+                className="mt-2 flex flex-col gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  deleteAccount();
+                }}
+              >
                 <p className="text-xs text-fg-muted">
                   This permanently deletes your account, tracks, and playlists.
                   Type <span className="text-fg">{userEmail}</span> to confirm.
                 </p>
-                <input
+                <Input
                   type="email"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   placeholder="Type your email to confirm"
                   autoComplete="off"
-                  className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-fg outline-none focus:border-red-500/60"
                 />
                 {deleteError && (
                   <p className="text-xs text-red-400">{deleteError}</p>
                 )}
                 <div className="flex gap-2">
                   <button
-                    onClick={deleteAccount}
+                    type="submit"
                     disabled={!emailMatches || deleting}
-                    className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {deleting ? "Deleting…" : "Delete account"}
                   </button>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={deleting}
                     onClick={() => {
                       setConfirming(false);
                       setEmailInput("");
                       setDeleteError(null);
                     }}
-                    disabled={deleting}
-                    className="rounded-md px-3 py-1.5 text-sm text-fg-muted hover:text-white"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </form>
             )}
           </div>
         </>

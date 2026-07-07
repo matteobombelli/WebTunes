@@ -29,7 +29,7 @@ export default function RegisterForm({
       <div className="flex flex-col gap-4 text-sm">
         <h2 className="font-display text-lg font-semibold">Check your email</h2>
         <p className="text-fg-muted">{state.notice}</p>
-        <Link href="/login" className="text-accent-bright hover:text-white">
+        <Link href="/login" className="text-accent-bright hover:text-fg">
           Back to sign in
         </Link>
       </div>
@@ -83,7 +83,7 @@ export default function RegisterForm({
       </Button>
       <p className="text-center text-sm text-fg-muted">
         Have an account?{" "}
-        <Link href="/login" className="text-accent-bright hover:text-white">
+        <Link href="/login" className="text-accent-bright hover:text-fg">
           Sign in
         </Link>
       </p>

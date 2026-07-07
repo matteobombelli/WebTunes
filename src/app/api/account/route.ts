@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { playlists, tracks, users } from "@/db/schema";
+import { playlists, playlistTracks, tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { deleteObject } from "@/lib/s3";
 import { nameSchema, updateDisplayName } from "@/lib/users";
@@ -58,7 +58,22 @@ export async function DELETE(req: NextRequest) {
     .from(playlists)
     .where(eq(playlists.ownerId, user.id));
 
-  await db.delete(users).where(eq(users.id, user.id));
+  // The cascade also pulls this user's tracks out of FRIENDS' playlists; bump
+  // those playlists' updatedAt (the convention for content changes). The
+  // user's own playlists are deleted by the same cascade.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update ${playlists} set updated_at = now()
+      where ${playlists.ownerId} <> ${user.id}
+        and ${playlists.id} in (
+          select ${playlistTracks.playlistId}
+          from ${playlistTracks}
+          join ${tracks} on ${tracks.id} = ${playlistTracks.trackId}
+          where ${tracks.ownerId} = ${user.id}
+        )
+    `);
+    await tx.delete(users).where(eq(users.id, user.id));
+  });
 
   const s3Keys = [
     ...ownedTracks.flatMap((t) => [t.s3Key, t.artS3Key, t.artThumbS3Key]),

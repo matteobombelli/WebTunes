@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { api } from "@/lib/api";
+import { useToastStore } from "@/stores/toast";
 import type { TrackDTO } from "@/lib/types";
 
 // Client mirror of the user's "exclude from Play Similar" list. UI-only: the
@@ -49,10 +50,13 @@ export const useExclusionsStore = create<ExclusionsState>((set, get) => ({
     set({ ids: new Set(ids).add(track.id), tracks: [track, ...tracks] });
     try {
       await api(`/tracks/${track.id}/similar-exclusion`, { method: "POST" });
+      // The kebab menu closes on click with no other confirmation.
+      useToastStore.getState().show("Excluded from Play Similar");
     } catch {
       const ids = new Set(get().ids);
       ids.delete(track.id);
       set({ ids, tracks: get().tracks.filter((t) => t.id !== track.id) });
+      useToastStore.getState().show("Couldn’t exclude track");
     }
   },
 
@@ -71,6 +75,7 @@ export const useExclusionsStore = create<ExclusionsState>((set, get) => ({
         ids: new Set(get().ids).add(trackId),
         tracks: removed ? [removed, ...get().tracks] : get().tracks,
       });
+      useToastStore.getState().show("Couldn’t update exclusions");
     }
   },
 }));

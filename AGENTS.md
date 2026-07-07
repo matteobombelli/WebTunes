@@ -226,7 +226,12 @@ setup, and architecture rationale.
   art from **Cover Art Archive** (by MBID) → iTunes `findCoverArt` fallback. It
   fills **only empty** fields and the `title` is never touched: it re-reads the
   row and every write is a conditional `... WHERE col IS NULL` UPDATE, so the
-  no-overwrite rule is atomic even against a concurrent fill. Best-effort like
+  no-overwrite rule is atomic even against a concurrent fill. Recognized art
+  uploads to disjoint `art/{owner}/{trackId}.rec.{ext}` / `….rec.thumb.jpg`
+  keys and only then runs the conditional UPDATE as a claim — so it can never
+  clobber the objects of a cover the owner uploaded mid-recognition; a lost
+  claim best-effort-deletes the fresh objects (reconcile script backstops).
+  Best-effort like
   loudness/CLAP — any failure (no key, no/low-confidence match, fpcalc/network
   error) just leaves the gaps. `ACOUSTID_API_KEY` (free app key from
   acoustid.org; unset = recognition disabled, but the worker still does the iTunes
@@ -246,8 +251,10 @@ setup, and architecture rationale.
   viewer's own (`notDuplicateOfOwn` in `lib/tracks.ts`) in scope=all/friends
   listings and search; friend profile pages are intentionally unfiltered.
 - Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
-  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 100mb;
-  default 10MB silently truncates bodies and breaks track uploads).
+  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 110mb —
+  deliberately ABOVE the 100 MB `MAX_FILE_BYTES` app limit so a near-limit file
+  plus multipart overhead isn't silently truncated; the default 10MB broke
+  track uploads).
 - Offline/PWA: the player streams via the stable
   `GET /api/tracks/[id]/stream` (302 to presigned URL); `public/sw.js` serves
   downloaded tracks from the `wt-audio` cache with Range-aware 206s (iOS

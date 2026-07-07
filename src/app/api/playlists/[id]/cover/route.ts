@@ -3,15 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { IMAGE_EXTENSIONS, imageKindFromUpload } from "@/lib/image-upload";
+import { imageKindFromUpload, validateImageUpload } from "@/lib/image-upload";
 import {
   getAccessiblePlaylist,
   getOwnPlaylist,
   toPlaylistDTO,
 } from "@/lib/playlists";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // Stable per-playlist cover URL (mirrors the track /art route): the client keys
 // on this URL while the presigned redirect target rotates per request, so a
@@ -50,30 +48,21 @@ export async function POST(
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
-  const form = await req.formData();
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing file" }, { status: 400 });
+  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
+  const form = await req.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
   }
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!file.type.startsWith("image/") && !IMAGE_EXTENSIONS.has(ext)) {
-    return NextResponse.json({ error: "Cover must be an image" }, { status: 400 });
+  const upload = validateImageUpload(form.get("file"), "Cover");
+  if (!upload.ok) {
+    return NextResponse.json({ error: upload.error }, { status: 400 });
   }
-  if (file.size > MAX_IMAGE_BYTES) {
-    return NextResponse.json({ error: "Image exceeds the 5 MB limit" }, { status: 400 });
-  }
+  const { file, ext } = upload;
 
   // Key extension and stored Content-Type come from a server-side allowlist —
-  // never the untrusted filename/MIME. Replace the old object if it differs.
+  // never the untrusted filename/MIME.
   const kind = imageKindFromUpload(ext, file.type);
   const s3Key = `covers/${user.id}/${id}.${kind.ext}`;
-  if (playlist.coverS3Key && playlist.coverS3Key !== s3Key) {
-    try {
-      await deleteObject(playlist.coverS3Key);
-    } catch {
-      // Orphaned cover object is harmless.
-    }
-  }
   await uploadObject(s3Key, Buffer.from(await file.arrayBuffer()), kind.contentType);
 
   const [updated] = await db
@@ -81,5 +70,15 @@ export async function POST(
     .set({ coverS3Key: s3Key, updatedAt: new Date() })
     .where(eq(playlists.id, id))
     .returning();
+  if (!updated) {
+    // Playlist deleted between the ownership check and the update; the fresh
+    // object is an orphan the reconcile script sweeps.
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  // Only after the row points at the new object, drop the replaced one (leak
+  // beats dangling: deleting first would break the cover if the upload failed).
+  if (playlist.coverS3Key && playlist.coverS3Key !== s3Key) {
+    await deleteObject(playlist.coverS3Key).catch(() => {});
+  }
   return NextResponse.json(await toPlaylistDTO(updated));
 }

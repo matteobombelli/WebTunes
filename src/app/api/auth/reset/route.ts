@@ -41,18 +41,36 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await hash(parsed.data.password, 12);
-  await db.transaction(async (tx) => {
+  const consumed = await db.transaction(async (tx) => {
+    // Burning the token is the atomic claim (the SELECT above is only a cheap
+    // pre-check to skip the bcrypt work): two concurrent posts of the same
+    // token can't both pass this UPDATE's usedAt guard.
+    const [claim] = await tx
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date())
+        )
+      )
+      .returning({ userId: passwordResetTokens.userId });
+    if (!claim) return false;
     await tx
       .update(users)
       .set({ passwordHash })
-      .where(eq(users.id, row.userId));
-    await tx
-      .update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
+      .where(eq(users.id, claim.userId));
     // Log out every existing session for the account.
-    await tx.delete(sessions).where(eq(sessions.userId, row.userId));
+    await tx.delete(sessions).where(eq(sessions.userId, claim.userId));
+    return true;
   });
+  if (!consumed) {
+    return NextResponse.json(
+      { error: "This reset link is invalid or has expired" },
+      { status: 400 }
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

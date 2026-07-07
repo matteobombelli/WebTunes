@@ -20,6 +20,9 @@ export default async function AlbumPage({
     name,
     settings.hideFriendDuplicates
   );
+  // Albums only exist through their tracks — an unknown/typo'd name is a 404,
+  // not a real-looking empty album.
+  if (tracks.length === 0) notFound();
 
   const artists = [...new Set(tracks.map((t) => t.artist).filter(Boolean))];
   const albumArtist =
@@ -27,7 +30,7 @@ export default async function AlbumPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <p className="text-sm text-fg-muted">Album</p>
+      <p className="text-xs uppercase text-fg-subtle">Album</p>
       <h1 className={`font-display text-4xl font-bold tracking-tight ${albumArtist ? "" : "mb-6"}`}>{name}</h1>
       {albumArtist && (
         <p className="mb-6 text-sm text-fg-muted">

@@ -1,10 +1,8 @@
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { areFriends } from "@/lib/friends";
-import { listFriendTracks } from "@/lib/tracks";
+import { listTracksOfFriend } from "@/lib/tracks";
+import { getDisplayName } from "@/lib/users";
 import { isUuid } from "@/lib/validate";
 
 export async function GET(
@@ -19,9 +17,6 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const [owner] = await db
-    .select({ name: users.name })
-    .from(users)
-    .where(eq(users.id, userId));
-  return NextResponse.json(await listFriendTracks(userId, owner?.name ?? null));
+  const ownerName = await getDisplayName(userId);
+  return NextResponse.json(await listTracksOfFriend(userId, ownerName));
 }

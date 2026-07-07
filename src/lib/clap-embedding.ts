@@ -34,8 +34,6 @@ const DECODE_TIMEOUT_MS = 30_000;
 // harmless for real music while it stops a decompression-style OOM. KEEP IN SYNC
 // with scripts/analyze-clap-embeddings.mjs.
 const MAX_DECODE_BYTES = 1024 * 1024 * 1024;
-// CLAP truncates to a fixed window, so inference time is roughly constant; only
-// a stuck onnxruntime call needs a backstop.
 const MAX_CONCURRENT = 2;
 
 /**

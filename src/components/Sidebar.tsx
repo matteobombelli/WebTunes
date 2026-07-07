@@ -71,7 +71,7 @@ export default function Sidebar({
         <div className="mt-2 flex items-center gap-4">
           <button
             onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
+            className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
           >
             <SettingsIcon size={14} />
             Settings
@@ -79,7 +79,7 @@ export default function Sidebar({
           <form action={signOutAction} className="flex">
             <button
               type="submit"
-              className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-white"
+              className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg"
             >
               <LogoutIcon size={14} />
               Sign out

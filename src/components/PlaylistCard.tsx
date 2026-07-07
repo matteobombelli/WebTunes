@@ -18,7 +18,7 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
           className="aspect-square w-full bg-surface-2"
         />
       </div>
-      <p className="mt-2 flex items-center gap-1 truncate font-medium text-fg group-hover:text-white">
+      <p className="mt-2 flex items-center gap-1 truncate font-medium text-fg">
         {!playlist.ownerName && playlist.isPrivate && (
           <LockIcon size={13} className="shrink-0 text-fg-subtle" />
         )}
