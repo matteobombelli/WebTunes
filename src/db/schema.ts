@@ -98,8 +98,6 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   usedAt: timestamp("used_at", { mode: "date" }),
 });
 
-<<<<<<< Updated upstream
-=======
 // Short-lived pairing codes for connecting the WebTunes Importer desktop app
 // (the "extension" naming predates it). The signed-in user mints a code in
 // Settings, types it into the importer, and the importer redeems it for a
@@ -140,7 +138,6 @@ export const extensionTokens = pgTable(
   (t) => [index("extension_tokens_user_id_idx").on(t.userId)]
 );
 
->>>>>>> Stashed changes
 export const tracks = pgTable(
   "tracks",
   {

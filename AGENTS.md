@@ -329,9 +329,25 @@ setup, and architecture rationale.
     load-bearing — gesture-less autoplay at mount would recreate the keep-alive
     `AudioContext` off-gesture (BT/battery regression) and reject; the first tap
     resumes via the in-gesture path. Lock-screen controls return on that tap.
-  Debugging is on-device: enable **Settings → Diagnostics → Audio debug logging**
-  (sets `wt-audio-debug`), which persists `logAudio` lines to `localStorage`
-  (`wt-audio-log`, survives a discard) and shows them in a copyable panel — no Mac
+  - **Locked auto-advance dies at the track-end gap**: after `ended`, nothing is
+    playing, so iOS releases the audio session and freezes the page — a next
+    track not already in the SW `wt-prefetch` cache (`NextTrackPrefetcher` →
+    `lib/offline/prefetch.ts`, `PREFETCH_AHEAD = 3`) needs a live fetch that
+    never completes, the owed `play()` never fires, silence until foreground.
+    Fix: `onEnded` runs `startSilenceLoop()` (the same silent keep-alive as the
+    pause path) so the session — and the page — stays alive through the gap
+    while the next source loads; `onPlaying` stops it. Keeping the page alive is
+    also what lets `NextTrackPrefetcher` and the radio refill
+    (`usePlaySimilarRefill`) keep topping up across locked advances (throttled
+    but working network) instead of the warmed window shrinking to nothing.
+  Lock-screen/Control-Center scrubbing works via a MediaSession `seekto` handler
+  (routes through the store's `seekTo`, and moves `pausedPosRef` so the silence
+  loop's per-tick pin doesn't snap a scrub-while-paused back). Only
+  `seekbackward`/`seekforward` stay nulled (re-asserted every `onPlaying`) —
+  they, not `seekto`, are what swap the prev/next arrows for ±10/15s buttons.
+  Debugging is on-device: set `localStorage.setItem("wt-audio-debug", "1")` (the
+  old Settings → Diagnostics panel was removed), which persists `logAudio` lines
+  to `localStorage` (`wt-audio-log`, survives a discard) — no Mac
   / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
   our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
   the keep-alive loop start?), `pause … vis=…` + `pause:reconcile`,

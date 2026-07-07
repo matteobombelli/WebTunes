@@ -1,12 +1,8 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listOwnTracks } from "@/lib/tracks";
 import LibraryBrowser from "@/components/LibraryBrowser";
-<<<<<<< Updated upstream
-import UploadDialog from "@/components/UploadDialog";
-=======
 import UploadButton from "@/components/UploadButton";
 import DownloadImporterButton from "@/components/DownloadImporterButton";
->>>>>>> Stashed changes
 
 export default async function LibraryPage() {
   const user = await requirePageUser();
@@ -16,14 +12,10 @@ export default async function LibraryPage() {
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-4xl font-bold tracking-tight">Your Library</h1>
-<<<<<<< Updated upstream
-        <UploadDialog />
-=======
         <div className="flex items-center gap-2">
           <DownloadImporterButton />
           <UploadButton />
         </div>
->>>>>>> Stashed changes
       </div>
       <LibraryBrowser initialTracks={trackDTOs} />
     </div>

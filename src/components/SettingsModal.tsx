@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
+import type { ExtensionTokenDTO } from "@/lib/types";
 import { useUsernameAvailability } from "@/lib/use-username-availability";
 import { usePlayerStore } from "@/stores/player";
 import { useExclusionsStore } from "@/stores/exclusions";
+import { useToastStore } from "@/stores/toast";
 import Dialog from "@/components/Dialog";
 import ExcludedSongsList from "@/components/ExcludedSongsList";
 import { Button } from "@/components/ui/Button";
@@ -54,8 +56,6 @@ export default function SettingsModal({
   const [emailInput, setEmailInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-<<<<<<< Updated upstream
-=======
   // WebTunes Importer pairing section (the desktop-app connector).
   const [importers, setImporters] = useState<ExtensionTokenDTO[]>([]);
   const [pairCode, setPairCode] = useState<string | null>(null);
@@ -109,12 +109,13 @@ export default function SettingsModal({
       );
     }
   };
->>>>>>> Stashed changes
 
   // Reset to the main view on close so reopening lands on the settings list,
   // not a stale sub-view. Every close path (X / Escape / backdrop) funnels here.
   const close = () => {
     setView("main");
+    setPairCode(null);
+    setImporterError(null);
     usePlayerStore.getState().setSettingsOpen(false);
   };
 
@@ -276,8 +277,8 @@ export default function SettingsModal({
               <p className="mt-1 text-xs text-accent-bright">Username updated.</p>
             ) : (
               <p className="mt-1 text-xs text-fg-muted">
-                Your unique username — friends find you by this. Your email stays
-                private.
+                Your unique username. Friends find you by this. Your email
+                stays private.
               </p>
             )}
           </div>
@@ -362,8 +363,6 @@ export default function SettingsModal({
           </p>
 
           <div className="mt-6 border-t border-border pt-4">
-<<<<<<< Updated upstream
-=======
             <h3 className="text-sm font-semibold text-fg">WebTunes Importer</h3>
             <p className="mt-1 text-xs text-fg-muted">
               The WebTunes Importer desktop app downloads audio and adds it to
@@ -433,7 +432,6 @@ export default function SettingsModal({
           </div>
 
           <div className="mt-6 border-t border-border pt-4">
->>>>>>> Stashed changes
             <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>
             {!confirming ? (
               <Button

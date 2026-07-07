@@ -16,14 +16,18 @@ import { log } from "@/lib/log";
 // stores the original file and the upload never fails.
 
 const REMUX_TIMEOUT_MS = 60_000;
-// Ogg-family extensions worth probing for Opus; mimeType audio/ogg also triggers.
-const OGG_EXTS = new Set(["ogg", "opus", "oga"]);
+// Containers worth probing for Opus; the matching MIME types also trigger.
+// webm covers the extension importer: YouTube's best audio is Opus-in-WebM
+// (itag 251), which iOS Safari can't play at all — same lossless copy applies.
+const OPUS_EXTS = new Set(["ogg", "opus", "oga", "webm"]);
+const OPUS_MIMES = new Set(["audio/ogg", "audio/webm"]);
 
 export type RemuxResult = { body: Buffer; ext: "mp4"; contentType: "audio/mp4" };
 
 /**
- * Losslessly re-mux an Opus-in-Ogg upload to MP4. Returns null when it doesn't
- * apply (not Ogg/Opus) or anything fails — the caller then keeps the original.
+ * Losslessly re-mux an Opus upload (Ogg or WebM container) to MP4. Returns
+ * null when it doesn't apply (no Opus stream) or anything fails — the caller
+ * then keeps the original.
  * Before returning, verifies the copied (encoded) audio stream is byte-identical
  * to the source via a decode-free stream hash; that correctly ignores the benign
  * container-level trailing-frame padding MP4 carries vs Ogg (which a decoded-PCM
@@ -34,7 +38,7 @@ export async function remuxOpusToMp4(
   ext: string,
   mimeType: string
 ): Promise<RemuxResult | null> {
-  if (!OGG_EXTS.has(ext.toLowerCase()) && mimeType !== "audio/ogg") return null;
+  if (!OPUS_EXTS.has(ext.toLowerCase()) && !OPUS_MIMES.has(mimeType)) return null;
 
   let dir: string | null = null;
   try {
