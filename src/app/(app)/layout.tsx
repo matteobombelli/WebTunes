@@ -2,6 +2,7 @@ import { requirePageUser } from "@/lib/auth-helpers";
 import { pendingRequestsFor } from "@/lib/friends";
 import { getUserSettings } from "@/lib/users";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ImportProgressBar from "@/components/ImportProgressBar";
 import { MobileNav, MobileTopBar } from "@/components/MobileNav";
 import PlayerBar from "@/components/PlayerBar";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
@@ -30,6 +31,7 @@ export default async function AppLayout({
     <div className="flex h-dvh flex-col">
       <ServiceWorkerRegistrar userId={user.id} />
       <UploadProgressBar />
+      <ImportProgressBar />
       <MobileTopBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar

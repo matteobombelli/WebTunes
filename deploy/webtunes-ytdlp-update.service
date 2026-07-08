@@ -1,0 +1,11 @@
+[Unit]
+Description=WebTunes yt-dlp self-update (in-site importer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hs
+WorkingDirectory=/home/hs/WebTunes
+# -U rewrites bin/yt-dlp in place (the dir is app-user-owned).
+ExecStart=/home/hs/WebTunes/bin/yt-dlp -U

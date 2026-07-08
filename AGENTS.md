@@ -53,6 +53,13 @@ setup, and architecture rationale.
     (see the recognition-worker note below)
   - `offline/` — PWA download internals: `db.ts` (IndexedDB metadata),
     `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
+  - `import/` — the in-site importer (server-side port of the desktop
+    WebTunes Importer): `ytdlp.ts` (the only file that spawns the yt-dlp CLI —
+    flat extract / probe / download per quality), `sources.ts` (URL
+    classification + Spotify/Apple metadata scrapers, fixed-host fetches only),
+    `match.ts` (fuzzy YouTube matching, Ratcliff/Obershelp on normalized
+    word sets), `jobs.ts` (in-memory job registry + ONE global serial worker
+    feeding `ingestTrack`). See the importer convention note below.
 - `src/app/api/` — REST-ish JSON routes. Some GET endpoints are unused by the
   web client but are **intentional public surface for a future mobile client —
   do not delete them**. Routes stay thin: auth check + zod validation + lib call.
@@ -136,6 +143,27 @@ setup, and architecture rationale.
   no auth bounce) and exempted in `src/proxy.ts`; its `<audio>`/`<img>` use
   `shareStreamSrc`/`shareArtSrc` (basePath-aware). The presigned target is
   downloadable (can't enforce stream-only).
+- In-site importer: `POST /api/import` (session auth) takes a YouTube video/
+  playlist URL — or a Spotify/Apple Music URL whose tracks are scraped for
+  metadata and fuzzy-matched to YouTube — and runs the whole job server-side
+  via the **yt-dlp standalone binary** at `bin/yt-dlp` (gitignored;
+  `YT_DLP_PATH` overrides; daily self-update via the
+  `deploy/webtunes-ytdlp-update` timer since YouTube breakage is yt-dlp's #1
+  failure mode). yt-dlp needs **node on PATH** for its YouTube JS challenge
+  solver (`--js-runtimes node --remote-components ejs:github`). Each track
+  downloads to a temp dir and feeds `ingestTrack` directly — same dedupe/
+  metadata/remux/S3/CLAP/recognition pipeline as a web upload; yt-dlp's own
+  ffmpeg post-processing runs OUTSIDE `ffmpeg-gate`, acceptable only because
+  the import worker is strictly serial (keep it that way: one global worker,
+  one IP, YouTube 429s aggressively — 429s get a 60s cooldown + ≤3 retries).
+  Job state is in-memory like the queues (restart loses the in-flight job;
+  re-pasting the link is cheap — ingest's sha256 dedupe skips what landed),
+  polled by the client every 2s (`stores/imports.ts` → `ImportProgressBar` in
+  the app layout, which re-attaches after a reload). One active job per user;
+  playlists cap at 500 tracks; sub-100 kbps sources and below-strictness
+  matches are "missed" with a reason, never guessed. The desktop-importer
+  path (`/api/tracks/extension-import` + `/api/extension/*`) stays untouched
+  and working alongside.
 - Loudness normalization: on upload `lib/loudness.ts` shells out to **ffmpeg**
   (a runtime dependency — must be on `PATH` in dev and prod) to measure EBU R128
   loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:

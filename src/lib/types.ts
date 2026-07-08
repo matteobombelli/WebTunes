@@ -79,3 +79,61 @@ export type ExtensionTokenDTO = {
   createdAt: string;
   lastUsedAt: string | null;
 };
+
+// --- Server-side imports (lib/import/) ---------------------------------------
+// Types live here (not in lib/import/jobs.ts) so client components can use them
+// without pulling the server-only import modules (fs/child_process) into a
+// client bundle.
+
+export type ImportQuality = "128" | "192" | "opus" | "m4a";
+export type ImportVersionPref = "none" | "studio" | "live";
+
+export type ImportItemStatus =
+  | "waiting"
+  | "matching"
+  | "downloading"
+  | "uploading"
+  | "done"
+  | "duplicate"
+  | "missed"
+  | "cancelled";
+
+export type ImportJobStatus =
+  | "resolving"
+  | "running"
+  | "done"
+  | "cancelled"
+  | "error";
+
+export type ImportItemDTO = {
+  label: string;
+  status: ImportItemStatus;
+  /** 0–100 download percent for the current item. */
+  progress: number;
+  /** Why it was missed / flagged duplicate. */
+  reason: string | null;
+};
+
+export type ImportJobDTO = {
+  id: string;
+  sourceUrl: string;
+  kind: "youtube" | "spotify" | "apple";
+  status: ImportJobStatus;
+  error: string | null;
+  items: ImportItemDTO[];
+  /** Progress log lines, shown in the Import dialog's Link tab (mirrors the
+   * desktop importer's log view). */
+  log: string[];
+  createdAt: string;
+  finishedAt: string | null;
+};
+
+/** One row of the Import dialog's YouTube search tab. */
+export type ImportSearchResultDTO = {
+  id: string;
+  url: string;
+  title: string;
+  uploader: string;
+  duration: number | null;
+  thumbnail: string | null;
+};

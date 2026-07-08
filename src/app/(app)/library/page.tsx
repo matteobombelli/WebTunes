@@ -1,8 +1,8 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { listOwnTracks } from "@/lib/tracks";
+import ImportButton from "@/components/ImportButton";
 import LibraryBrowser from "@/components/LibraryBrowser";
 import UploadButton from "@/components/UploadButton";
-import DownloadImporterButton from "@/components/DownloadImporterButton";
 
 export default async function LibraryPage() {
   const user = await requirePageUser();
@@ -13,7 +13,7 @@ export default async function LibraryPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-4xl font-bold tracking-tight">Your Library</h1>
         <div className="flex items-center gap-2">
-          <DownloadImporterButton />
+          <ImportButton />
           <UploadButton />
         </div>
       </div>

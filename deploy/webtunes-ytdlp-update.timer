@@ -1,0 +1,10 @@
+[Unit]
+Description=Update WebTunes yt-dlp daily
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+# Fire on next boot if the box was down at the scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

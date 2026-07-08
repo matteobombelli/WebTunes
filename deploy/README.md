@@ -87,3 +87,38 @@ systemctl list-timers webtunes-purge-invites    # next/last run
 sudo systemctl start webtunes-purge-invites.service  # run once, now
 journalctl -u webtunes-purge-invites.service    # logs (number of links purged)
 ```
+
+## Daily yt-dlp self-update (in-site importer)
+
+The in-site importer (`src/lib/import/`) shells out to the yt-dlp standalone
+binary at `bin/yt-dlp` (gitignored; `YT_DLP_PATH` overrides). YouTube breakage
+is yt-dlp's #1 failure mode, so a daily `-U` self-update keeps it current — a
+stale binary just fails an import job with a readable error, never the app.
+
+### Provision (once, as the app user)
+
+```sh
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+  -o bin/yt-dlp && chmod +x bin/yt-dlp
+bin/yt-dlp --version
+```
+
+Needs Python 3.9+ and node on PATH (the YouTube JS challenge solver runs on
+node; ffmpeg is already a runtime dep).
+
+### Install the timer
+
+```sh
+sudo cp deploy/webtunes-ytdlp-update.service /etc/systemd/system/
+sudo cp deploy/webtunes-ytdlp-update.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now webtunes-ytdlp-update.timer
+```
+
+### Check
+
+```sh
+systemctl list-timers webtunes-ytdlp-update    # next/last run
+systemctl start webtunes-ytdlp-update.service  # update once, now
+journalctl -u webtunes-ytdlp-update.service    # update log
+```
