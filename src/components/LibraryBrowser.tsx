@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
@@ -19,13 +19,22 @@ import { SCOPES } from "@/components/ui/scopes";
 // revalidates it.
 const scopeCache = new Map<string, TrackDTO[]>();
 
-// Default view is the server-rendered own library (initialTracks, kept fresh
-// by router.refresh from TrackList). Any query or non-own scope switches to
-// client-fetched results.
+// scopeCache key for the background-fetched full own library (the own scope
+// isn't affected by hideFriendDuplicates, so no setting suffix).
+const OWN_FULL_KEY = "own:full";
+
+// Default view is the server-rendered own library (initialTracks — only the
+// newest slice at large library sizes, kept fresh by router.refresh from
+// TrackList — with the remainder background-fetched below). Any query or
+// non-own scope switches to client-fetched results.
 export default function LibraryBrowser({
   initialTracks,
+  totalTracks,
 }: {
   initialTracks: TrackDTO[];
+  /** How many tracks the user owns; > initialTracks.length means the server
+   *  sent a partial slice and the full list must be fetched client-side. */
+  totalTracks: number;
 }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
@@ -44,6 +53,37 @@ export default function LibraryBrowser({
   // React.memo by changing TrackList's `remove` callback every render.
   const [refreshKey, setRefreshKey] = useState(0);
   const onMutated = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  // The rest of the own library beyond the server's initial slice, fetched in
+  // the background. Seeded from the module cache so navigating back renders the
+  // full list instantly (revalidated below).
+  const [ownFull, setOwnFull] = useState<TrackDTO[] | null>(
+    () => scopeCache.get(OWN_FULL_KEY) ?? null
+  );
+  const initialPartial = initialTracks.length < totalTracks;
+  useEffect(() => {
+    if (!initialPartial) return;
+    const controller = new AbortController();
+    api<TrackDTO[]>("/tracks", { signal: controller.signal })
+      .then((tracks) => {
+        scopeCache.set(OWN_FULL_KEY, tracks);
+        setOwnFull(tracks);
+      })
+      .catch(() => {}); // best-effort: the fresh initial slice stays up
+    return () => controller.abort();
+    // initialTracks identity marks a new server snapshot (a navigation, or the
+    // router.refresh every mutation issues) — refetch so the tail can't go stale.
+  }, [initialPartial, initialTracks]);
+
+  // Own-scope list: the fresh server slice wins; the background-fetched list
+  // fills in the older remainder (id-deduped — both are newest-first, and a
+  // track outside the newest slice sorts after all of it, so concatenation
+  // preserves order; a possibly-stale tail is corrected when the refetch lands).
+  const ownTracks = useMemo(() => {
+    if (!initialPartial || !ownFull) return initialTracks;
+    const headIds = new Set(initialTracks.map((t) => t.id));
+    return [...initialTracks, ...ownFull.filter((t) => !headIds.has(t.id))];
+  }, [initialTracks, ownFull, initialPartial]);
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
@@ -100,7 +140,7 @@ export default function LibraryBrowser({
   // Typing keeps the previous results visible, dimmed.
   const fresh = resultsKey === viewKey;
   const tracks = browsingOwn
-    ? initialTracks
+    ? ownTracks
     : fresh
       ? results
       : query
@@ -108,6 +148,13 @@ export default function LibraryBrowser({
         : (scopeCache.get(cacheKey) ?? null);
   const dimmed = !browsingOwn && searching && !fresh && !!query;
   const countNoun = query ? "result" : "track";
+  // Own-scope count uses the server total so the partial first paint doesn't
+  // briefly claim a slice-sized library while the full list is still loading.
+  const trackCount = !tracks
+    ? 0
+    : browsingOwn
+      ? Math.max(totalTracks, tracks.length)
+      : tracks.length;
 
   return (
     <>
@@ -145,8 +192,8 @@ export default function LibraryBrowser({
           className={`transition-opacity duration-100 ${dimmed ? "opacity-50" : ""}`}
         >
           <p className="mb-1 text-sm text-fg-muted">
-            {tracks.length} {countNoun}
-            {tracks.length === 1 ? "" : "s"}
+            {trackCount} {countNoun}
+            {trackCount === 1 ? "" : "s"}
           </p>
           <TrackList
             tracks={tracks}

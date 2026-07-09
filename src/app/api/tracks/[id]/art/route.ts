@@ -20,23 +20,26 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await requireUser();
-  if (!user) return unauthorized();
-
   const { id } = await params;
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  const [track] = await db
-    .select({
-      id: tracks.id,
-      ownerId: tracks.ownerId,
-      isPrivate: tracks.isPrivate,
-      artS3Key: tracks.artS3Key,
-      artThumbS3Key: tracks.artThumbS3Key,
-    })
-    .from(tracks)
-    .where(eq(tracks.id, id));
+  // The track row doesn't depend on the session, so fetch both concurrently —
+  // list views fan out many /art requests, each saving a serial DB hop.
+  const [user, [track]] = await Promise.all([
+    requireUser(),
+    db
+      .select({
+        id: tracks.id,
+        ownerId: tracks.ownerId,
+        isPrivate: tracks.isPrivate,
+        artS3Key: tracks.artS3Key,
+        artThumbS3Key: tracks.artThumbS3Key,
+      })
+      .from(tracks)
+      .where(eq(tracks.id, id)),
+  ]);
+  if (!user) return unauthorized();
   if (!track || !track.artS3Key) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }

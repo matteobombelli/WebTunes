@@ -16,17 +16,19 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await requireUser();
-  if (!user) return unauthorized();
-
   const { id } = await params;
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  const [track] = await db
-    .select({ ownerId: tracks.ownerId, isPrivate: tracks.isPrivate })
-    .from(tracks)
-    .where(eq(tracks.id, id));
+  // The track row doesn't depend on the session, so fetch both concurrently.
+  const [user, [track]] = await Promise.all([
+    requireUser(),
+    db
+      .select({ ownerId: tracks.ownerId, isPrivate: tracks.isPrivate })
+      .from(tracks)
+      .where(eq(tracks.id, id)),
+  ]);
+  if (!user) return unauthorized();
   if (!track) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }

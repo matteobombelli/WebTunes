@@ -95,14 +95,29 @@ export function canonicalFriendCopy(friendIds: string[]) {
   )`;
 }
 
-/** The user's own tracks, newest first. */
-export async function listOwnTracks(userId: string): Promise<TrackDTO[]> {
-  const rows = await db
+/** The user's own tracks, newest first. `limit` caps the result (the library
+ *  page's partial first paint); omitted = the full library. */
+export async function listOwnTracks(
+  userId: string,
+  limit?: number
+): Promise<TrackDTO[]> {
+  const query = db
     .select(trackDtoColumns)
     .from(tracks)
     .where(eq(tracks.ownerId, userId))
     .orderBy(desc(tracks.createdAt));
+  const rows = await (limit === undefined ? query : query.limit(limit));
   return rows.map((t) => toTrackDTO(t));
+}
+
+/** How many tracks the user owns — tells the library page whether its partial
+ *  initial payload covers the whole library. */
+export async function countOwnTracks(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(tracks)
+    .where(eq(tracks.ownerId, userId));
+  return row?.count ?? 0;
 }
 
 /**
