@@ -79,6 +79,9 @@ type PlayerState = {
   pendingSimilarSeed: string | null;
   /** Whether the settings modal is open (triggered from PlayerBar/MobileTopBar). */
   settingsOpen: boolean;
+  /** Whether the tutorial tour overlay is open (auto-started on first visit by
+   *  TutorialTour, replayable from the settings modal). */
+  tutorialOpen: boolean;
   isPlaying: boolean;
   volume: number; // 0..1
   /** When true, attenuate each track toward a common loudness target. */
@@ -133,6 +136,7 @@ type PlayerState = {
   /** Clear the pending auto-start seed (consumed by usePlaySimilarAutoStart). */
   _clearPendingSimilar: () => void;
   setSettingsOpen: (open: boolean) => void;
+  setTutorialOpen: (open: boolean) => void;
   toggle: () => void;
   next: () => void;
   prev: () => void;
@@ -167,6 +171,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playSimilarPref: false,
   pendingSimilarSeed: null,
   settingsOpen: false,
+  tutorialOpen: false,
   isPlaying: false,
   volume: 1,
   normalizeVolume: true,
@@ -525,6 +530,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   _clearPendingSimilar: () => set({ pendingSimilarSeed: null }),
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setTutorialOpen: (open) => set({ tutorialOpen: open }),
 
   toggle: () => {
     if (get().index >= 0) set((s) => ({ isPlaying: !s.isPlaying }));

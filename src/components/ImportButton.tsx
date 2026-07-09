@@ -53,7 +53,11 @@ function formatDuration(seconds: number | null): string {
 }
 
 function isActive(job: ImportJobDTO): boolean {
-  return job.status === "resolving" || job.status === "running";
+  return (
+    job.status === "queued" ||
+    job.status === "resolving" ||
+    job.status === "running"
+  );
 }
 
 export default function ImportButton() {
@@ -194,11 +198,19 @@ function LinkTab({ options }: { options: ImportOptions }) {
   const submit = useImportsStore((s) => s.submit);
   const submitting = useImportsStore((s) => s.submitting);
   const cancel = useImportsStore((s) => s.cancel);
-  const job = useImportsStore((s) => s.jobs[0] as ImportJobDTO | undefined);
+  const jobs = useImportsStore((s) => s.jobs);
 
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // At most one job runs at a time (global serial worker); the rest queue
+  // behind it. Show the running job's progress/log — else the newest finished
+  // one — and list what's queued. Jobs arrive newest-first; the queue runs
+  // oldest-first, so reverse it for display.
+  const job: ImportJobDTO | undefined =
+    jobs.find((j) => j.status === "resolving" || j.status === "running") ??
+    jobs.find((j) => j.status !== "queued");
+  const queuedJobs = jobs.filter((j) => j.status === "queued").reverse();
   const busy = !!job && isActive(job);
   const start = async () => {
     setError(null);
@@ -242,11 +254,32 @@ function LinkTab({ options }: { options: ImportOptions }) {
           placeholder="Spotify, Apple Music, or YouTube link (playlist or song)"
           className="flex-1"
         />
-        <Button type="submit" disabled={submitting || busy || !url.trim()}>
-          Import
+        <Button type="submit" disabled={submitting || !url.trim()}>
+          {busy || queuedJobs.length > 0 ? "Queue" : "Import"}
         </Button>
       </form>
       {error && <p className="text-sm text-red-400">{error}</p>}
+
+      {queuedJobs.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {queuedJobs.map((j) => (
+            <li
+              key={j.id}
+              className="flex items-center gap-2 text-xs text-fg-muted"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                Queued: {j.sourceUrl}
+              </span>
+              <button
+                onClick={() => void cancel(j.id)}
+                className="font-medium hover:text-red-400"
+              >
+                Cancel
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {job && (
         <>

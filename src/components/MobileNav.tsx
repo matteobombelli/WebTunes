@@ -38,6 +38,7 @@ export function MobileNav({
             href={href}
             prefetch
             aria-label={label}
+            data-tour={`nav-${href.slice(1)}`}
             className={`flex flex-1 items-center justify-center py-3 ${
               active ? "text-accent-bright" : "text-fg-muted"
             }`}

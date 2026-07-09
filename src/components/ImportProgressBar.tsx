@@ -11,7 +11,11 @@ import { useImportsStore } from "@/stores/imports";
 // after a reload (the job itself lives server-side).
 
 function isActive(job: ImportJobDTO): boolean {
-  return job.status === "resolving" || job.status === "running";
+  return (
+    job.status === "queued" ||
+    job.status === "resolving" ||
+    job.status === "running"
+  );
 }
 
 export default function ImportProgressBar() {
@@ -42,6 +46,10 @@ export default function ImportProgressBar() {
   const duplicates = items.filter((it) => it.status === "duplicate").length;
   const missedItems = items.filter((it) => it.status === "missed");
   const erroredJobs = jobs.filter((j) => j.status === "error");
+  const running = jobs.some(
+    (j) => j.status === "resolving" || j.status === "running"
+  );
+  const queuedCount = jobs.filter((j) => j.status === "queued").length;
   const resolving = busy && items.length === 0;
   const overall =
     items.length === 0 ? 0 : (finished.length / items.length) * 100;
@@ -59,10 +67,16 @@ export default function ImportProgressBar() {
           </span>
           <span className="tabular-nums text-fg-muted">
             {resolving ? (
-              "finding tracks…"
+              running ? "finding tracks…" : "waiting in queue…"
             ) : (
               <>
                 {finished.length}/{items.length}
+                {queuedCount > 0 && (
+                  <span>
+                    {" "}
+                    · {queuedCount} queued
+                  </span>
+                )}
                 {duplicates > 0 && (
                   <span className="text-amber-300">
                     {" "}

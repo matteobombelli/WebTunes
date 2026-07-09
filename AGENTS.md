@@ -159,7 +159,8 @@ setup, and architecture rationale.
   Job state is in-memory like the queues (restart loses the in-flight job;
   re-pasting the link is cheap — ingest's sha256 dedupe skips what landed),
   polled by the client every 2s (`stores/imports.ts` → `ImportProgressBar` in
-  the app layout, which re-attaches after a reload). One active job per user;
+  the app layout, which re-attaches after a reload). Users can queue multiple
+  jobs (FIFO behind the one global worker; `queued` status until picked up);
   playlists cap at 500 tracks; sub-100 kbps sources and below-strictness
   matches are "missed" with a reason, never guessed. The desktop-importer
   path (`/api/tracks/extension-import` + `/api/extension/*`) stays untouched

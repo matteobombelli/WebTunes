@@ -9,6 +9,7 @@ import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import SettingsModal from "@/components/SettingsModal";
 import Sidebar from "@/components/Sidebar";
 import Toast from "@/components/Toast";
+import TutorialTour from "@/components/TutorialTour";
 import UploadProgressBar from "@/components/UploadProgressBar";
 
 export default async function AppLayout({
@@ -20,7 +21,13 @@ export default async function AppLayout({
   // pendingRequestsFor drives the incoming-request notification dot in the nav;
   // it's cache()d, so this shares the discover page's query within one request.
   const [
-    { normalizeVolume, similarVariation, similarDrift, hideFriendDuplicates },
+    {
+      normalizeVolume,
+      similarVariation,
+      similarDrift,
+      hideFriendDuplicates,
+      tutorialSeen,
+    },
     pendingRequests,
   ] = await Promise.all([getUserSettings(user.id), pendingRequestsFor(user.id)]);
   const hasIncomingRequests = pendingRequests.some(
@@ -56,6 +63,7 @@ export default async function AppLayout({
         userEmail={user.email}
         userName={user.name}
       />
+      <TutorialTour initialSeen={tutorialSeen} />
     </div>
   );
 }

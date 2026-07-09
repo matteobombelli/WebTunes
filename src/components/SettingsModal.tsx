@@ -362,6 +362,17 @@ export default function SettingsModal({
             browsing everything or friends.
           </p>
 
+          <button
+            onClick={() => {
+              close();
+              usePlayerStore.getState().setTutorialOpen(true);
+            }}
+            className="mt-5 flex w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5 text-left text-sm text-fg hover:bg-surface-2"
+          >
+            <span>Show the tutorial</span>
+            <ChevronRightIcon size={14} className="text-fg-muted" />
+          </button>
+
           <div className="mt-6 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-fg">WebTunes Importer</h3>
             <p className="mt-1 text-xs text-fg-muted">

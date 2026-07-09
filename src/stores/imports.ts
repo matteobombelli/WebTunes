@@ -27,8 +27,8 @@ type ImportsState = {
   submitting: boolean;
   /** Fetch current jobs once and start polling if any are active. */
   hydrate: () => void;
-  /** Submit a URL for import. Resolves once the job is accepted; throws with
-   * the server's message (400 bad URL / 409 already running) otherwise. */
+  /** Submit a URL for import. Resolves once the job is queued; throws with
+   * the server's message (400 bad URL) otherwise. */
   submit: (url: string, opts: ImportOptions) => Promise<void>;
   cancel: (jobId: string) => Promise<void>;
   /** Dismisses finished jobs from the progress bar. */
@@ -36,7 +36,11 @@ type ImportsState = {
 };
 
 function isActive(job: ImportJobDTO): boolean {
-  return job.status === "resolving" || job.status === "running";
+  return (
+    job.status === "queued" ||
+    job.status === "resolving" ||
+    job.status === "running"
+  );
 }
 
 // Module-level like uploads' activeXhrs: one poll loop no matter how many

@@ -33,8 +33,7 @@ import type {
 //
 // ONE global worker (not per-user): every download leaves this box's single
 // IP, and YouTube rate-limits aggressively — same politeness rationale as
-// recognize-queue. Per-user fairness comes from the one-active-job-per-user
-// guard instead.
+// recognize-queue. Jobs queue FIFO behind it; a user can queue several.
 
 export type ImportOptions = {
   quality: ImportQuality;
@@ -87,7 +86,11 @@ const queue: Job[] = [];
 let workerRunning = false;
 
 function isActive(job: Job): boolean {
-  return job.status === "resolving" || job.status === "running";
+  return (
+    job.status === "queued" ||
+    job.status === "resolving" ||
+    job.status === "running"
+  );
 }
 
 /** Drop finished jobs after an hour — checked lazily, no timer. */
@@ -127,17 +130,12 @@ export function startImport(
   if (!kind) {
     return { ok: false, error: "Enter a YouTube, Spotify, or Apple Music URL" };
   }
-  for (const job of jobs.values()) {
-    if (job.userId === userId && isActive(job)) {
-      return { ok: false, error: "An import is already running" };
-    }
-  }
   const job: Job = {
     id: crypto.randomUUID(),
     userId,
     sourceUrl: url,
     kind,
-    status: "resolving",
+    status: "queued",
     error: null,
     items: [],
     log: [],
@@ -254,6 +252,7 @@ async function withRetry<T>(
 async function runJob(job: Job): Promise<void> {
   const signal = job.abort.signal;
   try {
+    job.status = "resolving";
     job.items = await resolveItems(job);
     if (job.items.length === 0) {
       job.status = "error";

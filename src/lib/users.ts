@@ -111,6 +111,7 @@ export type UserSettings = {
   normalizeVolume: boolean;
   similarVariation: number;
   similarDrift: boolean;
+  tutorialSeen: boolean;
 };
 
 // Per-request cache(): read once even though the (app) layout and the page it
@@ -125,6 +126,7 @@ export const getUserSettings = cache(async function getUserSettings(
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
       similarDrift: users.similarDrift,
+      tutorialSeen: users.tutorialSeen,
     })
     .from(users)
     .where(eq(users.id, userId));
@@ -134,6 +136,7 @@ export const getUserSettings = cache(async function getUserSettings(
       normalizeVolume: true,
       similarVariation: 3,
       similarDrift: true,
+      tutorialSeen: true,
     }
   );
 });
@@ -151,6 +154,7 @@ export async function updateUserSettings(
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
       similarDrift: users.similarDrift,
+      tutorialSeen: users.tutorialSeen,
     });
   return row;
 }

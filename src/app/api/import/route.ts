@@ -27,11 +27,7 @@ export async function POST(req: NextRequest) {
 
   const result = startImport(user.id, url, { quality, strictness, versionPref });
   if (!result.ok) {
-    const conflict = result.error === "An import is already running";
-    return NextResponse.json(
-      { error: result.error },
-      { status: conflict ? 409 : 400 }
-    );
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
   return NextResponse.json({ jobId: result.jobId }, { status: 202 });
 }

@@ -8,6 +8,7 @@ const patchSchema = z.object({
   normalizeVolume: z.boolean().optional(),
   similarVariation: z.number().int().min(0).max(4).optional(),
   similarDrift: z.boolean().optional(),
+  tutorialSeen: z.boolean().optional(),
 });
 
 export async function GET() {

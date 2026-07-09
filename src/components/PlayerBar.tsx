@@ -919,12 +919,14 @@ export default function PlayerBar({
     action: () => void,
     label: string,
     icon: React.ReactNode,
-    className: string
+    className: string,
+    dataTour?: string
   ) => (
     <button
       onClick={action}
       aria-label={label}
       title={label}
+      data-tour={dataTour}
       className={`flex items-center justify-center rounded-full ${className}`}
     >
       {icon}
@@ -1204,7 +1206,8 @@ export default function PlayerBar({
               playSimilarOn
                 ? "text-accent-bright hover:text-accent-bright"
                 : "text-fg-muted hover:text-fg"
-            }`
+            }`,
+            "play-similar"
           )}
           {transportButton(
             prev,

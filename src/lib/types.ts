@@ -99,6 +99,7 @@ export type ImportItemStatus =
   | "cancelled";
 
 export type ImportJobStatus =
+  | "queued"
   | "resolving"
   | "running"
   | "done"
