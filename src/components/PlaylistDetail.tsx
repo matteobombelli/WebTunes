@@ -151,15 +151,15 @@ export default function PlaylistDetail({
             >
               {cover}
               <span
-                className={`absolute inset-0 items-center justify-center rounded-lg bg-black/60 text-sm text-fg ${
-                  coverBusy ? "flex" : "hidden group-hover:flex"
+                className={`absolute inset-0 flex items-center justify-center rounded-lg bg-black/60 text-sm text-fg transition-opacity ${
+                  coverBusy ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                 }`}
               >
                 {coverBusy ? "Uploading…" : "Change cover"}
               </span>
               {/* Always-visible affordance for touch/mobile, where there's no
                   hover to reveal the overlay above. */}
-              <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-fg shadow group-hover:hidden">
+              <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-fg shadow transition-opacity group-hover:opacity-0">
                 <PencilIcon size={14} />
               </span>
             </button>
@@ -298,12 +298,13 @@ export default function PlaylistDetail({
           showOwner
           canEdit
           selectable
+          sortable
           onRemove={removeTrack}
           removeLabel="Remove from playlist"
           onReorder={reorderTracks}
         />
       ) : (
-        <TrackList tracks={tracks} showOwner selectable />
+        <TrackList tracks={tracks} showOwner selectable sortable />
       )}
 
       {isOwner && (

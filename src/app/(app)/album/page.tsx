@@ -46,7 +46,7 @@ export default async function AlbumPage({
           )}
         </p>
       )}
-      <TrackList tracks={tracks} showOwner canDelete selectable />
+      <TrackList tracks={tracks} showOwner canDelete selectable sortable />
     </div>
   );
 }

@@ -525,7 +525,17 @@ const QueueRow = memo(function QueueRow({
           ) : (
             "Unknown artist"
           )}
-          {track.ownerName ? ` · from ${track.ownerName}` : ""}
+          {track.ownerName ? (
+            <>
+              {" · from "}
+              <Link
+                href={`/discover/${track.ownerId}`}
+                className="hover:text-accent-bright"
+              >
+                {track.ownerName}
+              </Link>
+            </>
+          ) : null}
         </p>
       </div>
       {isCurrent ? (

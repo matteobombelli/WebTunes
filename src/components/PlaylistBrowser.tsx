@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import type { PlaylistDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import PlaylistCard from "@/components/PlaylistCard";
-import { cardClass } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SCOPES } from "@/components/ui/scopes";
@@ -21,6 +20,31 @@ function forScope(all: PlaylistDTO[], scope: string): PlaylistDTO[] {
   return scope === "friends" ? all.filter((p) => p.ownerName) : all;
 }
 
+// Client-side orderings for the card grid; "recent" keeps the server's
+// updatedAt order.
+const PLAYLIST_SORTS = [
+  { value: "recent", label: "Recent" },
+  { value: "name", label: "A–Z" },
+  { value: "tracks", label: "Tracks" },
+] as const;
+type PlaylistSortKey = (typeof PLAYLIST_SORTS)[number]["value"];
+
+function sortPlaylists(
+  playlists: PlaylistDTO[],
+  key: PlaylistSortKey
+): PlaylistDTO[] {
+  if (key === "recent") return playlists;
+  const copy = [...playlists];
+  if (key === "name") {
+    copy.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  } else {
+    copy.sort((a, b) => (b.trackCount ?? 0) - (a.trackCount ?? 0));
+  }
+  return copy;
+}
+
 // Default view is the server-rendered own playlists (initialPlaylists). Any
 // non-own scope switches to client-fetched results, mirroring LibraryBrowser.
 export default function PlaylistBrowser({
@@ -29,6 +53,7 @@ export default function PlaylistBrowser({
   initialPlaylists: PlaylistDTO[];
 }) {
   const [scope, setScope] = usePersistedScope("webtunes:playlists-scope");
+  const [sortKey, setSortKey] = useState<PlaylistSortKey>("recent");
   const [results, setResults] = useState<PlaylistDTO[] | null>(null);
   // Which scope `results` belongs to, so a scope change can tell fresh results
   // from the previous scope's (and fall back to the cache meanwhile).
@@ -72,24 +97,32 @@ export default function PlaylistBrowser({
       : cachedAllPlaylists
         ? forScope(cachedAllPlaylists, scope)
         : null;
+  const view = playlists ? sortPlaylists(playlists, sortKey) : null;
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SegmentedControl options={SCOPES} value={scope} onChange={setScope} />
+        <div className="ml-auto">
+          <SegmentedControl
+            options={PLAYLIST_SORTS}
+            value={sortKey}
+            onChange={setSortKey}
+          />
+        </div>
       </div>
 
-      {playlists === null ? (
+      {view === null ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className={`p-3 ${cardClass}`}>
+            <div key={i}>
               <Skeleton className="aspect-square w-full rounded-md" />
               <Skeleton className="mt-2 h-4 w-3/4" />
               <Skeleton className="mt-1.5 h-3 w-1/2" />
             </div>
           ))}
         </div>
-      ) : playlists.length === 0 ? (
+      ) : view.length === 0 ? (
         <p className="py-8 text-center text-sm text-fg-muted">
           {!browsingOwn && loadFailed && resultsKey === scope
             ? "Couldn’t load playlists — check your connection."
@@ -99,7 +132,7 @@ export default function PlaylistBrowser({
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {playlists.map((p, i) => (
+          {view.map((p, i) => (
             <div
               key={p.id}
               className="animate-fade-in-up"

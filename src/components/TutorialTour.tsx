@@ -201,7 +201,7 @@ export default function TutorialTour({ initialSeen }: { initialSeen: boolean }) 
 
   const card = (
     <div
-      className="pointer-events-auto rounded-xl border border-border bg-surface-1 p-4 shadow-2xl"
+      className="animate-pop-in pointer-events-auto rounded-xl border border-border bg-surface-1 p-4 shadow-2xl"
       style={{ width: cardWidth }}
     >
       <p className="text-xs text-fg-subtle">
@@ -242,7 +242,7 @@ export default function TutorialTour({ initialSeen }: { initialSeen: boolean }) 
   // top of the spotlight while the tour runs.
   return (
     <div
-      className="fixed inset-0 z-[85]"
+      className="animate-fade-in fixed inset-0 z-[85]"
       role="dialog"
       aria-modal="true"
       aria-label="WebTunes tutorial"

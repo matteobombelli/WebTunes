@@ -1,4 +1,3 @@
-import { cardClass } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 // Shown instantly (via Suspense) while the playlists page query runs. Mirrors
@@ -12,7 +11,7 @@ export default function Loading() {
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className={`p-3 ${cardClass}`}>
+          <div key={i}>
             <Skeleton className="aspect-square w-full rounded-md" />
             <Skeleton className="mt-2 h-4 w-3/4" />
             <Skeleton className="mt-1.5 h-3 w-1/2" />

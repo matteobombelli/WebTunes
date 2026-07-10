@@ -189,7 +189,7 @@ export default function DiscoverSection({
             key={track.id}
             onClick={() => playThenRadio(track)}
             title={track.title}
-            className={`relative aspect-square w-full overflow-hidden rounded-lg bg-surface-2 transition duration-200 ease-out hover:z-10 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/40 ${
+            className={`relative aspect-square w-full overflow-hidden rounded-lg bg-surface-2 transition duration-200 ease-out hover:z-10 hover:scale-105 ${
               i >= 4 ? "hidden sm:block" : ""
             } ${current?.id === track.id ? "ring-2 ring-accent" : ""}`}
           >

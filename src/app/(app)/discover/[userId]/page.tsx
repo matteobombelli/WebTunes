@@ -44,7 +44,7 @@ export default async function FriendLibraryPage({
         <p className="mb-3 text-sm text-fg-muted">
           {trackDTOs.length} track{trackDTOs.length === 1 ? "" : "s"} shared with you
         </p>
-        <TrackList tracks={trackDTOs} />
+        <TrackList tracks={trackDTOs} sortable />
       </div>
     </div>
   );

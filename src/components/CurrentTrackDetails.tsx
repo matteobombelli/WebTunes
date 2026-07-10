@@ -67,7 +67,16 @@ export default function CurrentTrackDetails({
         ) : null}
       </p>
       {track.ownerName ? (
-        <p className="truncate text-xs text-fg-subtle">from {track.ownerName}</p>
+        <p className="truncate text-xs text-fg-subtle">
+          from{" "}
+          <Link
+            href={`/discover/${track.ownerId}`}
+            onClick={onNavigate}
+            className="hover:text-accent-bright"
+          >
+            {track.ownerName}
+          </Link>
+        </p>
       ) : null}
     </div>
   );

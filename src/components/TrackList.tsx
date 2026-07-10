@@ -223,7 +223,16 @@ const TrackRow = memo(function TrackRow({
       </td>
       {showOwner && (
         <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
-          {track.ownerName ?? "You"}
+          {track.ownerName ? (
+            <Link
+              href={`/discover/${track.ownerId}`}
+              className="hover:text-accent-bright"
+            >
+              {track.ownerName}
+            </Link>
+          ) : (
+            "You"
+          )}
         </td>
       )}
       <td className="py-2.5 text-center tabular-nums text-fg-muted sm:py-2">
@@ -389,7 +398,7 @@ export default function TrackList({
   canEdit?: boolean;
   /** Enables checkbox multi-select with a bulk add-to-playlist bar. */
   selectable?: boolean;
-  /** Enables click-to-sort column headers (library view). */
+  /** Enables click-to-sort column headers. */
   sortable?: boolean;
   /** Custom remove handler (e.g. remove from playlist instead of deleting). */
   onRemove?: (track: TrackDTO) => Promise<void>;
@@ -413,9 +422,9 @@ export default function TrackList({
   const [sort, setSort] = useState<SortState>(null);
 
   // Drag-to-reorder is opt-in like select, and mutually exclusive with it. Only
-  // offered when a persist handler is wired and the list isn't user-sorted, so
-  // the visual order is the true server order the reorder PUT permutation wants.
-  const reorderable = !!onReorder && !sortable && tracks.length > 1;
+  // offered when a persist handler is wired; entering it clears any active sort
+  // so the visual order is the true server order the reorder PUT permutation wants.
+  const reorderable = !!onReorder && tracks.length > 1;
   const [reorderMode, setReorderMode] = useState(false);
   // Optimistic order during a drag; re-synced whenever the parent passes a fresh
   // `tracks` array (e.g. after router.refresh). Render-phase reset, like prevView.
@@ -680,6 +689,7 @@ export default function TrackList({
           {reorderable && (
             <button
               onClick={() => {
+                setSort(null);
                 setReorderMode(true);
                 exitSelectMode();
               }}

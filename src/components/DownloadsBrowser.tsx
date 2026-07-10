@@ -14,6 +14,7 @@ import {
 } from "@/components/icons";
 import PlaylistCover from "@/components/PlaylistCover";
 import TrackArt from "@/components/TrackArt";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 
 // The offline workhorse: everything rendered here comes from the downloads
@@ -158,6 +159,14 @@ const PlaylistDetail = memo(function PlaylistDetail({
 // cards use their uuid, so no collision is possible.
 const LIBRARY = "library";
 
+// Client-side orderings for the downloaded-songs list.
+const LIBRARY_SORTS = [
+  { value: "title", label: "Title" },
+  { value: "artist", label: "Artist" },
+  { value: "size", label: "Size" },
+] as const;
+type LibrarySortKey = (typeof LIBRARY_SORTS)[number]["value"];
+
 export default function DownloadsBrowser() {
   const ready = useDownloadsStore((s) => s.ready);
   const tracksById = useDownloadsStore((s) => s.tracks);
@@ -169,6 +178,7 @@ export default function DownloadsBrowser() {
   const removeAll = useDownloadsStore((s) => s.removeAll);
   // Which card is open: null = card grid, LIBRARY, or a playlist id.
   const [open, setOpen] = useState<string | null>(null);
+  const [librarySort, setLibrarySort] = useState<LibrarySortKey>("title");
 
   // Idempotent; the layout's registrar normally beat us to it, but this page
   // may be the first (or only) thing that loads offline.
@@ -178,15 +188,20 @@ export default function DownloadsBrowser() {
 
   // Stable derived lists + remove handler so the memoized sections don't
   // re-render on every download-progress tick (only on actual data changes).
-  const pinned = useMemo(
-    () =>
-      Object.values(tracksById)
-        .filter((t) => t.pinned)
-        .sort((a, b) =>
-          a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
-        ),
-    [tracksById]
-  );
+  const pinned = useMemo(() => {
+    const list = Object.values(tracksById).filter((t) => t.pinned);
+    if (librarySort === "size") {
+      list.sort((a, b) => (b.fileSize ?? 0) - (a.fileSize ?? 0));
+    } else {
+      // "￿" sentinel sorts tracks with no artist last, like TrackList.
+      const text = (t: DownloadedTrack) =>
+        librarySort === "artist" ? (t.artist ?? "￿") : t.title;
+      list.sort((a, b) =>
+        text(a).localeCompare(text(b), undefined, { sensitivity: "base" })
+      );
+    }
+    return list;
+  }, [tracksById, librarySort]);
   const playlists = useMemo(
     () =>
       Object.values(playlistsById).sort((a, b) =>
@@ -272,6 +287,15 @@ export default function DownloadsBrowser() {
                 <span className="text-xs text-fg-subtle">
                   {pinned.length} song{pinned.length === 1 ? "" : "s"}
                 </span>
+                {pinned.length > 1 && (
+                  <div className="ml-auto">
+                    <SegmentedControl
+                      options={LIBRARY_SORTS}
+                      value={librarySort}
+                      onChange={setLibrarySort}
+                    />
+                  </div>
+                )}
               </div>
               {pinned.length === 0 ? (
                 <p className="py-8 text-center text-sm text-fg-muted">

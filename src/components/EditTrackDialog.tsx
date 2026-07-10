@@ -133,7 +133,7 @@ function EditTrackForm({
           ) : (
             <TrackArt track={track} size="h-16 w-16" iconSize={28} thumb />
           )}
-          <span className="absolute inset-0 hidden items-center justify-center rounded bg-black/60 text-[10px] font-medium text-fg group-hover:flex">
+          <span className="absolute inset-0 flex items-center justify-center rounded bg-black/60 text-[10px] font-medium text-fg opacity-0 transition-opacity group-hover:opacity-100">
             Change
           </span>
         </button>
