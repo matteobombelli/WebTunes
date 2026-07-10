@@ -146,10 +146,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
   await db.transaction(async (tx) => {
     // One set-based statement instead of one UPDATE per track: a drag-drop in a
     // large playlist would otherwise hold the transaction (and row locks) across
-    // hundreds of sequential round-trips.
+    // hundreds of sequential round-trips. sql.param keeps the id array a single
+    // $1::uuid[] parameter — plain ${array} interpolation expands to ($1, $2, …),
+    // which Postgres can't cast to uuid[].
     await tx.execute(sql`
       update ${playlistTracks} set "position" = v.ord - 1
-      from unnest(${parsed.data.trackIds}::uuid[]) with ordinality as v(track_id, ord)
+      from unnest(${sql.param(parsed.data.trackIds)}::uuid[]) with ordinality as v(track_id, ord)
       where ${playlistTracks.playlistId} = ${id}
         and ${playlistTracks.trackId} = v.track_id
     `);
