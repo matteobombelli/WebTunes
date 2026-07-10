@@ -205,7 +205,16 @@ export default function PlayerBar({
   // Last currentTime pushed to the store, so onTimeUpdate can throttle the
   // 4-30 Hz timeupdate down to ~4 Hz of store writes (see onTimeUpdate).
   const lastProgressRef = useRef(0);
+  // The track id the <audio> src was last loaded for, so the load effect can
+  // skip the src reload (a refetch) when only the queue slot changed.
+  const loadedTrackIdRef = useRef<string | null>(null);
   const track = useCurrentTrack();
+  // The current queue SLOT's identity: the same track can occupy multiple
+  // slots, so advancing between duplicates changes uid but not track.id — the
+  // load effect keys on this.
+  const currentUid = usePlayerStore((s) =>
+    s.index >= 0 ? s.queue[s.index].uid : null
+  );
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
@@ -523,6 +532,23 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
+    // Same track in a different queue slot (a duplicate entry, or re-picking
+    // the playing track): the src is already loaded, so restart in place
+    // instead of reloading (a refetch). The effect keys on the slot uid
+    // because track.id can't tell two slots holding the same track apart —
+    // an advance between duplicates never refired this effect (and isPlaying
+    // never dips, so no other effect fires), stopping playback at the first
+    // slot's end.
+    if (loadedTrackIdRef.current === track.id) {
+      const autoAdvance = autoAdvanceRef.current;
+      autoAdvanceRef.current = false; // consume the flag
+      recoverAttemptsRef.current = 0; // fresh recovery budget, like a load
+      audio.currentTime = 0;
+      if (usePlayerStore.getState().isPlaying && audio.paused)
+        attemptPlay(autoAdvance);
+      return;
+    }
+    loadedTrackIdRef.current = track.id;
     // A src swap on a still-playing element queues a 'pause' event; tag it as
     // expected so onPause doesn't mistake it for an involuntary interruption.
     if (!audio.paused) expectedPauseRef.current = true;
@@ -559,7 +585,7 @@ export default function PlayerBar({
     const autoAdvance = autoAdvanceRef.current;
     autoAdvanceRef.current = false; // consume the flag
     if (usePlayerStore.getState().isPlaying) attemptPlay(autoAdvance);
-  }, [track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const audio = audioRef.current;
