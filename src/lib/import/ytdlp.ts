@@ -148,6 +148,9 @@ export async function probeVideo(
   let bestAudioKbps = 0;
   for (const f of (info.formats ?? []) as any[]) {
     if (!f?.acodec || f.acodec === "none") continue;
+    // Muxed (audio+video) formats report a tbr that includes the video bitrate,
+    // which would inflate the floor check — only audio-only formats count.
+    if (f.vcodec && f.vcodec !== "none") continue;
     const rate = f.abr ?? f.tbr ?? 0;
     if (rate > bestAudioKbps) bestAudioKbps = rate;
   }
@@ -172,8 +175,10 @@ const MIME_BY_EXT: Record<string, string> = {
 /**
  * Download one video's audio into the caller-owned dir. Quality mirrors the
  * desktop importer: "128"/"192" transcode to MP3, "opus" repackages YouTube's
- * native Opus stream (lossless), "m4a" copies the native AAC stream (lossless,
- * fails when the video has none rather than re-encoding).
+ * native Opus stream — or, when the video has none, stream-copies the best
+ * audio into its native container instead (still lossless, never re-encoded) —
+ * "m4a" copies the native AAC stream (lossless, fails when the video has none
+ * rather than re-encoding).
  */
 export async function downloadAudio(opts: {
   url: string;
@@ -196,7 +201,9 @@ export async function downloadAudio(opts: {
     "download:PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes,progress.total_bytes_estimate)s",
   ];
   if (opts.quality === "opus") {
-    args.push("-f", "bestaudio[acodec=opus]/bestaudio", "-x", "--audio-format", "opus");
+    // No --audio-format: bare -x stream-copies into the codec's native
+    // container (opus→.opus, aac→.m4a), so the AAC fallback isn't re-encoded.
+    args.push("-f", "bestaudio[acodec=opus]/bestaudio", "-x");
   } else if (opts.quality === "m4a") {
     // AAC-only so the copy is truly lossless (no Opus→AAC re-encode).
     args.push("-f", "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]");
@@ -233,7 +240,13 @@ export async function downloadAudio(opts: {
       },
     });
   } catch (err) {
-    if (opts.quality === "m4a" && !opts.signal.aborted) {
+    // Only the format-selection failure means "no AAC stream" — anything else
+    // (unavailable video, exhausted 429 retries) keeps its real message.
+    if (
+      opts.quality === "m4a" &&
+      err instanceof Error &&
+      err.message.includes("Requested format is not available")
+    ) {
       throw new Error(
         "no lossless .m4a (AAC) stream available — try Best (Opus) instead",
         { cause: err }

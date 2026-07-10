@@ -251,7 +251,7 @@ function LinkTab({ options }: { options: ImportOptions }) {
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="Spotify, Apple Music, or YouTube link (playlist or song)"
+          placeholder="Spotify, Apple Music, or YouTube link (album, playlist, or song)"
           className="flex-1"
         />
         <Button type="submit" disabled={submitting || !url.trim()}>

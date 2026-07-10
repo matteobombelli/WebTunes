@@ -10,6 +10,17 @@
 
 export type SourceKind = "youtube" | "spotify" | "apple";
 
+// A YouTube URL is the only user input passed verbatim to yt-dlp, whose
+// generic extractor will fetch arbitrary hosts — so it gets a strict hostname
+// allowlist, unlike the Spotify/Apple branches (id-extraction only, above).
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtu.be",
+]);
+
 /** One track's metadata, identical shape from every source. */
 export type SourceTrack = {
   artist: string;
@@ -22,14 +33,18 @@ export type SourceTrack = {
 export function classifyUrl(url: string): SourceKind | null {
   if (
     url.includes("open.spotify.com") &&
-    /(playlist|track)\/([A-Za-z0-9]+)/.test(url)
+    /(playlist|album|track)\/([A-Za-z0-9]+)/.test(url)
   ) {
     return "spotify";
   }
   if (url.includes("music.apple.com") && /\/(playlist|album|song)\//.test(url)) {
     return "apple";
   }
-  if (url.includes("youtube.com") || url.includes("youtu.be")) return "youtube";
+  try {
+    if (YOUTUBE_HOSTS.has(new URL(url).hostname)) return "youtube";
+  } catch {
+    // not a parseable URL — fall through
+  }
   return null;
 }
 
@@ -65,7 +80,10 @@ function largestImage(images: any[] | undefined, widthKey = "width"): string {
   return best?.url ?? "";
 }
 
-async function spotifyEmbedState(itemId: string, kind: "playlist" | "track") {
+async function spotifyEmbedState(
+  itemId: string,
+  kind: "playlist" | "album" | "track"
+) {
   const html = await get(`https://open.spotify.com/embed/${kind}/${itemId}`);
   // [\s\S] instead of the `s` flag — tsconfig targets pre-es2018.
   const m = html.match(
@@ -149,6 +167,21 @@ async function spotifyPlaylist(playlistId: string): Promise<SourceTrack[]> {
   }
 }
 
+async function spotifyAlbum(albumId: string): Promise<SourceTrack[]> {
+  // The album embed carries the full track list plus the album name and
+  // cover, so no pathfinder call is needed (unlike playlists).
+  const ent = (await spotifyEmbedState(albumId, "album")).data.entity;
+  const album = ent.name ?? ent.title ?? "";
+  const artUrl = largestImage(ent.visualIdentity?.image, "maxWidth");
+  return (ent.trackList ?? []).map((t: any) => ({
+    artist: t.subtitle ?? "",
+    title: t.title,
+    album,
+    artUrl,
+    duration: (t.duration ?? 0) / 1000,
+  }));
+}
+
 async function spotifySingle(trackId: string): Promise<SourceTrack[]> {
   const ent = (await spotifyEmbedState(trackId, "track")).data.entity;
   const images: any[] = ent.visualIdentity?.image ?? [];
@@ -166,6 +199,8 @@ async function spotifySingle(trackId: string): Promise<SourceTrack[]> {
 export async function spotifyTracks(url: string): Promise<SourceTrack[]> {
   const track = url.match(/track\/([A-Za-z0-9]+)/);
   if (track) return spotifySingle(track[1]);
+  const album = url.match(/album\/([A-Za-z0-9]+)/);
+  if (album) return spotifyAlbum(album[1]);
   const playlist = url.match(/playlist\/([A-Za-z0-9]+)/);
   if (!playlist) throw new Error("Unrecognized Spotify URL");
   return spotifyPlaylist(playlist[1]);

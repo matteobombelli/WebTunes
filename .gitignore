@@ -63,3 +63,7 @@ next-env.d.ts
 # Snapshot/audit logs written by scripts/reconcile-r2.mjs (runtime artifacts)
 /reconcile-r2-review.jsonl
 /reconcile-r2-revert.jsonl
+
+# Review/revert logs from the one-off essentials album/art fix (2026-07-09)
+/fix-essentials-review.jsonl
+/fix-essentials-revert.jsonl

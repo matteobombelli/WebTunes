@@ -8,6 +8,7 @@ import type { ImportVersionPref } from "@/lib/types";
 
 export const DEFAULT_STRICTNESS = 0.7; // match-score floor, user-adjustable 0..1
 const DURATION_TOLERANCE = 15; // seconds
+const DURATION_REJECT = 90; // seconds; beyond this a candidate is discarded
 const SEARCH_RESULTS = 10; // candidates to scan per track when matching
 export const MIN_SOURCE_KBPS = 100; // drop sources whose best audio is below this
 
@@ -84,7 +85,20 @@ function ratio(a: string, b: string): number {
   return (2 * matchingChars(sa, sb)) / (sa.length + sb.length);
 }
 
-export function matchScore(track: SourceTrack, entry: FlatEntry): number {
+/** Score a candidate against the track's metadata; null when the candidate is
+ * so far off the expected duration (an extended mix, a full-album video) that
+ * no title similarity should save it. */
+export function matchScore(
+  track: SourceTrack,
+  entry: FlatEntry,
+  pref: ImportVersionPref
+): number | null {
+  const delta =
+    track.duration && entry.duration
+      ? Math.abs(entry.duration - track.duration)
+      : null;
+  if (delta !== null && delta > DURATION_REJECT) return null;
+
   const want = normalize(`${track.artist} ${track.title}`);
   const title = normalize(entry.title);
   // Official "Artist - Topic"/VEVO uploads often carry only the song name in
@@ -92,12 +106,38 @@ export function matchScore(track: SourceTrack, entry: FlatEntry): number {
   // the better fit; a junk channel just makes that variant score lower.
   const channel = normalize(entry.uploader);
   let score = Math.max(ratio(want, title), ratio(want, `${title} ${channel}`.trim()));
+
+  // Version markers the candidate carries but the source title doesn't flag a
+  // wrong version — checked on the raw titles, since normalize() strips the
+  // "(Nightcore Remix)" brackets they usually live in. When pref is set,
+  // versionAllowed has already filtered; this is what protects pref "none".
+  const rawTitle = entry.title.toLowerCase();
+  const rawWant = track.title.toLowerCase();
+  if (JUNK_PATTERNS.test(rawTitle) && !JUNK_PATTERNS.test(rawWant)) score -= 0.4;
   if (
-    track.duration &&
-    entry.duration &&
-    Math.abs(entry.duration - track.duration) > DURATION_TOLERANCE
+    pref !== "live" &&
+    LIVE_PATTERNS.test(rawTitle) &&
+    !LIVE_PATTERNS.test(rawWant)
   ) {
-    score -= 0.2;
+    score -= 0.4;
+  }
+
+  // Official channels carry the catalog audio — a tie-break edge over
+  // re-uploads, too small to rescue a bad title match.
+  if (
+    channel &&
+    (channel === normalize(track.artist) ||
+      channel.endsWith("topic") ||
+      channel.endsWith("vevo"))
+  ) {
+    score += 0.05;
+  }
+
+  if (delta !== null && delta > DURATION_TOLERANCE) {
+    // -0.2 just past the tolerance, ramping to -1 at the reject cutoff.
+    score -=
+      0.2 +
+      0.8 * ((delta - DURATION_TOLERANCE) / (DURATION_REJECT - DURATION_TOLERANCE));
   }
   return score;
 }
@@ -120,18 +160,24 @@ export async function findMatch(
   if (entries.length === 0) {
     return { url: null, reason: `no ${pref} version in top ${SEARCH_RESULTS} results` };
   }
-  let best = entries[0];
+  let best: FlatEntry | null = null;
   let bestScore = -Infinity;
   for (const e of entries) {
-    const score = matchScore(track, e);
-    if (score > bestScore) {
+    const score = matchScore(track, e, pref);
+    if (score !== null && score > bestScore) {
       best = e;
       bestScore = score;
     }
   }
+  if (!best) {
+    return {
+      url: null,
+      reason: `every candidate is >${DURATION_REJECT}s off the expected duration`,
+    };
+  }
   if (bestScore >= threshold) return { url: best.url, score: bestScore };
   return {
     url: null,
-    reason: `below strictness ${threshold.toFixed(2)}, best ${bestScore.toFixed(2)}`,
+    reason: `below strictness ${threshold.toFixed(2)}, best ${bestScore.toFixed(2)}: "${best.title}"`,
   };
 }
