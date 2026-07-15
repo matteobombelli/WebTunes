@@ -67,3 +67,7 @@ next-env.d.ts
 # Review/revert logs from the one-off essentials album/art fix (2026-07-09)
 /fix-essentials-review.jsonl
 /fix-essentials-revert.jsonl
+
+# Review/revert logs from scripts/fix-track-durations.mjs (runtime artifacts)
+/fix-track-durations-review.jsonl
+/fix-track-durations-revert.jsonl
