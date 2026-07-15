@@ -7,6 +7,7 @@ import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
 import { log } from "@/lib/log";
 import { analyzeLoudnessLufs } from "@/lib/loudness";
+import { probeDurationSec } from "@/lib/ffprobe";
 import { cleanTag, extractTrackMetadata } from "@/lib/metadata";
 import { enqueueRecognition } from "@/lib/recognize-queue";
 import { remuxOpusToMp4 } from "@/lib/remux";
@@ -165,6 +166,12 @@ export async function ingestTrack({
   const storedType = remuxed ? remuxed.contentType : originalType;
   const s3Key = `audio/${userId}/${trackId}.${audioExt}`;
 
+  // Measure duration on the EXACT bytes we store (post-remux) so the listed time
+  // always matches what actually plays; music-metadata measured the original
+  // upload buffer, which diverges from the remuxed MP4 for Opus. Best-effort —
+  // fall back to the music-metadata value when ffprobe can't measure it.
+  const durationSec = (await probeDurationSec(audioBody, audioExt)) ?? meta.durationSec;
+
   // Upload audio and cover art together. Art is best-effort and must never fail
   // the track — swallow its errors and drop the key so the row isn't orphaned.
   let artS3Key: string | null = null;
@@ -219,7 +226,7 @@ export async function ingestTrack({
         title,
         artist,
         album,
-        durationSec: meta.durationSec,
+        durationSec,
         loudnessLufs,
         s3Key,
         artS3Key,
