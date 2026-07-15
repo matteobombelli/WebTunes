@@ -17,13 +17,14 @@ function formatTime(totalSeconds: number): string {
  * whole PlayerBar subtree. It also owns the per-tick MediaSession position
  * update for the same reason.
  *
- * `serverDuration` is the upload-measured track length. Some mobile browsers
- * misreport <audio>.duration for Ogg/Opus files (seen ~3x too long: the 48 kHz
- * granule divided by a wrong rate), intermittently — the same track can read a
- * sane duration on one load and an inflated one on the next. When the browser's
- * value disagrees materially we display serverDuration as the total. We do NOT
- * rescale currentTime: on the affected devices it already advances in real
- * seconds even when duration is inflated.
+ * `serverDuration` is the track length measured on upload (ffprobe on the exact
+ * stored bytes), so it's authoritative and matches what the track list shows.
+ * We use it as the displayed total whenever present, falling back to the <audio>
+ * element's own duration only for tracks with no stored value. Browsers misreport
+ * element.duration on some files (Ogg/Opus seen ~3x too long; estimated VBR-MP3
+ * lengths), which made the player's total disagree with the listed time — so the
+ * stored value wins. We do NOT rescale currentTime: it already advances in real
+ * seconds, so the fill (currentTime/total) and seeking stay correct.
  */
 export default function PlayerProgress({
   className,
@@ -37,13 +38,7 @@ export default function PlayerProgress({
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
 
-  const durationUnreliable =
-    serverDuration > 0 &&
-    duration > 0 &&
-    Math.abs(duration - serverDuration) / serverDuration > 0.1;
-  const totalDuration = durationUnreliable
-    ? serverDuration
-    : duration || serverDuration || 0;
+  const totalDuration = serverDuration > 0 ? serverDuration : duration || 0;
   const playedSeconds = currentTime;
 
   // Report the reliable duration + live position to the OS Now Playing UI.
