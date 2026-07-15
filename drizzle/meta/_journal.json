@@ -155,6 +155,13 @@
       "when": 1783611280236,
       "tag": "0021_even_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784154251147,
+      "tag": "0022_illegal_wraith",
+      "breakpoints": true
     }
   ]
 }

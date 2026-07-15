@@ -35,5 +35,7 @@ export async function POST(req: NextRequest) {
     .insert(playlists)
     .values({ ownerId: user.id, name: parsed.data.name })
     .returning();
-  return NextResponse.json(await toPlaylistDTO(playlist, 0), { status: 201 });
+  return NextResponse.json(await toPlaylistDTO(playlist, 0, null, "owner"), {
+    status: 201,
+  });
 }

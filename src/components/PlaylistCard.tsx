@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { PlaylistDTO } from "@/lib/types";
 import PlaylistCover from "@/components/PlaylistCover";
-import { LockIcon } from "@/components/icons";
+import { LockIcon, UsersIcon } from "@/components/icons";
 
 export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
   return (
@@ -24,9 +24,20 @@ export default function PlaylistCard({ playlist }: { playlist: PlaylistDTO }) {
         )}
         <span className="truncate">{playlist.name}</span>
       </p>
-      <p className="truncate text-xs text-fg-subtle">
-        {playlist.ownerName ? `${playlist.ownerName} · ` : ""}
-        {playlist.trackCount ?? 0} track{(playlist.trackCount ?? 0) === 1 ? "" : "s"}
+      <p className="flex items-center gap-1 truncate text-xs text-fg-subtle">
+        {playlist.role === "collaborator" && (
+          <span
+            title="You collaborate on this playlist"
+            className="flex shrink-0 items-center gap-0.5 text-accent-bright"
+          >
+            <UsersIcon size={12} />
+          </span>
+        )}
+        <span className="truncate">
+          {playlist.ownerName ? `${playlist.ownerName} · ` : ""}
+          {playlist.trackCount ?? 0} track
+          {(playlist.trackCount ?? 0) === 1 ? "" : "s"}
+        </span>
       </p>
     </Link>
   );

@@ -5,7 +5,7 @@ import { db, isUniqueViolation } from "@/db";
 import { playlists, playlistTracks, tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
-import { getOwnPlaylist } from "@/lib/playlists";
+import { getEditablePlaylist } from "@/lib/playlists";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  const playlist = await getEditablePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
@@ -112,7 +112,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  const playlist = await getEditablePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }

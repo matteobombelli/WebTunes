@@ -15,9 +15,12 @@ import { SCOPES } from "@/components/ui/scopes";
 let cachedAllPlaylists: PlaylistDTO[] | null = null;
 
 // Friends-only is the accessible set minus own playlists (own playlists carry
-// no ownerName).
+// no ownerName) and minus ones you collaborate on (those live under "Yours",
+// since you can edit them).
 function forScope(all: PlaylistDTO[], scope: string): PlaylistDTO[] {
-  return scope === "friends" ? all.filter((p) => p.ownerName) : all;
+  return scope === "friends"
+    ? all.filter((p) => p.ownerName && p.role !== "collaborator")
+    : all;
 }
 
 // Client-side orderings for the card grid; "recent" keeps the server's

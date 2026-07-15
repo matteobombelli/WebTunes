@@ -34,6 +34,14 @@ export type PlaylistDTO = {
   ownerName?: string | null;
   /** Up to 4 art-bearing track ids, in position order, for the no-cover mosaic. */
   coverTrackIds?: string[];
+  /**
+   * The viewer's relationship to this playlist: "owner", "collaborator" (a
+   * friend the owner granted edit access), or null/absent for a read-only
+   * friend view. Editors (owner or collaborator) may add/remove/reorder tracks,
+   * rename, and change the cover; only the owner controls privacy/delete and
+   * who collaborates.
+   */
+  role?: "owner" | "collaborator" | null;
 };
 
 // `name` is the public username; email is intentionally never exposed to other

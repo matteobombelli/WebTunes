@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { PlaylistDTO, TrackDTO } from "@/lib/types";
+import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useConfirmStore } from "@/stores/confirm";
 import { usePlayerStore } from "@/stores/player";
 import AddTracksDialog from "@/components/AddTracksDialog";
+import CollaboratorsDialog from "@/components/CollaboratorsDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import PlaylistCover from "@/components/PlaylistCover";
+import PlaylistRecommendations from "@/components/PlaylistRecommendations";
 import { LockIcon, PencilIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
@@ -16,11 +18,18 @@ import { Button } from "@/components/ui/Button";
 export default function PlaylistDetail({
   playlist,
   tracks,
+  viewerId,
   isOwner,
+  canEdit,
+  collaborators,
 }: {
   playlist: PlaylistDTO;
   tracks: TrackDTO[];
+  viewerId: string;
   isOwner: boolean;
+  /** Owner OR collaborator: may add/remove/reorder tracks, rename, set cover. */
+  canEdit: boolean;
+  collaborators: FriendDTO[];
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
@@ -32,6 +41,7 @@ export default function PlaylistDetail({
   const [coverBusy, setCoverBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [managingCollab, setManagingCollab] = useState(false);
 
   // Total listen time: sum of known track durations, rounded to minutes,
   // shown as "Xh Ymin" past the hour mark.
@@ -111,6 +121,23 @@ export default function PlaylistDetail({
     router.refresh();
   };
 
+  const leavePlaylist = async () => {
+    const ok = await useConfirmStore
+      .getState()
+      .ask(`Stop collaborating on “${playlist.name}”?`, { confirmLabel: "Leave" });
+    if (!ok) return;
+    try {
+      await api(`/playlists/${playlist.id}/collaborators?userId=${viewerId}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn’t leave playlist");
+      return;
+    }
+    router.push("/playlists");
+    router.refresh();
+  };
+
   const removeTrack = async (track: TrackDTO) => {
     // Failures surface via TrackList's remove/bulkRemove toasts.
     await api(`/playlists/${playlist.id}/tracks/${track.id}`, { method: "DELETE" });
@@ -142,7 +169,7 @@ export default function PlaylistDetail({
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-wrap items-end gap-5">
-        {isOwner ? (
+        {canEdit ? (
           <>
             <button
               onClick={() => coverInputRef.current?.click()}
@@ -177,7 +204,7 @@ export default function PlaylistDetail({
 
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase text-fg-subtle">Playlist</p>
-          {isOwner && renaming ? (
+          {canEdit && renaming ? (
             <form onSubmit={rename} className="flex items-center gap-2">
               {/* Raw input: needs the title's own geometry/size, which would
                   fight the Input primitive's px/py/text utilities. Focus
@@ -203,7 +230,7 @@ export default function PlaylistDetail({
                 Cancel
               </button>
             </form>
-          ) : isOwner ? (
+          ) : canEdit ? (
             // A real button so renaming is reachable by keyboard, with the
             // pencil making the affordance visible on touch (no hover there).
             <button
@@ -256,7 +283,7 @@ export default function PlaylistDetail({
               <ShuffleIcon size={16} />
               Shuffle all
             </Button>
-            {isOwner && (
+            {canEdit && (
               <Button variant="outline" pill onClick={() => setAdding(true)}>
                 Add songs
               </Button>
@@ -281,18 +308,59 @@ export default function PlaylistDetail({
             )}
             {isOwner && (
               <button
+                onClick={() => setManagingCollab(true)}
+                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+                title="Manage collaborators"
+              >
+                <UsersIcon size={16} />
+                {collaborators.length
+                  ? `Collaborators · ${collaborators.length}`
+                  : "Add collaborators"}
+              </button>
+            )}
+            {isOwner && (
+              <button
                 onClick={deletePlaylist}
                 className="text-sm text-fg-muted hover:text-red-400"
               >
                 Delete playlist
               </button>
             )}
+            {!isOwner && canEdit && (
+              <button
+                onClick={leavePlaylist}
+                className="text-sm text-fg-muted hover:text-red-400"
+              >
+                Leave playlist
+              </button>
+            )}
           </div>
+          {/* Collaborator avatars — shown to anyone viewing so it's clear the
+              playlist is shared. */}
+          {collaborators.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs uppercase text-fg-subtle">
+                Collaborators
+              </span>
+              {collaborators.map((c) => (
+                <span
+                  key={c.id}
+                  title={c.name}
+                  className="flex items-center gap-1.5 rounded-full bg-surface-2 py-1 pl-1 pr-2.5 text-sm"
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent-bright">
+                    {c.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="max-w-32 truncate">{c.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         </div>
       </div>
 
-      {isOwner ? (
+      {canEdit ? (
         <TrackList
           tracks={tracks}
           showOwner
@@ -307,12 +375,24 @@ export default function PlaylistDetail({
         <TrackList tracks={tracks} showOwner selectable sortable />
       )}
 
-      {isOwner && (
+      <PlaylistRecommendations playlistId={playlist.id} canEdit={canEdit} />
+
+      {canEdit && (
         <AddTracksDialog
           playlistId={playlist.id}
           existingTrackIds={tracks.map((t) => t.id)}
           open={adding}
           onClose={() => setAdding(false)}
+        />
+      )}
+
+      {isOwner && (
+        <CollaboratorsDialog
+          playlistId={playlist.id}
+          collaborators={collaborators}
+          open={managingCollab}
+          onClose={() => setManagingCollab(false)}
+          onChanged={() => router.refresh()}
         />
       )}
     </div>

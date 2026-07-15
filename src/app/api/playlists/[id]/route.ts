@@ -6,7 +6,9 @@ import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import {
   getAccessiblePlaylist,
+  getEditablePlaylist,
   getOwnPlaylist,
+  getPlaylistRole,
   getPlaylistTracks,
   toPlaylistDTO,
 } from "@/lib/playlists";
@@ -25,11 +27,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
-  const trackDTOs = await getPlaylistTracks(id, user.id);
-  const ownerName =
-    playlist.ownerId === user.id ? null : await getDisplayName(playlist.ownerId);
+  const isOwner = playlist.ownerId === user.id;
+  const [trackDTOs, ownerName, role] = await Promise.all([
+    getPlaylistTracks(id, user.id),
+    isOwner ? Promise.resolve(null) : getDisplayName(playlist.ownerId),
+    getPlaylistRole(id, user.id),
+  ]);
   return NextResponse.json({
-    ...(await toPlaylistDTO(playlist, trackDTOs.length, ownerName)),
+    ...(await toPlaylistDTO(playlist, trackDTOs.length, ownerName, role)),
     tracks: trackDTOs,
   });
 }
@@ -48,7 +53,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  // Editors (owner or collaborator) may rename; toggling privacy is owner-only.
+  const playlist = await getEditablePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
@@ -59,6 +65,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const { name, isPrivate } = parsed.data;
+  if (isPrivate !== undefined && playlist.ownerId !== user.id) {
+    return NextResponse.json(
+      { error: "Only the owner can change privacy" },
+      { status: 403 }
+    );
+  }
   const [updated] = await db
     .update(playlists)
     .set({

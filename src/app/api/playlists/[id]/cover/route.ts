@@ -6,7 +6,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { imageKindFromUpload, validateImageUpload } from "@/lib/image-upload";
 import {
   getAccessiblePlaylist,
-  getOwnPlaylist,
+  getEditablePlaylist,
   toPlaylistDTO,
 } from "@/lib/playlists";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
@@ -43,7 +43,7 @@ export async function POST(
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  const playlist = await getEditablePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }

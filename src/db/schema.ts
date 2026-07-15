@@ -358,5 +358,27 @@ export const playlistTracks = pgTable(
   ]
 );
 
+// Friends the owner has granted edit access to a playlist (collaborative
+// playlists). A collaborator can add/remove/reorder tracks, rename, and change
+// the cover; the owner alone controls privacy, deletion, and who collaborates.
+export const playlistCollaborators = pgTable(
+  "playlist_collaborators",
+  {
+    playlistId: uuid("playlist_id")
+      .notNull()
+      .references(() => playlists.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (pc) => [
+    primaryKey({ columns: [pc.playlistId, pc.userId] }),
+    // Cover the reverse lookup "playlists I collaborate on" (the FK on
+    // playlistId already covers the forward "collaborators of this playlist").
+    index("playlist_collaborators_user_idx").on(pc.userId),
+  ]
+);
+
 export type Track = typeof tracks.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;

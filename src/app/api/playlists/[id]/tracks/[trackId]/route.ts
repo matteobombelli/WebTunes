@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { playlists, playlistTracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { getOwnPlaylist } from "@/lib/playlists";
+import { getEditablePlaylist } from "@/lib/playlists";
 import { isUuid } from "@/lib/validate";
 
 export async function DELETE(
@@ -14,7 +14,7 @@ export async function DELETE(
   if (!user) return unauthorized();
 
   const { id, trackId } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
+  const playlist = await getEditablePlaylist(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
