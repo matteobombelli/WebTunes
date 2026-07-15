@@ -8,7 +8,13 @@ import {
   sql,
 } from "drizzle-orm";
 import { db } from "@/db";
-import { similarExclusions, trackEmbeddings, tracks, users } from "@/db/schema";
+import {
+  playlistTracks,
+  similarExclusions,
+  trackEmbeddings,
+  tracks,
+  users,
+} from "@/db/schema";
 import { autoClusterCentroids } from "@/lib/cluster";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import {
@@ -164,6 +170,35 @@ export async function findRecommendedClusters(
     )
   );
   return draftRoundRobin(lists, limit);
+}
+
+/**
+ * Track recommendations for a playlist: the same multi-centroid recommender as
+ * Discover, but seeded from the playlist's own tracks instead of the viewer's
+ * top plays. Results are access-filtered to the VIEWER (so a friend viewing a
+ * shared playlist only ever sees tracks they could play) and exclude the
+ * playlist's current members plus any `excludeIds` (already-shown ids, for
+ * "refresh / show more"). Returns [] when no member has an embedding yet.
+ *
+ * Seeds are every member track id — the seed embeddings never leave the DB, so
+ * seeding from members the viewer can't personally stream is safe and gives
+ * better centroids; only the access-filtered results are returned.
+ */
+export async function findPlaylistRecommendations(
+  userId: string,
+  playlistId: string,
+  { limit, excludeIds = [] }: { limit: number; excludeIds?: string[] }
+): Promise<TrackDTO[]> {
+  const members = await db
+    .select({ trackId: playlistTracks.trackId })
+    .from(playlistTracks)
+    .where(eq(playlistTracks.playlistId, playlistId));
+  const memberIds = members.map((m) => m.trackId);
+  if (memberIds.length === 0) return [];
+  return findRecommendedClusters(userId, memberIds, {
+    limit,
+    excludeIds: [...memberIds, ...excludeIds],
+  });
 }
 
 /**
