@@ -1270,7 +1270,7 @@ export default function PlayerBar({
           serverDuration={serverDuration}
         />
 
-        <div className="flex w-32 shrink-0 items-center gap-2">
+        <div className="flex w-64 shrink-0 items-center gap-2">
           <span title="Volume" className="flex shrink-0">
             <VolumeIcon size={16} className="text-fg-muted" />
           </span>
