@@ -1278,7 +1278,7 @@ export default function PlayerBar({
             type="range"
             min={0}
             max={1}
-            step={0.05}
+            step="any"
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
             className="h-1 min-w-0 flex-1 accent-accent"
