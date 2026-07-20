@@ -5,7 +5,7 @@
 // S3_* creds come from the process environment when set, otherwise from the
 // first env file present (.env.production locally, .env on the VPS).
 // On Cloudflare R2 the bucket-level CORS calls need an Admin Read & Write
-// token — the app's object-scoped token gets AccessDenied. Export admin
+// token - the app's object-scoped token gets AccessDenied. Export admin
 // S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY (plus S3_BUCKET etc.) to override.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -45,7 +45,7 @@ const env = loadEnv();
 const bucket = env.S3_BUCKET;
 const corsConfig = JSON.parse(readFileSync(join(root, "scripts/s3-cors.json"), "utf8"));
 
-// Client construction must mirror src/lib/s3.ts exactly — the VPS relies on
+// Client construction must mirror src/lib/s3.ts exactly - the VPS relies on
 // S3_ENDPOINT (and dev MinIO on path-style); deriving the endpoint from
 // bucket+region alone resolves to a hostname that doesn't exist there.
 const client = new S3Client({

@@ -1,7 +1,7 @@
 // One-time backfill: generates downscaled JPEG cover thumbnails for tracks that
 // have full art (art_s3_key) but no thumbnail yet (art_thumb_s3_key IS NULL),
 // so list/queue/mini-bar rows stop pulling the full-resolution cover. Mirrors
-// src/lib/thumbnail.ts — keep the ffmpeg args, size, and key scheme in sync.
+// src/lib/thumbnail.ts - keep the ffmpeg args, size, and key scheme in sync.
 //   node scripts/backfill-thumbnails.mjs
 // Requires ffmpeg on PATH. DATABASE_URL + S3_* come from the process environment
 // when set, otherwise from the first env file present.
@@ -59,7 +59,7 @@ const BUCKET = env.S3_BUCKET;
 
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL });
 
-const THUMB_PX = 256; // longest edge — must match src/lib/thumbnail.ts
+const THUMB_PX = 256; // longest edge - must match src/lib/thumbnail.ts
 const THUMB_CONTENT_TYPE = "image/jpeg";
 
 function runFfmpeg(inputPath) {
@@ -153,10 +153,10 @@ for (const { id, owner_id, art_s3_key } of rows) {
     const thumb = await makeThumbnail(art, ext);
     if (!thumb) {
       failed++;
-      console.warn(`  ${id} — thumbnail failed, leaving NULL`);
+      console.warn(`  ${id} - thumbnail failed, leaving NULL`);
       continue;
     }
-    // Deterministic sibling key — must match thumbnailS3Key() in lib/thumbnail.ts.
+    // Deterministic sibling key - must match thumbnailS3Key() in lib/thumbnail.ts.
     const thumbKey = `art/${owner_id}/${id}.thumb.jpg`;
     await s3.send(
       new PutObjectCommand({
@@ -171,10 +171,10 @@ for (const { id, owner_id, art_s3_key } of rows) {
       id,
     ]);
     done++;
-    console.log(`  ${id} — ${(thumb.length / 1024).toFixed(0)}KB thumb`);
+    console.log(`  ${id} - ${(thumb.length / 1024).toFixed(0)}KB thumb`);
   } catch (err) {
     failed++;
-    console.warn(`  ${id} — failed: ${err.message}`);
+    console.warn(`  ${id} - failed: ${err.message}`);
   }
 }
 

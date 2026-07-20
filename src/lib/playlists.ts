@@ -135,7 +135,7 @@ export async function getOwnPlaylist(playlistId: string, userId: string) {
 /**
  * Loads a playlist the user may view: their own, one they collaborate on (even
  * if private), or a non-private playlist owned by an accepted friend. Returns
- * null otherwise. Mutations must still use getOwnPlaylist/getEditablePlaylist —
+ * null otherwise. Mutations must still use getOwnPlaylist/getEditablePlaylist -
  * this is read access only.
  */
 export async function getAccessiblePlaylist(playlistId: string, userId: string) {
@@ -234,8 +234,8 @@ async function withCoverPreviews(
 }
 
 /**
- * A user's editable playlists — their own plus playlists a friend added them to
- * as a collaborator — with track counts, most recently updated first. Own rows
+ * A user's editable playlists - their own plus playlists a friend added them to
+ * as a collaborator - with track counts, most recently updated first. Own rows
  * carry role "owner" (no ownerName); collaborated rows carry role "collaborator"
  * and the owner's name.
  */

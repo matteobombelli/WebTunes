@@ -36,7 +36,7 @@ export function usePlaySimilarRefill() {
     const seedId = st.similarDrift
       ? st.queue[st.index]?.track.id ?? similarSeedId
       : similarSeedId;
-    // Skip only if *this* seed is the one that ran dry — a different drift seed
+    // Skip only if *this* seed is the one that ran dry - a different drift seed
     // gets a fresh chance.
     if (exhaustedSeedRef.current === seedId) return;
 
@@ -47,7 +47,7 @@ export function usePlaySimilarRefill() {
         const s = usePlayerStore.getState();
         if (!s.playSimilar || s.similarSeedId !== similarSeedId) return;
         if (tracks.length > 0) s.advanceSimilar(tracks);
-        // Only stop refilling this seed when the pool is truly empty — a short
+        // Only stop refilling this seed when the pool is truly empty - a short
         // batch (fewer than requested) is still progress; keep going.
         if (tracks.length === 0) exhaustedSeedRef.current = seedId;
       })

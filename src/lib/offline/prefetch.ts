@@ -5,7 +5,7 @@
 // one plays (in the foreground, where the network works) lets the service worker
 // (public/sw.js) serve consecutive background advances from cache with no live
 // fetch. Distinct from wt-audio (user downloads): holds only the current + next
-// few tracks and is best-effort — any failure just falls back to the live
+// few tracks and is best-effort - any failure just falls back to the live
 // (throttled) fetch.
 
 import { streamSrc } from "@/lib/api";
@@ -22,7 +22,7 @@ export const PREFETCH_AHEAD = 3;
  * Warm the next few tracks' audio for cache-served background advances, keeping
  * only the current + those tracks in the prefetch cache. The current id is kept
  * (not just the next) because the just-advanced-to track is served from here
- * until the element has it buffered — pruning to next-only would evict it mid
+ * until the element has it buffered - pruning to next-only would evict it mid
  * hand-off. Warms sequentially (most-imminent first) so it doesn't blast the
  * iOS-throttled network; per-id dedup means a single advance is usually ~one
  * fetch. No-op for already-downloaded tracks (served from wt-audio) and offline.
@@ -45,7 +45,7 @@ export async function prefetchUpcoming(
       if (res.ok) await cache.put(url, res);
     }
   } catch (err) {
-    // best-effort (offline / iOS-throttled is normal — gated debug, not warn)
+    // best-effort (offline / iOS-throttled is normal - gated debug, not warn)
     log.debug(
       "prefetch",
       "warm failed",

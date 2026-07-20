@@ -10,17 +10,17 @@ import { findCoverArt, type CoverArt } from "@/lib/metadata-lookup";
 
 // Acoustic-fingerprint recognition (AcoustID / Chromaprint) for the background
 // recognition worker (lib/recognize-queue.ts). Used to fill MISSING
-// artist/album/cover-art only — it never writes the DB itself (the worker does
+// artist/album/cover-art only - it never writes the DB itself (the worker does
 // the conditional, no-overwrite UPDATEs) and never touches the title.
 //
 // Best-effort, exactly like loudness/CLAP/art: any failure (fpcalc missing,
 // undecodable audio, no AcoustID key, no/low-confidence match, network error)
 // yields null and nothing is written. Only the compact fingerprint leaves the
-// box — never the audio.
+// box - never the audio.
 //
 // SECURITY: cover art comes from untrusted remote hosts (Cover Art Archive /
 // iTunes), so the stored image kind is sniffed from the bytes
-// (imageKindFromBytes), never the URL/Content-Type — the offline SW replays a
+// (imageKindFromBytes), never the URL/Content-Type - the offline SW replays a
 // stored Content-Type from a same-origin cache (stored XSS). Same model as
 // lib/metadata-lookup.ts.
 
@@ -36,7 +36,7 @@ const MIN_SCORE = 0.5;
 
 // AcoustID asks clients to stay under ~3 req/s and Cover Art Archive (served by
 // archive.org) likes ≤1 req/s. The recognition queue runs a single worker, so a
-// shared min-interval gate is almost always a no-op — but it guarantees we never
+// shared min-interval gate is almost always a no-op - but it guarantees we never
 // burst even if something else calls in.
 let lastRequestAt = 0;
 async function politeWait(): Promise<void> {

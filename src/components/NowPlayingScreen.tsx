@@ -76,7 +76,7 @@ export default function NowPlayingScreen({
 
   // Only derive the cover gradient while the sheet is on-screen. Otherwise this
   // hook re-fetches /art-url and re-downloads the full-res cover (then re-runs a
-  // canvas decode) on every track change even when the sheet is closed — which
+  // canvas decode) on every track change even when the sheet is closed - which
   // is always, on desktop, where it's `md:hidden`. Gating on `mounted` (not
   // `open`) keeps the gradient through the close slide so the bg doesn't flash.
   const gradient = useArtGradient(mounted ? track : null);
@@ -109,7 +109,7 @@ export default function NowPlayingScreen({
 
   if (!mounted || !track) return null;
 
-  // Attached to the whole sheet (nothing in it scrolls — body scroll is locked
+  // Attached to the whole sheet (nothing in it scrolls - body scroll is locked
   // above), so a downward swipe dismisses from anywhere. Gestures starting on a
   // control are ignored: a seek-slider scrub must not also drag the sheet.
   const swipe = {
@@ -133,7 +133,7 @@ export default function NowPlayingScreen({
       else setDragY(0);
     },
     // A system-interrupted swipe (iOS edge gesture, incoming call) fires
-    // touchcancel, not touchend — reset so it can't pin `dragging` (which would
+    // touchcancel, not touchend - reset so it can't pin `dragging` (which would
     // kill the next slide's transition) or strand a past-threshold dragY that a
     // later tap would read as a dismiss.
     onTouchCancel: () => {

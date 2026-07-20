@@ -2,7 +2,7 @@
  * Spherical k-means + automatic-K selection for the "Recommended" feed.
  *
  * Operates on the viewer's top-N CLAP embeddings (512-d, already L2-normalized,
- * so cosine similarity is a plain dot product). Pure and dependency-free — no
+ * so cosine similarity is a plain dot product). Pure and dependency-free - no
  * DB or I/O. The randomness (k-means++ seeding, restarts) is driven by a PRNG
  * seeded deterministically from the seed-track ids, so a given taste profile
  * always clusters the same way and only re-derives when the top-N changes. That
@@ -108,7 +108,7 @@ function dropEmpty(centroids: number[][], assignments: number[]): ClusterResult 
 /**
  * Spherical k-means: Lloyd's algorithm with cosine assignment (max dot product)
  * and centroids re-normalized to unit length each iteration. Re-normalizing is
- * what keeps cosine assignment correct — arithmetic means don't share magnitude.
+ * what keeps cosine assignment correct - arithmetic means don't share magnitude.
  * Runs `restarts` times and keeps the lowest within-cluster cosine inertia.
  * Empty clusters are dropped, so the returned centroid count may be < `k`.
  */
@@ -236,7 +236,7 @@ function meanSilhouette(
  * the single-centroid fallback. K is the value in 2..min(kMax, ⌊n/2⌋) with the
  * highest mean cosine silhouette. Returns `null` when there are too few seeds
  * (`n < minSeeds`), no valid K range, or the best silhouette is below
- * `minSilhouette` (the embeddings show no real cluster structure — don't
+ * `minSilhouette` (the embeddings show no real cluster structure - don't
  * over-cluster a homogeneous library). Deterministic for a given `ids` set.
  */
 export function autoClusterCentroids(

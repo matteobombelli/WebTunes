@@ -4,13 +4,13 @@
 // "use client" components and server route handlers/libs (same neutrality as
 // base-path.ts / api.ts).
 //
-// Gating: warn/error ALWAYS emit. info/debug emit only when verbose is on —
+// Gating: warn/error ALWAYS emit. info/debug emit only when verbose is on -
 // client: localStorage["wt-log"] === "1"; server: process.env.WT_VERBOSE === "1".
 // (Mirrors the existing logAudio `wt-audio-debug` flag; that logger stays separate
 // under the `[wt-audio]` namespace.)
 //
 // REDACTION: callers must pass only non-sensitive data. Never pass request bodies,
-// full response JSON, headers, passwords, or tokens — see api.ts.
+// full response JSON, headers, passwords, or tokens - see api.ts.
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -21,7 +21,7 @@ function verbose(): boolean {
   try {
     return localStorage.getItem("wt-log") === "1";
   } catch {
-    // localStorage unavailable (private mode) — stay quiet.
+    // localStorage unavailable (private mode) - stay quiet.
     return false;
   }
 }

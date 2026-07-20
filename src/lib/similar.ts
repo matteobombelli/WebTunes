@@ -34,9 +34,9 @@ const SIGMA_BY_VARIATION = [1.2, 0.45, 0.2, 0.07, 0];
 
 // Nearest-neighbour candidates pulled from pgvector before sampling. Sampling
 // (for variation > 0) happens within this pool, so it bounds how far "very
-// random" can roam — the top POOL_SIZE most-similar tracks, which keeps even
+// random" can roam - the top POOL_SIZE most-similar tracks, which keeps even
 // random picks related. Far larger than any `limit`, and cheap (no vectors are
-// transferred — pgvector ranks in-DB and returns only these rows).
+// transferred - pgvector ranks in-DB and returns only these rows).
 const POOL_SIZE = 200;
 
 /**
@@ -46,7 +46,7 @@ const POOL_SIZE = 200;
  * so a result can never leak a track the viewer couldn't otherwise play.
  *
  * pgvector ranks the candidate pool in the database (`embedding <=> seed`), so
- * only POOL_SIZE rows come back — no embeddings cross the wire. The viewer's
+ * only POOL_SIZE rows come back - no embeddings cross the wire. The viewer's
  * `similar_variation` then controls how much randomness is mixed in (so the same
  * seed doesn't always produce the same run); repeats are avoided by excluding
  * the already-served ids. Returns [] when the seed is inaccessible or has no
@@ -61,8 +61,8 @@ export async function findSimilarTracks(
     withinIds,
   }: { limit: number; excludeIds: string[]; withinIds?: string[] }
 ): Promise<TrackDTO[]> {
-  // All independent reads — including the viewer's friend ids, needed both for
-  // the access check and the candidate query — run together, so the access
+  // All independent reads - including the viewer's friend ids, needed both for
+  // the access check and the candidate query - run together, so the access
   // check is in-memory (no serial areFriends round-trip before the rest).
   const [seedRows, { hideFriendDuplicates, similarVariation }, friendIds] =
     await Promise.all([
@@ -84,8 +84,8 @@ export async function findSimilarTracks(
   if (!seed || !seed.embedding) return [];
   if (!canAccessTrackWithFriends(userId, seed, friendIds)) return [];
 
-  // The seed itself is just another excluded id — folds into the same NOT IN.
-  // `withinIds` (when given) limits ranking to a candidate set — used by
+  // The seed itself is just another excluded id - folds into the same NOT IN.
+  // `withinIds` (when given) limits ranking to a candidate set - used by
   // Discover to keep a tapped song's mix inside the section it came from.
   return rankAccessibleByVector(userId, seed.embedding, {
     limit,
@@ -152,7 +152,7 @@ export async function findRecommendedClusters(
   // No usable cluster structure (too few seeds / homogeneous library) → fall
   // back to the single mean centroid, the prior "Recommended" behavior.
   // cosineDistance normalizes both operands, so the mean's magnitude is
-  // irrelevant to ranking — no re-normalization needed.
+  // irrelevant to ranking - no re-normalization needed.
   if (!centroids) {
     const dim = embeddings[0].length; // 512
     const mean = new Array<number>(dim).fill(0);
@@ -161,7 +161,7 @@ export async function findRecommendedClusters(
     return rankAccessibleByVector(userId, mean, { limit, ...shared });
   }
 
-  // One ranked pool per cluster — request the full POOL_SIZE so the draft has
+  // One ranked pool per cluster - request the full POOL_SIZE so the draft has
   // headroom to reach `limit` after cross-cluster dedup. K ≤ 8 cheap HNSW
   // queries; no embeddings cross the wire (pgvector ranks in-DB).
   const lists = await Promise.all(
@@ -180,7 +180,7 @@ export async function findRecommendedClusters(
  * playlist's current members plus any `excludeIds` (already-shown ids, for
  * "refresh / show more"). Returns [] when no member has an embedding yet.
  *
- * Seeds are every member track id — the seed embeddings never leave the DB, so
+ * Seeds are every member track id - the seed embeddings never leave the DB, so
  * seeding from members the viewer can't personally stream is safe and gives
  * better centroids; only the access-filtered results are returned.
  */
@@ -269,7 +269,7 @@ async function rankAccessibleByVector(
           : undefined,
         excludeIds.length ? notInArray(tracks.id, excludeIds) : undefined,
         // Drop tracks the viewer has excluded from their Play Similar feed. A
-        // subselect (unlike an empty array) is always safe — no length guard —
+        // subselect (unlike an empty array) is always safe - no length guard -
         // and trackId is NOT NULL so NOT IN can't collapse to "no rows pass".
         notInArray(
           tracks.id,

@@ -3,7 +3,7 @@
 -- !! NOT a drizzle-kit migration !!  The CREATE INDEX statements use
 -- CONCURRENTLY, which Postgres forbids inside a transaction (and `drizzle-kit
 -- migrate` wraps each migration in one), so this file is intentionally NOT in
--- drizzle/meta/_journal.json. Apply it by hand — psql autocommits each
+-- drizzle/meta/_journal.json. Apply it by hand - psql autocommits each
 -- top-level statement, which CONCURRENTLY allows:
 --
 --     docker compose exec -T postgres \

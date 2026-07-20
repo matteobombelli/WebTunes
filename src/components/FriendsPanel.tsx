@@ -49,7 +49,7 @@ export default function FriendsPanel({
   const [query, setQuery] = useState("");
   // Search results stamped with the query they belong to, so `results` and
   // `searching` are derived during render (no synchronous setState in the
-  // effect — only the deferred fetch writes state).
+  // effect - only the deferred fetch writes state).
   const [search, setSearch] = useState<{ q: string; results: FriendDTO[] }>({
     q: "",
     results: [],

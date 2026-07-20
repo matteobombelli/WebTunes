@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webtunes}
       POSTGRES_DB: webtunes
     ports:
-      # Loopback only — never expose the database on a public interface.
+      # Loopback only - never expose the database on a public interface.
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data

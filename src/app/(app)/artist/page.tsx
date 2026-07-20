@@ -19,7 +19,7 @@ export default async function ArtistPage({
     name,
     settings.hideFriendDuplicates
   );
-  // Artists only exist through their tracks — an unknown/typo'd name is a 404,
+  // Artists only exist through their tracks - an unknown/typo'd name is a 404,
   // not a real-looking empty artist.
   if (tracks.length === 0) notFound();
 

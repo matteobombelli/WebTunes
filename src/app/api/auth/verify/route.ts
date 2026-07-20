@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const tokenHash = createHash("sha256")
     .update(parsed.data.token)
     .digest("hex");
-  // Burning the token is also the validity check — atomic, so two concurrent
+  // Burning the token is also the validity check - atomic, so two concurrent
   // posts of the same token can't both pass the usedAt guard.
   const consumed = await db.transaction(async (tx) => {
     const [claim] = await tx

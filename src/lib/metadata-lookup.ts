@@ -2,10 +2,10 @@ import { imageKindFromBytes, type ImageKind } from "@/lib/image-upload";
 import { log } from "@/lib/log";
 
 // Online cover-art lookup for tracks whose audio file has no embedded art.
-// Best-effort like loudness/lyrics — returns null on any miss.
+// Best-effort like loudness/lyrics - returns null on any miss.
 //
 // SECURITY: cover art comes from untrusted remote hosts, so the stored kind is
-// sniffed from the bytes (imageKindFromBytes), never the URL/Content-Type — the
+// sniffed from the bytes (imageKindFromBytes), never the URL/Content-Type - the
 // offline SW replays stored Content-Type from a same-origin cache (stored XSS).
 
 export type CoverArt = { body: Buffer; kind: ImageKind };
@@ -96,7 +96,7 @@ export async function findCoverArt(q: {
         if (img) return img;
       }
     } catch (err) {
-      // try the next term ("no art found" is normal — gated debug only)
+      // try the next term ("no art found" is normal - gated debug only)
       log.debug(
         "cover",
         `iTunes lookup failed for "${term}"`,

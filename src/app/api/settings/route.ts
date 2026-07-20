@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest) {
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   // An empty object passes the schema (the field is optional) but would make
-  // Drizzle's .set({}) throw "No values to set" — guard it like the other
+  // Drizzle's .set({}) throw "No values to set" - guard it like the other
   // PATCH routes do.
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
     return NextResponse.json({ error: "Invalid settings" }, { status: 400 });

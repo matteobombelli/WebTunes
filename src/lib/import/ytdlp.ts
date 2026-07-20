@@ -3,15 +3,15 @@ import { existsSync } from "fs";
 import { join } from "path";
 import type { ImportQuality, ImportSearchResultDTO } from "@/lib/types";
 
-// CLI wrapper around the yt-dlp standalone binary — the only file that spawns
+// CLI wrapper around the yt-dlp standalone binary - the only file that spawns
 // it. yt-dlp is a runtime dependency like ffmpeg/fpcalc, but repo-local
 // (bin/yt-dlp, gitignored) because it self-updates in place (`yt-dlp -U`,
-// daily deploy/webtunes-ytdlp-update.timer) — YouTube breakage is its #1
+// daily deploy/webtunes-ytdlp-update.timer) - YouTube breakage is its #1
 // failure mode and a distro package would lag. Its ffmpeg post-processing runs
 // outside lib/ffmpeg-gate.ts; acceptable because the import worker (jobs.ts)
 // is strictly serial, so at most one yt-dlp ffmpeg runs at a time.
 
-/** One row of a flat playlist/search extraction — enough to list and match.
+/** One row of a flat playlist/search extraction - enough to list and match.
  * Same shape the search route returns to the client. */
 export type FlatEntry = ImportSearchResultDTO;
 
@@ -103,7 +103,7 @@ function bestThumbnail(entry: {
 /* eslint-disable @typescript-eslint/no-explicit-any -- yt-dlp's JSON is untyped */
 
 /**
- * Flat extraction of a playlist URL, video URL, or "ytsearchN:query" — one
+ * Flat extraction of a playlist URL, video URL, or "ytsearchN:query" - one
  * entry per video, nothing resolved. `--flat-playlist` is yt-dlp's
  * extract_flat='in_playlist': a watch?v=…&list=… URL still expands into the
  * playlist, while a plain video fully extracts to a single entry.
@@ -132,7 +132,7 @@ export async function flatExtract(
 
 /**
  * Full extraction of one video: the import metadata (track/artist/album fields
- * when YouTube has them, falling back to title/uploader — same precedence as
+ * when YouTube has them, falling back to title/uploader - same precedence as
  * the desktop importer) plus the best audio bitrate for the kbps floor. One
  * call replaces the desktop's separate probe + in-download metadata extract.
  */
@@ -149,7 +149,7 @@ export async function probeVideo(
   for (const f of (info.formats ?? []) as any[]) {
     if (!f?.acodec || f.acodec === "none") continue;
     // Muxed (audio+video) formats report a tbr that includes the video bitrate,
-    // which would inflate the floor check — only audio-only formats count.
+    // which would inflate the floor check - only audio-only formats count.
     if (f.vcodec && f.vcodec !== "none") continue;
     const rate = f.abr ?? f.tbr ?? 0;
     if (rate > bestAudioKbps) bestAudioKbps = rate;
@@ -175,8 +175,8 @@ const MIME_BY_EXT: Record<string, string> = {
 /**
  * Download one video's audio into the caller-owned dir. Quality mirrors the
  * desktop importer: "128"/"192" transcode to MP3, "opus" repackages YouTube's
- * native Opus stream — or, when the video has none, stream-copies the best
- * audio into its native container instead (still lossless, never re-encoded) —
+ * native Opus stream - or, when the video has none, stream-copies the best
+ * audio into its native container instead (still lossless, never re-encoded) -
  * "m4a" copies the native AAC stream (lossless, fails when the video has none
  * rather than re-encoding).
  */
@@ -235,12 +235,12 @@ export async function downloadAudio(opts: {
             );
           }
         } else {
-          filepath = line; // after_move:filepath — the last non-progress line
+          filepath = line; // after_move:filepath - the last non-progress line
         }
       },
     });
   } catch (err) {
-    // Only the format-selection failure means "no AAC stream" — anything else
+    // Only the format-selection failure means "no AAC stream" - anything else
     // (unavailable video, exhausted 429 retries) keeps its real message.
     if (
       opts.quality === "m4a" &&
@@ -248,7 +248,7 @@ export async function downloadAudio(opts: {
       err.message.includes("Requested format is not available")
     ) {
       throw new Error(
-        "no lossless .m4a (AAC) stream available — try Best (Opus) instead",
+        "no lossless .m4a (AAC) stream available - try Best (Opus) instead",
         { cause: err }
       );
     }

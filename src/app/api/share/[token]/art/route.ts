@@ -3,7 +3,7 @@ import { getPresignedGetUrl } from "@/lib/s3";
 import { resolveShareToken } from "@/lib/shares";
 
 // Public, UNAUTHENTICATED cover art behind a share token (full art, not the
-// 64px thumb — this also backs the Open Graph image). 404 when the token is
+// 64px thumb - this also backs the Open Graph image). 404 when the token is
 // unknown/expired or the track has no art. See the stream route for the token
 // reasoning.
 export async function GET(

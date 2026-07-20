@@ -18,9 +18,9 @@
   --color-fg-muted: #a1a1aa; /* secondary text */
   --color-fg-subtle: #71717a; /* tertiary / captions */
 
-  --color-accent: #4f46e5; /* indigo-600 — fills, focus */
-  --color-accent-hover: #6366f1; /* indigo-500 — fill hover */
-  --color-accent-bright: #818cf8; /* indigo-400 — text, indicators */
+  --color-accent: #4f46e5; /* indigo-600 - fills, focus */
+  --color-accent-hover: #6366f1; /* indigo-500 - fill hover */
+  --color-accent-bright: #818cf8; /* indigo-400 - text, indicators */
   --color-accent-fg: #ffffff; /* text/icons on accent fills */
 
   --font-display: var(--font-space-grotesk);

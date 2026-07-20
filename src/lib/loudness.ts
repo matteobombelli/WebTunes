@@ -11,7 +11,7 @@ import { log } from "@/lib/log";
 //
 // Best-effort, exactly like cover-art and lyrics extraction: any failure
 // (ffmpeg missing, unparseable audio, silence, timeout) yields null so the
-// caller can store NULL and skip normalization for that track — it must never
+// caller can store NULL and skip normalization for that track - it must never
 // fail an upload.
 
 const ANALYSIS_TIMEOUT_MS = 30_000;

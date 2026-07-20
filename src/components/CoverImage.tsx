@@ -10,9 +10,9 @@ const BASE_DELAY_MS = 400;
  * Cover-art <img> for a short-lived presigned-redirect URL (track art via
  * /api/tracks/:id/art, playlist covers via /api/playlists/:id/cover), resilient
  * to transient load failures. On error it retries a few times with backoff and
- * a cache-busting query (`?r=<n>`) — which forces the route to mint a *fresh*
+ * a cache-busting query (`?r=<n>`) - which forces the route to mint a *fresh*
  * presigned redirect, recovering from an expired cached 302 → 403 that a plain
- * retry of the same URL could not — before falling back to a music-note
+ * retry of the same URL could not - before falling back to a music-note
  * placeholder. `src={null}` (no art) shows the placeholder immediately.
  *
  * `className` carries the full box classes (size, rounding, bg); it applies to

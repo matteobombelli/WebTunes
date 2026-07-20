@@ -5,7 +5,7 @@ import { log } from "@/lib/log";
 import { getObjectBytes } from "@/lib/s3";
 
 // Background queue for CLAP embeddings. On upload we no longer block the request
-// on the embedding (ffmpeg decode + ONNX inference, the slowest upload step) —
+// on the embedding (ffmpeg decode + ONNX inference, the slowest upload step) -
 // the route enqueues a tiny job here and returns, and these workers fill in the
 // `track_embeddings` row a few seconds later. Best-effort, exactly like the
 // inline path was: any failure leaves the track without an embedding, and the
@@ -13,7 +13,7 @@ import { getObjectBytes } from "@/lib/s3";
 //
 // Jobs hold only ids/keys, not audio bytes: the worker re-fetches the stored
 // bytes from S3 when it runs, so a burst of uploads can't pile up 100 MB buffers
-// in the queue — at most MAX_WORKERS decodes are in flight. (Embedding the
+// in the queue - at most MAX_WORKERS decodes are in flight. (Embedding the
 // stored bytes also matches the backfill script, which downloads the same S3
 // object.) `embedTrack` keeps its own inference gate, so two workers never
 // oversubscribe the model.

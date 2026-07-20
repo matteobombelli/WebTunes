@@ -15,7 +15,7 @@ import {
 // capability: anyone holding an unused, unexpired token can create exactly one
 // account at /register?invite=<token>, then gets auto-friended with the inviter.
 // Multiple concurrent links per user; each single-use (used_at is the consumed
-// flag — robust even if the redeemer is later deleted). Mirrors lib/shares.ts.
+// flag - robust even if the redeemer is later deleted). Mirrors lib/shares.ts.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Hard cap on TOTAL platform accounts (counts the demo accounts too).
@@ -115,7 +115,7 @@ export type RegisterInvitedResult =
 
 /**
  * Create an account from a valid invite, enforcing the 100-user cap and
- * auto-friending the inviter — all in one transaction so a failure never
+ * auto-friending the inviter - all in one transaction so a failure never
  * half-consumes the invite or orphans a user. `input` is already zod-validated.
  */
 export async function registerInvitedUser(
@@ -130,7 +130,7 @@ export async function registerInvitedUser(
   if (existing) return { error: "An account with that email already exists" };
   if (await isNameTaken(input.name)) return { error: USERNAME_TAKEN_MESSAGE };
 
-  const passwordHash = await hash(input.password, 12); // slow — keep out of the tx
+  const passwordHash = await hash(input.password, 12); // slow - keep out of the tx
   try {
     return await db.transaction(async (tx) => {
       // Serialize registrations so the count + insert below can't race the cap.
@@ -143,7 +143,7 @@ export async function registerInvitedUser(
         .from(users);
       if (count >= MAX_USERS) {
         return {
-          error: "WebTunes is full — the 100-account limit has been reached.",
+          error: "WebTunes is full - the 100-account limit has been reached.",
         };
       }
 
@@ -169,7 +169,7 @@ export async function registerInvitedUser(
         .values({ name: input.name, email: input.email, passwordHash })
         .returning({ id: users.id, email: users.email, name: users.name });
 
-      // Record who redeemed it (history) and auto-friend the inviter — one
+      // Record who redeemed it (history) and auto-friend the inviter - one
       // accepted row covers both directions; onConflictDoNothing is just safety.
       await tx
         .update(invites)

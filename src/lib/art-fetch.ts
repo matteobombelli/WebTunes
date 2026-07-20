@@ -11,7 +11,7 @@ import type { CoverArt } from "@/lib/metadata-lookup";
 // upload never fails on a bad art URL.
 //
 // SECURITY: the URL and its bytes are untrusted. The stored kind is sniffed
-// from the bytes (imageKindFromBytes), never the URL or response Content-Type —
+// from the bytes (imageKindFromBytes), never the URL or response Content-Type -
 // the offline SW replays stored Content-Type from a same-origin cache
 // (stored-XSS), same rule as lib/metadata-lookup.ts and lib/image-upload.ts.
 
@@ -24,7 +24,7 @@ const USER_AGENT = "WebTunes/0.1 (personal project)";
 
 /**
  * SSRF guard: this is the one outbound fetch whose URL a client controls, so
- * require a public-web-shaped https URL — no IP literals, localhost, or
+ * require a public-web-shaped https URL - no IP literals, localhost, or
  * internal-suffix hosts (blocks loopback/LAN/cloud-metadata targets). Not
  * DNS-rebinding-proof, but with redirects disabled below it closes the doors
  * an art URL has no business opening.
@@ -48,7 +48,7 @@ function isAllowedArtUrl(raw: string): boolean {
 
 /**
  * Download cover art from `url`. When `cropSquare` is set (YouTube's 16:9
- * thumbnails), center-crop to a square first — mirrors the reference
+ * thumbnails), center-crop to a square first - mirrors the reference
  * exporter's `_fetch_art(crop_square=True)`. Returns null on any failure.
  */
 export async function fetchCoverArt(
@@ -61,7 +61,7 @@ export async function fetchCoverArt(
     const res = await fetch(url, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-      // A redirect could bounce the vetted URL to a private target — refuse
+      // A redirect could bounce the vetted URL to a private target - refuse
       // (throws, caught below). Importer art URLs are direct CDN links.
       redirect: "error",
     });
@@ -75,7 +75,7 @@ export async function fetchCoverArt(
   if (opts?.cropSquare) {
     const cropped = await centerCropSquare(buf).catch(() => null);
     if (cropped) buf = cropped;
-    // A crop failure just keeps the original 16:9 image — never fatal.
+    // A crop failure just keeps the original 16:9 image - never fatal.
   }
 
   const kind = imageKindFromBytes(buf); // never trust the remote type

@@ -7,7 +7,7 @@ import { toTrackDTO } from "@/lib/tracks";
 /**
  * Track upload for the WebTunes Importer extension. Same pipeline as the
  * session-auth POST /api/tracks (ingestTrack), but authenticated with a bearer
- * import token — kept a separate route so token auth and session auth stay
+ * import token - kept a separate route so token auth and session auth stay
  * cleanly split. The claimed MIME/filename are validated here and re-checked
  * inside ingestTrack exactly like a web upload; the extension's word is never
  * trusted for the stored Content-Type.
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const user = await requireImportToken(req);
   if (!user) return unauthorized();
 
-  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
+  // A truncated/garbage multipart body makes formData() reject - 400, not 500.
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: result.message }, { status: 409 });
   }
 
-  // Provenance breadcrumb only — the URL isn't stored (no column, no need).
+  // Provenance breadcrumb only - the URL isn't stored (no column, no need).
   const sourceUrl = form.get("sourceUrl");
   log.info(
     "extension-import",

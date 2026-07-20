@@ -1,13 +1,13 @@
 // Reconcile the R2 bucket against the database: find (and optionally delete)
 // objects no track/playlist row references any more, and report the storage
-// measurements that gate any future dedup work. Nothing is ever re-encoded —
+// measurements that gate any future dedup work. Nothing is ever re-encoded -
 // this only removes unreferenced bytes.
 //
 //   node scripts/reconcile-r2.mjs [--apply [--yes]] [--only-remux]
 //                                 [--grace-hours=24] [--deep-art-hash] [--report-mpu]
 //
 // Default is DRY-RUN: lists the bucket, classifies every object, writes a fresh
-// snapshot to reconcile-r2-review.jsonl, and prints the measurement report —
+// snapshot to reconcile-r2-review.jsonl, and prints the measurement report -
 // NO deletes. --apply deletes the orphan candidates (re-checking the DB first)
 // and appends each deletion to reconcile-r2-revert.jsonl (an audit trail, NOT a
 // restore path: object deletes are irreversible); it first echoes the resolved
@@ -57,7 +57,7 @@ function parseEnvFile(path) {
 
 function loadEnv() {
   // Merge the .env files in order (later files override earlier), then overlay
-  // process.env LAST so an explicitly exported value wins — matching the
+  // process.env LAST so an explicitly exported value wins - matching the
   // docstring and the apply-s3-*.mjs scripts. (The previous order let the
   // on-disk files silently override an exported DATABASE_URL/S3_*, which on the
   // destructive --apply path could silently retarget the wrong bucket/DB.)
@@ -304,13 +304,13 @@ async function reportIncompleteMultipart() {
       );
       for (const u of page.Uploads ?? []) {
         count++;
-        console.log(`  ${u.Key} — initiated ${u.Initiated?.toISOString?.() ?? u.Initiated}`);
+        console.log(`  ${u.Key} - initiated ${u.Initiated?.toISOString?.() ?? u.Initiated}`);
       }
       keyMarker = page.IsTruncated ? page.NextKeyMarker : undefined;
       idMarker = page.IsTruncated ? page.NextUploadIdMarker : undefined;
     } while (keyMarker);
     if (count === 0) console.log(`  none.`);
-    else console.log(`  ${count} incomplete upload(s) — set a lifecycle rule (scripts/apply-s3-lifecycle.mjs).`);
+    else console.log(`  ${count} incomplete upload(s) - set a lifecycle rule (scripts/apply-s3-lifecycle.mjs).`);
   } catch (err) {
     console.log(`  could not list (likely needs an admin token): ${err.message}`);
   }
@@ -318,7 +318,7 @@ async function reportIncompleteMultipart() {
 
 // --- main --------------------------------------------------------------------
 console.log(
-  `reconcile-r2 — ${APPLY ? (ONLY_REMUX ? "APPLY (remux-only)" : "APPLY") : "DRY-RUN"} | ` +
+  `reconcile-r2 - ${APPLY ? (ONLY_REMUX ? "APPLY (remux-only)" : "APPLY") : "DRY-RUN"} | ` +
     `grace ${GRACE_HOURS}h | bucket ${BUCKET}`
 );
 if (!APPLY) console.log(`(dry-run: no deletes; snapshot -> ${REVIEW_LOG})`);
@@ -458,7 +458,7 @@ if (!APPLY) {
   const { referenced: fresh } = await loadReferenced();
   const toDelete = candidates.filter((c) => (ONLY_REMUX ? c.reason === "remux-orphan" : true));
   if (!(await confirmApply(toDelete.length))) {
-    console.log("Aborted — no objects deleted.");
+    console.log("Aborted - no objects deleted.");
     await pool.end();
     process.exit(1);
   }
@@ -468,7 +468,7 @@ if (!APPLY) {
   for (const c of toDelete) {
     if (fresh.has(c.key)) {
       skipped++;
-      continue; // became referenced since listing — never expected, but cheap
+      continue; // became referenced since listing - never expected, but cheap
     }
     try {
       await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: c.key }));

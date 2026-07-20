@@ -31,7 +31,7 @@ function parseEnvFile(path) {
 
 function loadEnv() {
   // Start from the ambient env, then overlay every env file that exists in
-  // ENV_FILES order so later files (.env.local) win — and so a value present
+  // ENV_FILES order so later files (.env.local) win - and so a value present
   // in any file overrides an empty shell-exported one (e.g. DATABASE_URL="").
   let env = { ...process.env };
   for (const f of ENV_FILES) {
@@ -140,15 +140,15 @@ for (const { id, s3_key } of rows) {
     );
     if (lufs === null) {
       failed++;
-      console.warn(`  ${id} — unmeasurable (silence/decode error), leaving NULL`);
+      console.warn(`  ${id} - unmeasurable (silence/decode error), leaving NULL`);
       continue;
     }
     await pool.query(`update tracks set loudness_lufs = $1 where id = $2`, [lufs, id]);
     done++;
-    console.log(`  ${id} — ${lufs.toFixed(1)} LUFS`);
+    console.log(`  ${id} - ${lufs.toFixed(1)} LUFS`);
   } catch (err) {
     failed++;
-    console.warn(`  ${id} — failed: ${err.message}`);
+    console.warn(`  ${id} - failed: ${err.message}`);
   }
 }
 

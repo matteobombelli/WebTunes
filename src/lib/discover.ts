@@ -21,7 +21,7 @@ import type { TrackDTO } from "@/lib/types";
 // friend-owned rows when the viewer has it on. Shared by every discovery section.
 // The play-history sections ("Your top 100", a friend's top, friends' combined
 // top) pass it through topTracksByRecency; pass hideFriendDuplicates=false there
-// to get the access half only (no dedup) — e.g. "Your top 100" must not collapse
+// to get the access half only (no dedup) - e.g. "Your top 100" must not collapse
 // friend-copies out of your own play history.
 function accessWhere(
   userId: string,
@@ -118,7 +118,7 @@ async function topTracksByRecency({
 /**
  * "Your top 100": the tracks the viewer played most, recent-first per the shared
  * recency rule (see topTracksByRecency). Access-filtered but NOT duplicate-hidden
- * (hideFriendDuplicates=false) — these are specific tracks you actually played, so
+ * (hideFriendDuplicates=false) - these are specific tracks you actually played, so
  * collapsing friend-copies would drop rows from your own history.
  */
 export async function listTopTracks(userId: string): Promise<TrackDTO[]> {
@@ -182,12 +182,12 @@ export async function randomSeedTracks(
 
 /**
  * "Friends Top 100": each friend's own top tracks, interleaved round-robin so the
- * art alternates between friends — friend1's #1, friend2's #1, …, then friend1's
+ * art alternates between friends - friend1's #1, friend2's #1, …, then friend1's
  * #2, and so on. Friends are ordered by how much they listened in the last 7 days
  * (most first; friends with no recent plays come last but still contribute their
  * backfilled top tracks). Each friend's list is ranked recent-first per the shared
  * recency rule and filtered to what the viewer can access (same predicate as a
- * single friend's profile top — see listUserTopTracks). A track two friends both
+ * single friend's profile top - see listUserTopTracks). A track two friends both
  * spin appears once, at its first round-robin slot. Empty with no friends.
  */
 export async function listFriendsTop(

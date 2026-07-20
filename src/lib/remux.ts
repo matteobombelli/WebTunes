@@ -9,7 +9,7 @@ import { log } from "@/lib/log";
 // iOS Safari mis-handles Opus-in-Ogg playback (it truncates a track partway and
 // auto-skips). The identical Opus bitstream plays correctly once rewrapped in an
 // MP4 container, so we losslessly re-mux Opus uploads (and scripts/remux-ogg-to-
-// mp4.mjs does the same to the backlog) with `ffmpeg -c:a copy` — no re-encode,
+// mp4.mjs does the same to the backlog) with `ffmpeg -c:a copy` - no re-encode,
 // bit-identical audio.
 //
 // Best-effort, like loudness/CLAP/art: any failure returns null so the caller
@@ -18,7 +18,7 @@ import { log } from "@/lib/log";
 const REMUX_TIMEOUT_MS = 60_000;
 // Containers worth probing for Opus; the matching MIME types also trigger.
 // webm covers the extension importer: YouTube's best audio is Opus-in-WebM
-// (itag 251), which iOS Safari can't play at all — same lossless copy applies.
+// (itag 251), which iOS Safari can't play at all - same lossless copy applies.
 const OPUS_EXTS = new Set(["ogg", "opus", "oga", "webm"]);
 const OPUS_MIMES = new Set(["audio/ogg", "audio/webm"]);
 
@@ -26,7 +26,7 @@ export type RemuxResult = { body: Buffer; ext: "mp4"; contentType: "audio/mp4" }
 
 /**
  * Losslessly re-mux an Opus upload (Ogg or WebM container) to MP4. Returns
- * null when it doesn't apply (no Opus stream) or anything fails — the caller
+ * null when it doesn't apply (no Opus stream) or anything fails - the caller
  * then keeps the original.
  * Before returning, verifies the copied (encoded) audio stream is byte-identical
  * to the source via a decode-free stream hash; that correctly ignores the benign
@@ -86,7 +86,7 @@ async function audioCodec(path: string): Promise<string> {
   return stdout.trim();
 }
 
-/** MD5 of the copied (encoded) audio packets — container-agnostic, decode-free. */
+/** MD5 of the copied (encoded) audio packets - container-agnostic, decode-free. */
 async function streamHash(path: string): Promise<string | null> {
   const { stdout } = await runFfmpeg([
     "-i", path, "-map", "0:a:0", "-c:a", "copy",

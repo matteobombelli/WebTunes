@@ -42,6 +42,19 @@ const SESSION_KEY = "wt-player-session";
 /** Bounded retry/reload budget per track load, for background play() recovery. */
 const MAX_ATTEMPTS = 4;
 
+const LISTEN_QUALIFY_SECONDS = 30;
+const LISTEN_CHECKPOINT_SECONDS = 60;
+
+type ListenSession = {
+  id: string;
+  trackId: string;
+  listenedSeconds: number;
+  confirmedSeconds: number;
+  nextCheckpointSeconds: number;
+  inFlight: number;
+  lastMediaTime: number;
+};
+
 /**
  * Gated, removable audio instrumentation. Off by default; enable from the
  * Settings → Diagnostics toggle (or localStorage.setItem("wt-audio-debug","1")).
@@ -72,7 +85,7 @@ function logAudio(event: string, detail?: string) {
     while (arr.length > 200) arr.shift();
     localStorage.setItem(AUDIO_LOG_KEY, JSON.stringify(arr));
   } catch {
-    // localStorage full/unavailable — in-memory buffer still holds the line.
+    // localStorage full/unavailable - in-memory buffer still holds the line.
   }
 }
 
@@ -157,8 +170,10 @@ export default function PlayerBar({
   // silence loop is the playing element then, so iOS would otherwise show ITS
   // 0-3s position). Non-null only between a pause and the next resume.
   const pausedPosRef = useRef<number | null>(null);
-  // Track id we've already reported a ≥30s play for, so each load counts once.
-  const countedRef = useRef<string | null>(null);
+  // One idempotent telemetry session per queue-slot playback. It accumulates
+  // actual media-clock progress (seeks excluded), reports once at 30 seconds,
+  // then checkpoints every minute and flushes on lifecycle/transport changes.
+  const listenSessionRef = useRef<ListenSession | null>(null);
   // True from a fresh track load until playback actually begins. A cold first
   // request (slow first byte after a refresh) can let the media clock drift
   // ahead while the element stalls, so the track audibly starts a second or
@@ -210,7 +225,7 @@ export default function PlayerBar({
   const loadedTrackIdRef = useRef<string | null>(null);
   const track = useCurrentTrack();
   // The current queue SLOT's identity: the same track can occupy multiple
-  // slots, so advancing between duplicates changes uid but not track.id — the
+  // slots, so advancing between duplicates changes uid but not track.id - the
   // load effect keys on this.
   const currentUid = usePlayerStore((s) =>
     s.index >= 0 ? s.queue[s.index].uid : null
@@ -218,7 +233,7 @@ export default function PlayerBar({
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const volume = usePlayerStore((s) => s.volume);
   const normalizeVolume = usePlayerStore((s) => s.normalizeVolume);
-  // NOTE: currentTime/duration are deliberately NOT subscribed here — they tick
+  // NOTE: currentTime/duration are deliberately NOT subscribed here - they tick
   // 4-30 Hz and would re-render this whole bar. The time readout + seek slider
   // live in <PlayerProgress>, which subscribes to them in isolation.
   const seekRequest = usePlayerStore((s) => s.seekRequest);
@@ -237,7 +252,7 @@ export default function PlayerBar({
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   // Gates the lazy queue/now-playing chunk (see the dynamic imports above):
   // mount the overlays once the page is idle so the queue's drag tree pre-warms
-  // before first open — or immediately if the user opens one before idle fires.
+  // before first open - or immediately if the user opens one before idle fires.
   const [overlaysReady, setOverlaysReady] = useState(false);
   // Stable identities so transport-state changes don't re-render the memoized
   // QueuePanel through a fresh onClose each render.
@@ -295,18 +310,18 @@ export default function PlayerBar({
     if (store.index < 0) return;
     const seed = store.queue[store.index].track;
     try {
-      // Load the closest matches, excluding only the seed itself — no-repeat is
+      // Load the closest matches, excluding only the seed itself - no-repeat is
       // enforced within the session by the store's similarSeen.
       const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
       // The user may have toggled the radio back off (or moved to another
-      // track) while the fetch was in flight — a stale response must not
+      // track) while the fetch was in flight - a stale response must not
       // re-arm it and hijack the queue. Mirrors usePlaySimilarAutoStart.
       const now = usePlayerStore.getState();
       if (!now.playSimilarPref || now.queue[now.index]?.track.id !== seed.id) {
         return;
       }
       // Nothing to play (tiny library, everything excluded, or no embedding):
-      // an explicit toggle shouldn't sit lit-but-dead — tell the user and clear.
+      // an explicit toggle shouldn't sit lit-but-dead - tell the user and clear.
       if (similar.length === 0) {
         useToastStore.getState().show("No similar tracks for this song");
         now.setPlaySimilarPref(false);
@@ -314,7 +329,7 @@ export default function PlayerBar({
       }
       now.startSimilar(seed.id, similar);
     } catch {
-      // A failed fetch shouldn't sit lit-but-dead either — mirror the
+      // A failed fetch shouldn't sit lit-but-dead either - mirror the
       // empty-result branch (unless the user already toggled off meanwhile).
       const now = usePlayerStore.getState();
       if (now.playSimilarPref) {
@@ -334,12 +349,97 @@ export default function PlayerBar({
     _clearSeek,
   } = usePlayerStore.getState();
 
+  const resetListenSample = (audio: HTMLAudioElement) => {
+    const session = listenSessionRef.current;
+    if (!session) return;
+    session.lastMediaTime = audio.currentTime;
+  };
+
+  // Add only plausible forward media-clock movement. Explicit seeks reset the
+  // sample. The generous five-minute cap still allows heavily-throttled
+  // background timeupdate events without mistaking an implausible jump for play.
+  const sampleListen = (audio: HTMLAudioElement, allowPaused = false) => {
+    const session = listenSessionRef.current;
+    if (!session) return;
+    const mediaTime = audio.currentTime;
+    if ((!audio.paused || allowPaused) && !audio.seeking) {
+      const mediaDelta = mediaTime - session.lastMediaTime;
+      const maxPlausible = 300 * Math.max(1, audio.playbackRate || 1);
+      if (mediaDelta > 0 && mediaDelta <= maxPlausible) {
+        session.listenedSeconds = Math.min(
+          86400,
+          session.listenedSeconds + mediaDelta
+        );
+      }
+    }
+    session.lastMediaTime = mediaTime;
+  };
+
+  const reportListen = (session: ListenSession, force = false) => {
+    const listenedSeconds = Math.min(86400, Math.floor(session.listenedSeconds));
+    if (
+      listenedSeconds < LISTEN_QUALIFY_SECONDS ||
+      listenedSeconds <= session.confirmedSeconds ||
+      (!force && listenedSeconds < session.nextCheckpointSeconds) ||
+      (!force && session.inFlight > 0)
+    ) {
+      return;
+    }
+
+    session.inFlight += 1;
+    session.nextCheckpointSeconds = listenedSeconds + LISTEN_CHECKPOINT_SECONDS;
+    api(`/tracks/${session.trackId}/play`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id, listenedSeconds }),
+      // Allows pagehide/visibility flushes to outlive the document briefly.
+      keepalive: true,
+    })
+      .then(() => {
+        session.confirmedSeconds = Math.max(
+          session.confirmedSeconds,
+          listenedSeconds
+        );
+      })
+      .catch(() => {
+        // Retry after another ten seconds of real playback (or immediately at
+        // the next forced lifecycle flush), without creating a request storm.
+        session.nextCheckpointSeconds = Math.min(
+          session.nextCheckpointSeconds,
+          Math.floor(session.listenedSeconds) + 10
+        );
+      })
+      .finally(() => {
+        session.inFlight = Math.max(0, session.inFlight - 1);
+      });
+  };
+
+  const startListenSession = (trackId: string, mediaTime: number) => {
+    listenSessionRef.current = {
+      id: crypto.randomUUID(),
+      trackId,
+      listenedSeconds: 0,
+      confirmedSeconds: 0,
+      nextCheckpointSeconds: LISTEN_QUALIFY_SECONDS,
+      inFlight: 0,
+      lastMediaTime: mediaTime,
+    };
+  };
+
+  const finishListenSession = (audio: HTMLAudioElement | null) => {
+    const session = listenSessionRef.current;
+    if (!session) return;
+    if (audio) sampleListen(audio, true);
+    reportListen(session, true);
+    listenSessionRef.current = null;
+  };
+
 
   // play() rejects with AbortError when a newer src load or a pause() supersedes
-  // it (e.g. skipping faster than tracks start) — benign, ignore. On an automatic
+  // it (e.g. skipping faster than tracks start) - benign, ignore. On an automatic
   // advance (track end) iOS rejects the play() of a freshly-loaded source in the
   // background with NotAllowedError; the old code flipped isPlaying to false here,
-  // which paused the element and suspended the keep-alive context — tearing down
+  // which paused the element and suspended the keep-alive context - tearing down
   // the audio session and detaching the lock-screen controls. Instead, on an
   // auto-advance, hold the session and mark the play() as owed so a retry trigger
   // can resume it. Only a genuine user-initiated failure flips the UI to paused.
@@ -433,7 +533,7 @@ export default function PlayerBar({
         playbackRate: audio.playbackRate || 1,
       });
     } catch {
-      // Out-of-range mid-load — ignore; a later call corrects it.
+      // Out-of-range mid-load - ignore; a later call corrects it.
     }
   };
 
@@ -448,7 +548,7 @@ export default function PlayerBar({
   };
 
   // EXPERIMENT (iOS session hold): start the silent loop so the iOS audio
-  // session stays held while the track element isn't playing — through a pause,
+  // session stays held while the track element isn't playing - through a pause,
   // or the track-end gap while the next source loads (with nothing playing iOS
   // releases the session and freezes the page, so an un-prefetched next track's
   // fetch never completes and the owed play() never fires). onPlaying stops it
@@ -478,7 +578,7 @@ export default function PlayerBar({
     const audio = audioRef.current;
     const target = restoredPositionRef.current;
     if (!audio || target == null) return;
-    // A target meant for a previously-loaded track must never seek this one —
+    // A target meant for a previously-loaded track must never seek this one -
     // drop it (even before the element is seekable) so it can't fire later.
     if (target.trackId !== track?.id) {
       restoredPositionRef.current = null;
@@ -492,7 +592,7 @@ export default function PlayerBar({
       audio.duration || target.position
     );
     if (Math.abs(audio.currentTime - clamped) <= 0.5) {
-      restoredPositionRef.current = null; // arrived — stop re-asserting
+      restoredPositionRef.current = null; // arrived - stop re-asserting
       return;
     }
     if (restoreAttemptsRef.current >= MAX_ATTEMPTS) {
@@ -501,6 +601,7 @@ export default function PlayerBar({
     }
     restoreAttemptsRef.current += 1;
     audio.currentTime = clamped;
+    resetListenSample(audio); // restoration/seek movement is not listening
     freshLoadRef.current = false; // stop onPlaying's cold-start snap-to-0
     logAudio("restore", String(clamped));
   };
@@ -532,10 +633,14 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
+    // A queue-slot change always starts a new qualified-listen session, even
+    // when the same track appears in adjacent slots. Flush the previous slot
+    // before resetting currentTime or swapping the source.
+    finishListenSession(audio);
     // Same track in a different queue slot (a duplicate entry, or re-picking
     // the playing track): the src is already loaded, so restart in place
     // instead of reloading (a refetch). The effect keys on the slot uid
-    // because track.id can't tell two slots holding the same track apart —
+    // because track.id can't tell two slots holding the same track apart -
     // an advance between duplicates never refired this effect (and isPlaying
     // never dips, so no other effect fires), stopping playback at the first
     // slot's end.
@@ -544,6 +649,7 @@ export default function PlayerBar({
       autoAdvanceRef.current = false; // consume the flag
       recoverAttemptsRef.current = 0; // fresh recovery budget, like a load
       audio.currentTime = 0;
+      startListenSession(track.id, 0);
       if (usePlayerStore.getState().isPlaying && audio.paused)
         attemptPlay(autoAdvance);
       return;
@@ -556,8 +662,8 @@ export default function PlayerBar({
     // element AT the saved offset via a media fragment (#t=) so iOS applies it at
     // LOAD time. A post-load `audio.currentTime = pos` seek is silently ignored on
     // a freshly-loaded streamed element on iOS (it preloads nothing for a paused
-    // element, and the far offset isn't seekable yet at first play) — the track
-    // plays from 0 — whereas the fragment is honored by the media pipeline during
+    // element, and the far offset isn't seekable yet at first play) - the track
+    // plays from 0 - whereas the fragment is honored by the media pipeline during
     // the gesture-driven load. The fragment is client-only (never sent in the HTTP
     // request), so the SW cache key (streamSrc, no fragment) still matches.
     const restoreTarget = restoredPositionRef.current;
@@ -567,7 +673,8 @@ export default function PlayerBar({
         : 0;
     audio.src =
       startAt > 0 ? `${streamSrc(track.id)}#t=${startAt}` : streamSrc(track.id);
-    // A restored start is the intended position, not cold-stream drift — clearing
+    startListenSession(track.id, startAt);
+    // A restored start is the intended position, not cold-stream drift - clearing
     // freshLoadRef stops onPlaying's snap-to-0 from resetting it. A normal fresh
     // load arms the drift guard (true).
     freshLoadRef.current = startAt === 0;
@@ -599,16 +706,16 @@ export default function PlayerBar({
     } else {
       // A genuine stop (user pause or end-of-queue) neutralizes any stale
       // auto-advance arm and releases the keep-alive session. NOTE: isPlaying is
-      // set false BEFORE this runs, and we tag the pause as expected — both are
+      // set false BEFORE this runs, and we tag the pause as expected - both are
       // load-bearing so onPause never treats a deliberate pause as involuntary.
       // (Keeping the keep-alive tone running through the pause was tried as a way
-      // to enable a locked-screen resume — it did NOT help: a backgrounded iOS
+      // to enable a locked-screen resume - it did NOT help: a backgrounded iOS
       // PWA cannot restart <audio> regardless. So we suspend it to save the idle
       // Bluetooth cost.)
       autoAdvanceRef.current = false;
       pausedPosRef.current = audio.currentTime; // frozen position for the OS scrubber
       // EXPERIMENT: start the silent loop in-gesture BEFORE pausing the track so
-      // the audio session stays held across the pause — the bet for enabling a
+      // the audio session stays held across the pause - the bet for enabling a
       // locked-screen resume (see startSilenceLoop).
       startSilenceLoop(() => {
         // Re-assert the paused display AFTER the silence element starts:
@@ -697,12 +804,16 @@ export default function PlayerBar({
     else localStorage.removeItem(PLAY_SIMILAR_KEY);
   }, [playSimilarPref]);
 
-  // Persist a minimal session snapshot when the tab is backgrounded/hidden — the
+  // Persist a minimal session snapshot when the tab is backgrounded/hidden - the
   // last reliable signals before iOS freezes then discards a paused PWA. Not a
   // per-tick writer; SPA navigation keeps PlayerBar mounted and fires neither
   // event, so a live session is never clobbered.
   useEffect(() => {
     const save = () => {
+      const audio = audioRef.current;
+      if (audio) sampleListen(audio, true);
+      const listenSession = listenSessionRef.current;
+      if (listenSession) reportListen(listenSession, true);
       const s = usePlayerStore.getState();
       logAudio("save", `idx=${s.index}`);
       if (s.index < 0) {
@@ -739,7 +850,7 @@ export default function PlayerBar({
     };
   }, []);
 
-  // On a cold mount (a real page load — e.g. iOS discarded and reloaded the app),
+  // On a cold mount (a real page load - e.g. iOS discarded and reloaded the app),
   // restore the snapshot PAUSED. The index<0 guard means this never runs on an
   // in-app remount where the in-memory store survived. The first tap resumes
   // (no gesture-less autoplay); the playhead is applied in onLoadedMetadata.
@@ -747,7 +858,7 @@ export default function PlayerBar({
     const cold = usePlayerStore.getState().index < 0;
     const raw = localStorage.getItem(SESSION_KEY);
     logAudio("mount", `cold=${cold} snap=${raw ? "yes" : "no"}`);
-    if (!cold) return; // store survived (in-app remount / thaw) — nothing to restore
+    if (!cold) return; // store survived (in-app remount / thaw) - nothing to restore
     if (!raw) return;
     try {
       const s = JSON.parse(raw) as {
@@ -771,7 +882,7 @@ export default function PlayerBar({
           .hydrateSession(s.tracks, s.index, s.currentTime);
       }
     } catch {
-      // Corrupt snapshot — ignore.
+      // Corrupt snapshot - ignore.
     }
   }, []);
 
@@ -795,17 +906,18 @@ export default function PlayerBar({
     if (audio && seekRequest !== null) {
       restoredPositionRef.current = null; // a deliberate seek cancels a pending restore
       audio.currentTime = seekRequest;
+      resetListenSample(audio); // moving the playhead is not listening time
       _clearSeek();
       updatePositionState(); // reflect the seek in the OS scrubber immediately
     }
   }, [seekRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lock-screen / hardware-key controls (MediaSession API). Wire play/pause/
-  // previous/next/seekto and explicitly null the ±10/15s skip actions (seekto —
-  // the scrubber drag — is a separate action and doesn't affect the arrows).
+  // previous/next/seekto and explicitly null the ±10/15s skip actions (seekto -
+  // the scrubber drag - is a separate action and doesn't affect the arrows).
   // iOS/WebKit auto-enables the ±10/15s skip commands when the <audio> element
   // becomes *seekable*, and that re-enable happens at playback time, AFTER a
-  // one-time mount registration has run — so nulling once at mount doesn't stick
+  // one-time mount registration has run - so nulling once at mount doesn't stick
   // and the lock screen reverts to skip buttons. We therefore re-assert this set
   // on every play start (when the element is seekable), which is when WebKit
   // would otherwise have brought the seek buttons back, so the previous/next-
@@ -821,7 +933,7 @@ export default function PlayerBar({
       // to the [isPlaying] effect loses it (NotAllowedError -> onPlayError(false)
       // -> _setPlaying(false), tearing the session down). attemptPlay(true) wakes
       // the output and plays here; a still-blocked resume is held as an owed play
-      // (onPlayError(true)) rather than torn down. Then sync intent — the effect's
+      // (onPlayError(true)) rather than torn down. Then sync intent - the effect's
       // own attempt no-ops because the element is already (being) played.
       attemptPlay(true);
       if (!usePlayerStore.getState().isPlaying) _setPlaying(true);
@@ -834,7 +946,7 @@ export default function PlayerBar({
     session.setActionHandler("nexttrack", next);
     // seekto is what the OS Now Playing scrubber dispatches on a drag. Routed
     // through the store's seekTo so the existing seek effect applies it (and
-    // cancels any pending restore) — no separate seek path.
+    // cancels any pending restore) - no separate seek path.
     try {
       session.setActionHandler("seekto", (d) => {
         logAudio("mediasession:seekto", String(d.seekTime));
@@ -847,7 +959,7 @@ export default function PlayerBar({
           Number.isFinite(dur) ? Math.min(d.seekTime, dur! - 0.25) : d.seekTime
         );
         // While paused the silence loop re-pins the OS scrubber to pausedPosRef
-        // on every tick — move the pin so it doesn't snap the scrub back.
+        // on every tick - move the pin so it doesn't snap the scrub back.
         if (pausedPosRef.current != null) pausedPosRef.current = t;
         usePlayerStore.getState().seekTo(t);
       });
@@ -864,7 +976,7 @@ export default function PlayerBar({
     // Deps intentionally []: stable identity matters (this is a dep of the mount
     // effect and is called from onPlaying). The captured attemptPlay/_setPlaying
     // first-render copies only touch refs and a stable zustand setter, so they
-    // operate on live values — no stale-closure hazard.
+    // operate on live values - no stale-closure hazard.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1010,18 +1122,23 @@ export default function PlayerBar({
           // First real playback after a load: if the clock drifted ahead while
           // the cold stream stalled (and the user didn't ask to resume/seek),
           // restart from the top so the intro isn't skipped.
-          if (!freshLoadRef.current) return;
-          freshLoadRef.current = false;
-          if (
-            usePlayerStore.getState().seekRequest === null &&
-            e.currentTarget.currentTime > 0.8
-          ) {
-            e.currentTarget.currentTime = 0;
+          if (freshLoadRef.current) {
+            freshLoadRef.current = false;
+            if (
+              usePlayerStore.getState().seekRequest === null &&
+              e.currentTarget.currentTime > 0.8
+            ) {
+              e.currentTarget.currentTime = 0;
+            }
           }
+          resetListenSample(e.currentTarget);
         }}
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
           const dur = e.currentTarget.duration || 0;
+          sampleListen(e.currentTarget);
+          const listenSession = listenSessionRef.current;
+          if (listenSession) reportListen(listenSession);
           // Throttle store writes to ~4 Hz: the browser fires timeupdate 4-30 Hz,
           // but the progress UI only needs ~quarter-second resolution. Push when
           // the clock moved ≥0.25s, jumped backward (seek/restart), or the
@@ -1036,15 +1153,9 @@ export default function PlayerBar({
             updatePositionState(); // keep the OS scrubber in step while playing
             // Re-assert "playing" while the track ticks so the lock-screen
             // button self-corrects after a resume (it otherwise lingers on the
-            // play icon — iOS latched a paused state when the silence loop
+            // play icon - iOS latched a paused state when the silence loop
             // stopped). onTimeUpdate only fires while the track is playing.
             setPlaybackState("playing");
-          }
-          // Count a "friend play" once the track passes 30s (server ignores
-          // the owner's own plays). Fire-and-forget; silent if offline.
-          if (track && ct >= 30 && countedRef.current !== track.id) {
-            countedRef.current = track.id;
-            api(`/tracks/${track.id}/play`, { method: "POST" }).catch(() => {});
           }
         }}
         // Primary background-resume trigger: a prefetched next track reaches
@@ -1065,9 +1176,10 @@ export default function PlayerBar({
         onError={onAudioError}
         onEnded={() => {
           logAudio("ended");
+          finishListenSession(audioRef.current);
           // Hold the audio session across the track-end gap: past the prefetch
           // window the next track needs a live fetch, which a frozen locked page
-          // never completes — the silence loop keeps the page running until
+          // never completes - the silence loop keeps the page running until
           // onPlaying stops it.
           startSilenceLoop();
           autoAdvanceRef.current = true; // mark the upcoming load as automatic
@@ -1076,6 +1188,9 @@ export default function PlayerBar({
         onPause={() => {
           const audio = audioRef.current;
           if (!audio) return;
+          sampleListen(audio, true);
+          const listenSession = listenSessionRef.current;
+          if (listenSession) reportListen(listenSession, true);
           const playing = usePlayerStore.getState().isPlaying;
           // Log every pause with its inputs so we can see, on-device, whether a
           // lock-screen pause even reaches here (vs the MediaSession 'pause'
@@ -1085,7 +1200,7 @@ export default function PlayerBar({
             `exp=${expectedPauseRef.current} ended=${audio.ended} playing=${playing} vis=${document.visibilityState}`
           );
           // Our own pauses (user/lock-screen pause, end-of-queue, src swap) are
-          // pre-tagged — consume the tag and ignore them.
+          // pre-tagged - consume the tag and ignore them.
           if (expectedPauseRef.current) {
             expectedPauseRef.current = false;
             return;
@@ -1095,7 +1210,7 @@ export default function PlayerBar({
           // Reality (paused) diverged from intent (playing) with no deliberate
           // cause: an involuntary/system pause (headphone/Bluetooth/CarPlay
           // disconnect, call, audio-focus loss, iOS shared-session handoff).
-          // The user/OS meant it — reconcile UI to reality, don't fight the OS.
+          // The user/OS meant it - reconcile UI to reality, don't fight the OS.
           // Backgrounded pauses reconcile too: we deliberately gave up the old
           // bg-reclaim (auto-resume after another PWA's session handoff) so a
           // Bluetooth disconnect while locked stays paused instead of resuming
@@ -1103,6 +1218,8 @@ export default function PlayerBar({
           logAudio("pause:reconcile");
           _setPlaying(false);
         }}
+        onSeeking={(e) => resetListenSample(e.currentTarget)}
+        onSeeked={(e) => resetListenSample(e.currentTarget)}
         onLoadedMetadata={() => {
           // Restore the playhead once the element is seekable (done here, not via
           // seekRequest, which the seek effect clears before first play). The seek
@@ -1111,7 +1228,7 @@ export default function PlayerBar({
           const audio = audioRef.current;
           if (!audio) return;
           // No explicit cold-mount target, but the element came back at ~0 while
-          // the store knows we were further into THIS track — a warm same-track
+          // the store knows we were further into THIS track - a warm same-track
           // reload that lost its position (iOS evicts a backgrounded PWA's media
           // resource on resume; or an expired-presigned-URL re-buffer errors and
           // onAudioError reload()s from the top). Adopt the store position as the
@@ -1145,7 +1262,7 @@ export default function PlayerBar({
         }}
       />
 
-      {/* Mobile (below md, matching MobileNav): a minimal mini-player — art +
+      {/* Mobile (below md, matching MobileNav): a minimal mini-player - art +
           title/artist on the left (tap to open the now-playing sheet),
           rewind/play/skip on the right, and a thin non-interactive progress
           line underneath (also taps through to the sheet). */}

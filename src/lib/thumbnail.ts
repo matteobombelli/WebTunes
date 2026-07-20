@@ -7,7 +7,7 @@ import { withFfmpeg } from "@/lib/ffmpeg-gate";
 
 // Downscale cover art to a small JPEG thumbnail. List / queue / mini-bar rows
 // render art at <=64px but otherwise download the full-resolution cover (often
-// 600px+ from iTunes, larger for embedded art) — wasteful on mobile data over a
+// 600px+ from iTunes, larger for embedded art) - wasteful on mobile data over a
 // long list. Generated with ffmpeg on upload (and backfilled), stored alongside
 // the full art under a sibling key.
 //

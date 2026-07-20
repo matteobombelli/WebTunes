@@ -24,7 +24,7 @@ export async function GET(
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  // The track row doesn't depend on the session, so fetch both concurrently —
+  // The track row doesn't depend on the session, so fetch both concurrently -
   // list views fan out many /art requests, each saving a serial DB hop.
   const [user, [track]] = await Promise.all([
     requireUser(),
@@ -86,7 +86,7 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
+  // A truncated/garbage multipart body makes formData() reject - 400, not 500.
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
@@ -98,7 +98,7 @@ export async function POST(
   const { file, ext } = upload;
 
   // Resolve the key extension and stored Content-Type from a server-side
-  // allowlist — never the untrusted filename/MIME.
+  // allowlist - never the untrusted filename/MIME.
   const kind = imageKindFromUpload(ext, file.type);
   const s3Key = `art/${user.id}/${id}.${kind.ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());

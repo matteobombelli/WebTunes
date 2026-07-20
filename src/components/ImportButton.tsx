@@ -41,7 +41,7 @@ function loadOptions(): ImportOptions {
     const raw = localStorage.getItem(OPTIONS_KEY);
     if (raw) return { ...DEFAULT_OPTIONS, ...JSON.parse(raw) };
   } catch {
-    // corrupt/unavailable localStorage — fall through to defaults
+    // corrupt/unavailable localStorage - fall through to defaults
   }
   return DEFAULT_OPTIONS;
 }
@@ -204,8 +204,8 @@ function LinkTab({ options }: { options: ImportOptions }) {
   const [error, setError] = useState<string | null>(null);
 
   // At most one job runs at a time (global serial worker); the rest queue
-  // behind it. Show the running job's progress/log — else the newest finished
-  // one — and list what's queued. Jobs arrive newest-first; the queue runs
+  // behind it. Show the running job's progress/log - else the newest finished
+  // one - and list what's queued. Jobs arrive newest-first; the queue runs
   // oldest-first, so reverse it for display.
   const job: ImportJobDTO | undefined =
     jobs.find((j) => j.status === "resolving" || j.status === "running") ??
@@ -394,7 +394,7 @@ function SearchTab({ options }: { options: ImportOptions }) {
           {results.map((r) => (
             <li key={r.id} className="flex items-center gap-3 p-2">
               {r.thumbnail && (
-                // External YouTube thumbnail — not a Next-optimizable asset.
+                // External YouTube thumbnail - not a Next-optimizable asset.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={r.thumbnail}

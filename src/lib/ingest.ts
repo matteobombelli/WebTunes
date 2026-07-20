@@ -61,7 +61,7 @@ export function validateAudioUpload(
  * Caller-supplied metadata that wins over whatever is embedded in the file.
  * The extension importer sends these: title/artist/album come from the source
  * (the YouTube video, or the Spotify/Apple track it matched), and `artUrl` is
- * that source's cover — a YouTube thumbnail (cropSquare) or Spotify/Apple
+ * that source's cover - a YouTube thumbnail (cropSquare) or Spotify/Apple
  * artwork. Mirrors the reference exporter tagging every file with title/
  * artist/album + embedded cover.
  */
@@ -110,7 +110,7 @@ export async function ingestTrack({
     };
   }
 
-  // These three are independent — run them concurrently so the I/O-bound lrclib
+  // These three are independent - run them concurrently so the I/O-bound lrclib
   // lookup inside metadata extraction overlaps the CPU-bound ffmpeg work instead
   // of running in series. Loudness is best-effort (null on any failure, like
   // art/lyrics); the re-mux returns null for anything that isn't Opus or fails.
@@ -132,7 +132,7 @@ export async function ingestTrack({
 
   // Cover art: prefer the file's embedded art; otherwise fetch the caller's art
   // URL (Spotify/Apple artwork, or a YouTube thumbnail cropped square). Both are
-  // untrusted — the fetch sniffs the bytes for the stored kind. Anything still
+  // untrusted - the fetch sniffs the bytes for the stored kind. Anything still
   // missing (no embedded art, no/failed URL) is left to the background
   // recognition worker, exactly as before.
   let cover: { body: Buffer; contentType: string; ext: string } | null =
@@ -157,7 +157,7 @@ export async function ingestTrack({
   // client-supplied filename is untrusted, so only allowlisted extensions reach
   // the key; the claimed MIME type is untrusted too, so we only keep it when
   // it's audio/* (anything else gets a neutral Content-Type so it can't be
-  // served as active content — the offline service worker replays this from a
+  // served as active content - the offline service worker replays this from a
   // same-origin cache).
   const originalExt = AUDIO_EXTENSIONS.has(ext) ? ext : "bin";
   const originalType = mimeType.startsWith("audio/") ? mimeType : null;
@@ -168,12 +168,12 @@ export async function ingestTrack({
 
   // Measure duration on the EXACT bytes we store (post-remux) so the listed time
   // always matches what actually plays; music-metadata measured the original
-  // upload buffer, which diverges from the remuxed MP4 for Opus. Best-effort —
+  // upload buffer, which diverges from the remuxed MP4 for Opus. Best-effort -
   // fall back to the music-metadata value when ffprobe can't measure it.
   const durationSec = (await probeDurationSec(audioBody, audioExt)) ?? meta.durationSec;
 
   // Upload audio and cover art together. Art is best-effort and must never fail
-  // the track — swallow its errors and drop the key so the row isn't orphaned.
+  // the track - swallow its errors and drop the key so the row isn't orphaned.
   let artS3Key: string | null = null;
   let artThumbS3Key: string | null = null;
   const uploads: Promise<unknown>[] = [
@@ -241,7 +241,7 @@ export async function ingestTrack({
     // Compute the CLAP embedding in the background (the slowest upload step),
     // now that the row + S3 object exist. Best-effort: a missing row just means
     // this track won't seed/appear in "play similar" until the worker (or the
-    // backfill script) fills it in — it must never fail or delay the upload.
+    // backfill script) fills it in - it must never fail or delay the upload.
     enqueueEmbedding({ trackId, s3Key, ext: audioExt });
     // Fill any MISSING artist/album/cover-art in the background via acoustic
     // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup

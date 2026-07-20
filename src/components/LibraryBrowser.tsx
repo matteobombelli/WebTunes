@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { TrackDTO } from "@/lib/types";
+import type { TrackDTO, TrackPageDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
 import { usePlayerStore } from "@/stores/player";
 import TrackList from "@/components/TrackList";
@@ -12,78 +12,52 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 import { SCOPES } from "@/components/ui/scopes";
 
-// Session cache of the last successful browse fetch per scope (+ the
-// hideFriendDuplicates setting, which changes the server result). Module-level
-// so it survives navigating away and back; the full list is a large JSON
-// download, so a cached copy renders instantly while a background refetch
-// revalidates it.
-const scopeCache = new Map<string, TrackDTO[]>();
+// Session cache of the pages loaded for each shared scope (+ the duplicate
+// setting, which changes the server result). Navigating back restores the
+// loaded window immediately while its first page revalidates.
+const scopeCache = new Map<string, TrackPageDTO>();
 
-// scopeCache key for the background-fetched full own library (the own scope
-// isn't affected by hideFriendDuplicates, so no setting suffix).
-const OWN_FULL_KEY = "own:full";
+const TRACKS_PER_PAGE = 100;
 
-// Default view is the server-rendered own library (initialTracks — only the
-// newest slice at large library sizes, kept fresh by router.refresh from
-// TrackList — with the remainder background-fetched below). Any query or
-// non-own scope switches to client-fetched results.
+// Default view is the server-rendered first own-library page. Any query or
+// non-own scope switches to client-fetched results; unfiltered lists fetch more
+// pages only as their scroll sentinel approaches.
 export default function LibraryBrowser({
-  initialTracks,
+  initialPage,
   totalTracks,
 }: {
-  initialTracks: TrackDTO[];
-  /** How many tracks the user owns; > initialTracks.length means the server
-   *  sent a partial slice and the full list must be fetched client-side. */
+  initialPage: TrackPageDTO;
   totalTracks: number;
 }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
-  const [results, setResults] = useState<TrackDTO[] | null>(null);
+  const [results, setResults] = useState<TrackPageDTO | null>(null);
   // Which view `results` belongs to, so a scope/query change can tell fresh
   // results from a previous view's (and fall back to the cache meanwhile).
   const [resultsKey, setResultsKey] = useState<string | null>(null);
-  // The last fetch failed — its empty list means "couldn't load", not "empty".
+  // The last fetch failed - its empty list means "couldn't load", not "empty".
   const [loadFailed, setLoadFailed] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   // Owned by the global Settings modal (player store); the server reads it per
   // request, so a change re-fires the fetch effect below to re-filter the list.
   const hideDuplicates = usePlayerStore((s) => s.hideFriendDuplicates);
   // Bumped after an edit/delete so client-fetched views re-query. Stable
-  // identity ([] deps — setState is stable) so it doesn't defeat TrackRow's
+  // identity ([] deps - setState is stable) so it doesn't defeat TrackRow's
   // React.memo by changing TrackList's `remove` callback every render.
   const [refreshKey, setRefreshKey] = useState(0);
   const onMutated = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  // The rest of the own library beyond the server's initial slice, fetched in
-  // the background. Seeded from the module cache so navigating back renders the
-  // full list instantly (revalidated below).
-  const [ownFull, setOwnFull] = useState<TrackDTO[] | null>(
-    () => scopeCache.get(OWN_FULL_KEY) ?? null
-  );
-  const initialPartial = initialTracks.length < totalTracks;
-  useEffect(() => {
-    if (!initialPartial) return;
-    const controller = new AbortController();
-    api<TrackDTO[]>("/tracks", { signal: controller.signal })
-      .then((tracks) => {
-        scopeCache.set(OWN_FULL_KEY, tracks);
-        setOwnFull(tracks);
-      })
-      .catch(() => {}); // best-effort: the fresh initial slice stays up
-    return () => controller.abort();
-    // initialTracks identity marks a new server snapshot (a navigation, or the
-    // router.refresh every mutation issues) — refetch so the tail can't go stale.
-  }, [initialPartial, initialTracks]);
-
-  // Own-scope list: the fresh server slice wins; the background-fetched list
-  // fills in the older remainder (id-deduped — both are newest-first, and a
-  // track outside the newest slice sorts after all of it, so concatenation
-  // preserves order; a possibly-stale tail is corrected when the refetch lands).
-  const ownTracks = useMemo(() => {
-    if (!initialPartial || !ownFull) return initialTracks;
-    const headIds = new Set(initialTracks.map((t) => t.id));
-    return [...initialTracks, ...ownFull.filter((t) => !headIds.has(t.id))];
-  }, [initialTracks, ownFull, initialPartial]);
+  // Reset any loaded own-library tail when a server navigation or mutation
+  // supplies a fresh first page.
+  const [ownPage, setOwnPage] = useState(() => ({
+    snapshot: initialPage,
+    page: initialPage,
+  }));
+  if (ownPage.snapshot !== initialPage) {
+    setOwnPage({ snapshot: initialPage, page: initialPage });
+  }
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
@@ -91,35 +65,38 @@ export default function LibraryBrowser({
   const viewKey = query ? `q:${scope}:${query}` : cacheKey;
 
   useEffect(() => {
-    // Own-library browsing renders initialTracks; stale results are ignored.
+    // Own-library browsing renders initialPage; stale results are ignored.
     if (browsingOwn) return;
     // Abort superseded requests so a slow old response cannot win.
     const controller = new AbortController();
     const run = async () => {
       setSearching(true);
+      setLoadMoreFailed(false);
       try {
-        let tracks: TrackDTO[];
+        let page: TrackPageDTO;
         if (query) {
-          tracks = await api<TrackDTO[]>(
+          const tracks = await api<TrackDTO[]>(
             `/search?q=${encodeURIComponent(query)}&scope=${scope}`,
             { signal: controller.signal }
           );
+          page = { tracks, nextCursor: null };
         } else {
           // Browsing without a query: let the server return exactly this scope
-          // (scope is "all" or "friends" here — "own" renders initialTracks),
+          // (scope is "all" or "friends" here - "own" renders initialPage),
           // so friends-only doesn't download own tracks just to discard them.
-          tracks = await api<TrackDTO[]>(`/tracks?scope=${scope}`, {
-            signal: controller.signal,
-          });
+          page = await api<TrackPageDTO>(
+            `/tracks?scope=${scope}&limit=${TRACKS_PER_PAGE}`,
+            { signal: controller.signal }
+          );
         }
-        if (!query) scopeCache.set(cacheKey, tracks);
-        setResults(tracks);
+        if (!query) scopeCache.set(cacheKey, page);
+        setResults(page);
         setResultsKey(viewKey);
         setLoadFailed(false);
         setSearching(false);
       } catch {
         if (!controller.signal.aborted) {
-          setResults([]);
+          setResults({ tracks: [], nextCursor: null });
           setResultsKey(viewKey);
           setLoadFailed(true);
           setSearching(false);
@@ -136,25 +113,77 @@ export default function LibraryBrowser({
 
   // Precedence: fresh results win; while a scope switch revalidates, the
   // cached copy of THAT scope renders at full opacity (right data, maybe
-  // stale) — never the previous scope's misleading rows (skeleton instead).
+  // stale) - never the previous scope's misleading rows (skeleton instead).
   // Typing keeps the previous results visible, dimmed.
   const fresh = resultsKey === viewKey;
-  const tracks = browsingOwn
-    ? ownTracks
+  const page = browsingOwn
+    ? ownPage.page
     : fresh
       ? results
       : query
         ? results
         : (scopeCache.get(cacheKey) ?? null);
+  const tracks = page?.tracks ?? null;
   const dimmed = !browsingOwn && searching && !fresh && !!query;
   const countNoun = query ? "result" : "track";
-  // Own-scope count uses the server total so the partial first paint doesn't
-  // briefly claim a slice-sized library while the full list is still loading.
+  const hasMore =
+    !query && !!page?.nextCursor && (browsingOwn || (fresh && !searching));
   const trackCount = !tracks
     ? 0
     : browsingOwn
       ? Math.max(totalTracks, tracks.length)
       : tracks.length;
+
+  const appendPage = useCallback((current: TrackPageDTO, next: TrackPageDTO) => {
+    const ids = new Set(current.tracks.map((track) => track.id));
+    return {
+      tracks: [
+        ...current.tracks,
+        ...next.tracks.filter((track) => !ids.has(track.id)),
+      ],
+      nextCursor: next.nextCursor,
+    };
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    const cursor = page?.nextCursor;
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const scopeParam = browsingOwn ? "" : `scope=${scope}&`;
+      const next = await api<TrackPageDTO>(
+        `/tracks?${scopeParam}limit=${TRACKS_PER_PAGE}&cursor=${encodeURIComponent(cursor)}`
+      );
+      if (browsingOwn) {
+        setOwnPage((current) =>
+          current.page.nextCursor === cursor
+            ? { ...current, page: appendPage(current.page, next) }
+            : current
+        );
+      } else if (resultsKey === viewKey) {
+        setResults((current) => {
+          if (!current || current.nextCursor !== cursor) return current;
+          const combined = appendPage(current, next);
+          scopeCache.set(cacheKey, combined);
+          return combined;
+        });
+      }
+    } catch {
+      setLoadMoreFailed(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    appendPage,
+    browsingOwn,
+    cacheKey,
+    loadingMore,
+    page?.nextCursor,
+    resultsKey,
+    scope,
+    viewKey,
+  ]);
 
   return (
     <>
@@ -192,7 +221,8 @@ export default function LibraryBrowser({
           className={`transition-opacity duration-100 ${dimmed ? "opacity-50" : ""}`}
         >
           <p className="mb-1 text-sm text-fg-muted">
-            {trackCount} {countNoun}
+            {trackCount}
+            {!browsingOwn && hasMore ? "+" : ""} {countNoun}
             {trackCount === 1 ? "" : "s"}
           </p>
           <TrackList
@@ -203,14 +233,29 @@ export default function LibraryBrowser({
             selectable
             sortable
             onMutated={onMutated}
+            hasMore={hasMore && !loadMoreFailed}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
             emptyMessage={
               !browsingOwn && loadFailed && fresh
-                ? "Couldn’t load tracks — check your connection."
+                ? "Couldn’t load tracks - check your connection."
                 : query
                   ? `No matches for “${query}”.`
                   : undefined
             }
           />
+          {loadMoreFailed && hasMore && (
+            <div className="py-4 text-center text-sm text-fg-muted">
+              Couldn’t load more tracks.{" "}
+              <button
+                type="button"
+                onClick={loadMore}
+                className="font-semibold text-accent hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          )}
         </div>
       )}
     </>

@@ -3,7 +3,7 @@
 -- users.name NOT NULL here because those live only in the hand-applied
 -- out-of-band files (0019_audit_indexes_and_share_fk.sql,
 -- 0020_username_unique.sql), not in the snapshot journal. They were trimmed
--- from this file — the out-of-band files remain their source of record — and
+-- from this file - the out-of-band files remain their source of record - and
 -- the new snapshot now records them, so future generates stop re-emitting them.
 CREATE TABLE "extension_pair_codes" (
 	"code_hash" text PRIMARY KEY NOT NULL,

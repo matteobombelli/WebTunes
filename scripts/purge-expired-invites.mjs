@@ -1,6 +1,6 @@
 // Deletes expired-but-never-used invite links (invites.used_at IS NULL AND
 // expires_at < now()) so dead links don't accumulate. Run daily by
-// deploy/webtunes-purge-invites.timer. REDEEMED invites are kept on purpose —
+// deploy/webtunes-purge-invites.timer. REDEEMED invites are kept on purpose -
 // they're the "used by <name>" history shown on the Invite tab (the friendship
 // itself is the durable record, but the row records how it formed). Expired
 // unused rows are already inert (lib/invites.ts filters by used_at + expiry);

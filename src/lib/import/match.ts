@@ -25,15 +25,15 @@ export function normalize(s: string): string {
     .trim();
 }
 
-// Matched on the raw title — normalize() strips "(Live)"/"(Remix)" brackets.
+// Matched on the raw title - normalize() strips "(Live)"/"(Remix)" brackets.
 const LIVE_PATTERNS = /\b(live|concert|unplugged|tour)\b/;
 const JUNK_PATTERNS =
   /\b(remix|sped[\s-]?up|slowed|nightcore|reverb|8d|cover|karaoke|mashup)\b/;
 
 /**
  * True if a candidate title is acceptable for the requested version.
- * studio — reject live takes and weird versions; live — require a live
- * indicator; none — everything allowed. Word-boundary matching can mis-flag
+ * studio - reject live takes and weird versions; live - require a live
+ * indicator; none - everything allowed. Word-boundary matching can mis-flag
  * legitimate titles ("Live and Let Die"); accepted, since every drop is
  * reported.
  */
@@ -45,7 +45,7 @@ export function versionAllowed(title: string, pref: ImportVersionPref): boolean 
 }
 
 // Total matching characters per Ratcliff/Obershelp: the longest common
-// substring, then recurse on what's left of both sides — the same measure
+// substring, then recurse on what's left of both sides - the same measure
 // difflib.SequenceMatcher's ratio() is built on (titles are far below the
 // length where difflib's junk heuristics would diverge).
 function matchingChars(a: string, b: string): number {
@@ -108,7 +108,7 @@ export function matchScore(
   let score = Math.max(ratio(want, title), ratio(want, `${title} ${channel}`.trim()));
 
   // Version markers the candidate carries but the source title doesn't flag a
-  // wrong version — checked on the raw titles, since normalize() strips the
+  // wrong version - checked on the raw titles, since normalize() strips the
   // "(Nightcore Remix)" brackets they usually live in. When pref is set,
   // versionAllowed has already filtered; this is what protects pref "none".
   const rawTitle = entry.title.toLowerCase();
@@ -122,7 +122,7 @@ export function matchScore(
     score -= 0.4;
   }
 
-  // Official channels carry the catalog audio — a tie-break edge over
+  // Official channels carry the catalog audio - a tie-break edge over
   // re-uploads, too small to rescue a bad title match.
   if (
     channel &&
@@ -143,7 +143,7 @@ export function matchScore(
 }
 
 /**
- * Search YouTube for the track and return the best-scoring candidate — url on
+ * Search YouTube for the track and return the best-scoring candidate - url on
  * a confident match (score ≥ threshold), otherwise a reason explaining the
  * skip.
  */

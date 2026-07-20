@@ -11,7 +11,7 @@ const schema = z.object({
 });
 
 /**
- * Redeem a pairing code for a long-lived import token — the one unauthenticated
+ * Redeem a pairing code for a long-lived import token - the one unauthenticated
  * extension endpoint. IP-rate-limited so the 8-char code space can't be brute
  * forced within its 10-minute life.
  */
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req.headers);
   if (!rateLimit(`ext-pair:${ip}`, 10, 15 * 60 * 1000)) {
     return NextResponse.json(
-      { error: "Too many attempts — try again later." },
+      { error: "Too many attempts - try again later." },
       { status: 429 }
     );
   }

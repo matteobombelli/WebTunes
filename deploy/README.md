@@ -41,8 +41,8 @@ restores in place over the current database.
 
 `scripts/purge-expired-shares.mjs` deletes `track_shares` rows whose
 `expires_at` has passed (public track-share links auto-expire after 7 days).
-Expired rows are already inert — `lib/shares.ts` filters by expiry and the
-create-upsert self-heals same-track collisions — so this timer is the guarantee
+Expired rows are already inert - `lib/shares.ts` filters by expiry and the
+create-upsert self-heals same-track collisions - so this timer is the guarantee
 they don't linger in the table. Reuses `DATABASE_URL`.
 
 ### Install (on the VPS, as `debian`)
@@ -65,7 +65,7 @@ journalctl -u webtunes-purge-shares.service     # logs (number of links purged)
 ## Daily purge of expired invite links
 
 `scripts/purge-expired-invites.mjs` deletes `invites` rows that expired without
-ever being used (`used_at IS NULL AND expires_at < now()`) — registration invite
+ever being used (`used_at IS NULL AND expires_at < now()`) - registration invite
 links auto-expire after 7 days. REDEEMED invites are kept (the "used by <name>"
 history on the Invite tab). Expired unused rows are already inert
 (`lib/invites.ts` filters by `used_at` + expiry), so this timer is the guarantee
@@ -92,7 +92,7 @@ journalctl -u webtunes-purge-invites.service    # logs (number of links purged)
 
 The in-site importer (`src/lib/import/`) shells out to the yt-dlp standalone
 binary at `bin/yt-dlp` (gitignored; `YT_DLP_PATH` overrides). YouTube breakage
-is yt-dlp's #1 failure mode, so a daily `-U` self-update keeps it current — a
+is yt-dlp's #1 failure mode, so a daily `-U` self-update keeps it current - a
 stale binary just fails an import job with a readable error, never the app.
 
 ### Provision (once, as the app user)

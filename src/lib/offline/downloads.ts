@@ -39,7 +39,7 @@ async function cacheArt(track: TrackDTO): Promise<void> {
     await putArt(track.id, await res.blob());
   } catch (err) {
     // Art is non-essential; never fail a download over it (offline failure is
-    // normal here, so debug — gated by wt-log, not a warning).
+    // normal here, so debug - gated by wt-log, not a warning).
     log.debug(
       "offline",
       `art cache failed ${track.id}`,
@@ -67,7 +67,7 @@ export async function downloadTrack(
   }
 
   // Downloads can't ride the stable /stream URL: the SW intercepts it, and
-  // we need a CORS-readable body — so fetch the presigned URL directly.
+  // we need a CORS-readable body - so fetch the presigned URL directly.
   const { url } = await api<{ url: string }>(`/tracks/${track.id}/stream-url`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
@@ -167,8 +167,8 @@ export async function removePlaylist(playlistId: string): Promise<void> {
 }
 
 /**
- * Hard-purge ALL offline state — every cache bucket plus the IndexedDB metadata
- * — in one pass. Used when a DIFFERENT account signs in on the same browser
+ * Hard-purge ALL offline state - every cache bucket plus the IndexedDB metadata
+ * - in one pass. Used when a DIFFERENT account signs in on the same browser
  * profile: the caches and DB are keyed only by track id with no access check, so
  * the previous user's downloads (including private tracks) must not survive the
  * switch. Heavier than removeAll(): it also drops the prefetch/shell caches and
@@ -183,7 +183,7 @@ export async function purgeAllOfflineData(): Promise<void> {
   await clearAll().catch(() => {});
 }
 
-/** Wipes every download — playlists and tracks (audio, art, metadata) alike. */
+/** Wipes every download - playlists and tracks (audio, art, metadata) alike. */
 export async function removeAll(): Promise<void> {
   for (const playlist of await getDownloadedPlaylists()) {
     await deleteDownloadedPlaylist(playlist.id);

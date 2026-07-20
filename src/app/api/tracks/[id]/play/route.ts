@@ -1,49 +1,47 @@
-import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { listens, tracks } from "@/db/schema";
+import { z } from "zod";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { canAccessTrack } from "@/lib/friends";
+import { recordListen, type ListenTelemetry } from "@/lib/listens";
 import { isUuid } from "@/lib/validate";
 
-// Records a play: the client fires this once a track has been played to ≥30s.
-// Every accessible play (owner included) is logged to `listens` — the
-// timestamped, per-user signal Discover ranks "Your top 100" and "Friends"
-// from. friend_play_count stays the global, owner-excluded counter behind the
-// "listen count" column. The server is the access/ownership boundary, so the
-// client may fire for any track it plays.
+const telemetrySchema = z.object({
+  sessionId: z.string().uuid(),
+  listenedSeconds: z.number().int().min(30).max(86400),
+});
+
+// Records a qualified play once actual playback reaches 30s, then accepts
+// idempotent cumulative-duration checkpoints for that playback session. A
+// body-less request remains supported for older/mobile clients.
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  // The track row doesn't depend on the session, so fetch both concurrently.
-  const [user, [track]] = await Promise.all([
-    requireUser(),
-    db
-      .select({ ownerId: tracks.ownerId, isPrivate: tracks.isPrivate })
-      .from(tracks)
-      .where(eq(tracks.id, id)),
-  ]);
+  const user = await requireUser();
   if (!user) return unauthorized();
-  if (!track) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  if (!(await canAccessTrack(user.id, track))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  let telemetry: ListenTelemetry | null = null;
+  if (req.headers.get("content-type")?.includes("application/json")) {
+    const body = await req.json().catch(() => null);
+    const parsed = telemetrySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid listen telemetry" },
+        { status: 400 }
+      );
+    }
+    telemetry = parsed.data;
   }
 
-  // Log the listen for everyone with access (owner included) — powers Discover.
-  await db.insert(listens).values({ userId: user.id, trackId: id });
-  // friend_play_count stays owner-excluded.
-  if (track.ownerId !== user.id) {
-    await db
-      .update(tracks)
-      .set({ friendPlayCount: sql`${tracks.friendPlayCount} + 1` })
-      .where(eq(tracks.id, id));
+  const result = await recordListen(user.id, id, telemetry);
+  if (result === "not_found") {
+    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+  }
+  if (result === "forbidden") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   return new NextResponse(null, { status: 204 });
 }

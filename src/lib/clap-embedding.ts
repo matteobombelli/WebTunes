@@ -13,10 +13,10 @@ import { log } from "@/lib/log";
 //
 // Best-effort, exactly like loudness/art/lyrics: any failure (ffmpeg missing,
 // model load failure, unparseable audio, timeout) yields null so the caller
-// stores no embedding for that track — it must never fail an upload.
+// stores no embedding for that track - it must never fail an upload.
 //
 // IMPORTANT: MODEL_ID, DTYPE and the 48 kHz mono decode below must stay in sync
-// with scripts/analyze-clap-embeddings.mjs — embeddings are only comparable
+// with scripts/analyze-clap-embeddings.mjs - embeddings are only comparable
 // when produced by identical model + preprocessing.
 
 // Model + dtype. clap-htsat-unfused's audio projection is 512-d. fp32 (the
@@ -138,7 +138,7 @@ async function decodeToPcm(buffer: Buffer, ext: string): Promise<Float32Array> {
 
 function runFfmpegDecode(inputPath: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    // -ac 1 -ar 48000 -f f32le: mono, 48 kHz, raw 32-bit float PCM in [-1,1] —
+    // -ac 1 -ar 48000 -f f32le: mono, 48 kHz, raw 32-bit float PCM in [-1,1] -
     // exactly what the CLAP feature extractor expects.
     const proc = spawn(
       "ffmpeg",

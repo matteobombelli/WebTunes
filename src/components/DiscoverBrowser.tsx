@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CompassIcon, UsersIcon } from "@/components/icons";
+import { CompassIcon, StatsIcon, UsersIcon } from "@/components/icons";
 import DiscoverSection from "@/components/DiscoverSection";
 import FriendsPanel from "@/components/FriendsPanel";
+import StatsPanel from "@/components/StatsPanel";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type {
   FriendDTO,
@@ -21,8 +22,8 @@ type Sections = {
 };
 
 /**
- * The Discover hub: a top-level tab switch between the five discovery sections
- * and the friends/requests panel (reused as-is, keeping its own sub-tabs).
+ * The Discover hub: a top-level tab switch between discovery, friends, and the
+ * viewer's private listening stats.
  */
 export default function DiscoverBrowser({
   sections,
@@ -39,18 +40,26 @@ export default function DiscoverBrowser({
   ownFriendListens: number;
   canInvite: boolean;
 }) {
-  const [tab, setTab] = useState<"discover" | "friends">("discover");
+  const [tab, setTab] = useState<"discover" | "friends" | "stats">("discover");
+  // Stats stays unmounted until first opened so Discover's initial render does
+  // not issue an analytics request. It stays mounted afterward to retain its
+  // per-range cache when the user switches tabs.
+  const [statsVisited, setStatsVisited] = useState(false);
   const hasIncoming = requests.some((r) => r.direction === "incoming");
+  const changeTab = (next: "discover" | "friends" | "stats") => {
+    if (next === "stats") setStatsVisited(true);
+    setTab(next);
+  };
 
   return (
     <>
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="font-display text-4xl font-bold tracking-tight">
-          {tab === "discover" ? "Discover" : "Friends"}
+          {tab === "discover" ? "Discover" : tab === "friends" ? "Friends" : "Stats"}
         </h1>
         <SegmentedControl
           value={tab}
-          onChange={setTab}
+          onChange={changeTab}
           size="lg"
           options={[
             {
@@ -64,11 +73,16 @@ export default function DiscoverBrowser({
               icon: <UsersIcon className="h-6 w-6 sm:h-4 sm:w-4" />,
               dot: hasIncoming,
             },
+            {
+              value: "stats",
+              label: "Stats",
+              icon: <StatsIcon className="h-6 w-6 sm:h-4 sm:w-4" />,
+            },
           ]}
         />
       </div>
 
-      {tab === "discover" ? (
+      {tab === "discover" && (
         <div className="flex flex-col gap-4 sm:gap-5">
           <DiscoverSection title="Random" radioSeeds={sections.random} />
           <DiscoverSection
@@ -92,7 +106,8 @@ export default function DiscoverBrowser({
             emptyHint="No tracks yet."
           />
         </div>
-      ) : (
+      )}
+      {tab === "friends" && (
         <FriendsPanel
           friends={friends}
           requests={requests}
@@ -100,6 +115,11 @@ export default function DiscoverBrowser({
           ownFriendListens={ownFriendListens}
           canInvite={canInvite}
         />
+      )}
+      {statsVisited && (
+        <div hidden={tab !== "stats"}>
+          <StatsPanel active={tab === "stats"} />
+        </div>
       )}
     </>
   );

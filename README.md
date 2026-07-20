@@ -42,7 +42,7 @@ sharing/privacy features can be demonstrated.
 The script is idempotent (safe to re-run), needs the database and S3 bucket
 from `docker compose up -d` plus internet access to download the tracks, and
 reads `.env.local` for credentials. The passwords are deliberately short for
-demos — seeding writes the hash directly, bypassing the 8-character
+demos - seeding writes the hash directly, bypassing the 8-character
 registration minimum.
 
 ## Commands

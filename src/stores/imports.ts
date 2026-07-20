@@ -11,7 +11,7 @@ import type {
 
 // Import-job state, mirroring the uploads store: module-level so an in-flight
 // import (and its results) stays visible across client-side navigation. Unlike
-// uploads, the job itself runs SERVER-side — this store just polls
+// uploads, the job itself runs SERVER-side - this store just polls
 // GET /api/import while anything is active, so a reload mid-import re-attaches
 // to the running job on the next hydrate().
 
@@ -56,7 +56,7 @@ export const useImportsStore = create<ImportsState>((set, get) => {
     try {
       jobs = await api<ImportJobDTO[]>("/import");
     } catch {
-      return; // transient poll failure — keep the last snapshot
+      return; // transient poll failure - keep the last snapshot
     }
     set({ jobs: jobs.filter((j) => !dismissed.has(j.id)) });
     if (!jobs.some(isActive)) stopPolling();
@@ -78,7 +78,7 @@ export const useImportsStore = create<ImportsState>((set, get) => {
 
     hydrate: () => {
       void (async () => {
-        // Jobs already terminal when the page loads are old news — dismiss
+        // Jobs already terminal when the page loads are old news - dismiss
         // them so a finished (or failed) job doesn't greet every app open for
         // the rest of its server-side retention. Active jobs re-attach and
         // show their results when they finish.

@@ -18,7 +18,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 
 // The offline workhorse: everything rendered here comes from the downloads
-// store (IndexedDB) — no server data, no API-dependent actions. TrackList is
+// store (IndexedDB) - no server data, no API-dependent actions. TrackList is
 // deliberately not reused; its row actions (edit, add-to-playlist,
 // router.refresh) all assume a network. Card → track-list navigation is
 // client state, not a sub-route: the SW's offline fallback only covers
@@ -215,7 +215,7 @@ export default function DownloadsBrowser() {
   );
   const onBack = useCallback(() => setOpen(null), []);
 
-  // Page-shell skeleton while IndexedDB hydrates — usually one frame, but this
+  // Page-shell skeleton while IndexedDB hydrates - usually one frame, but this
   // page is the landing surface on the slow-connection fallback path.
   if (!ready)
     return (
@@ -310,7 +310,7 @@ export default function DownloadsBrowser() {
       ) : playlists.length === 0 && pinned.length === 0 ? (
         <p className="py-8 text-center text-sm text-fg-muted">
           Nothing downloaded yet. Use the <DownloadIcon size={13} className="inline" />{" "}
-          button on songs or the Download button on a playlist — everything here
+          button on songs or the Download button on a playlist - everything here
           stays playable offline.
         </p>
       ) : (
@@ -331,7 +331,7 @@ export default function DownloadsBrowser() {
             const downloaded = p.trackIds.filter((id) => tracksById[id]);
             // Mosaic from downloaded art-bearing members: their art is what
             // the download manager put in wt-art, so covers render offline
-            // (an uploaded playlist cover would not — it is never cached).
+            // (an uploaded playlist cover would not - it is never cached).
             const artIds = downloaded
               .filter((id) => tracksById[id].artS3Key)
               .slice(0, 4);

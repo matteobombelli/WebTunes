@@ -176,12 +176,12 @@ async function processTrack({ id, owner_id, s3_key, title: currentTitle }) {
         { duration: true }
       );
     } catch {
-      // still unparseable — leave the row alone
+      // still unparseable - leave the row alone
     }
 
     if (!meta) {
       unchanged++;
-      console.warn(`  ${id} — unparseable, left as-is`);
+      console.warn(`  ${id} - unparseable, left as-is`);
       return;
     }
 
@@ -240,7 +240,7 @@ async function processTrack({ id, owner_id, s3_key, title: currentTitle }) {
 
     if (sets.length === 0) {
       unchanged++;
-      console.log(`  ${id} — no embedded metadata found, left as-is`);
+      console.log(`  ${id} - no embedded metadata found, left as-is`);
       return;
     }
 
@@ -251,7 +251,7 @@ async function processTrack({ id, owner_id, s3_key, title: currentTitle }) {
     );
     updated++;
     console.log(
-      `  ${id} — ${[
+      `  ${id} - ${[
         tagTitle && tagTitle !== currentTitle && `title="${tagTitle}"`,
         artist && `artist="${artist}"`,
         album && `album="${album}"`,
@@ -264,7 +264,7 @@ async function processTrack({ id, owner_id, s3_key, title: currentTitle }) {
     );
   } catch (err) {
     failed++;
-    console.warn(`  ${id} — failed: ${err.message}`);
+    console.warn(`  ${id} - failed: ${err.message}`);
   }
 }
 

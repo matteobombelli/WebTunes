@@ -1,12 +1,12 @@
 // Applies scripts/s3-lifecycle.json to the production bucket so R2 aborts
-// incomplete multipart uploads (left by a crashed/killed upload — they count
+// incomplete multipart uploads (left by a crashed/killed upload - they count
 // toward storage and are invisible to a normal object listing). Repeatable; run
 // after any change to s3-lifecycle.json:
 //   node scripts/apply-s3-lifecycle.mjs
 // S3_* creds come from the process environment when set, otherwise from the
 // first env file present (.env.production locally, .env on the VPS).
 // Like apply-s3-cors.mjs, this is a bucket-level call: Cloudflare R2 needs an
-// Admin Read & Write token — the app's object-scoped token gets AccessDenied.
+// Admin Read & Write token - the app's object-scoped token gets AccessDenied.
 // Export admin S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY (plus S3_BUCKET etc.) first.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -65,14 +65,14 @@ console.log(
 );
 
 // Show what the rule will clean up. ListMultipartUploads is the only way to see
-// these — they never appear in ListObjectsV2.
+// these - they never appear in ListObjectsV2.
 try {
   const { Uploads = [] } = await client.send(
     new ListMultipartUploadsCommand({ Bucket: bucket })
   );
   console.log(`Incomplete multipart uploads currently present: ${Uploads.length}`);
   for (const u of Uploads) {
-    console.log(`  ${u.Key} — initiated ${u.Initiated?.toISOString?.() ?? u.Initiated}`);
+    console.log(`  ${u.Key} - initiated ${u.Initiated?.toISOString?.() ?? u.Initiated}`);
   }
 } catch (err) {
   console.log(`(could not list incomplete uploads: ${err.message})`);

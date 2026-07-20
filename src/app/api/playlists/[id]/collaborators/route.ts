@@ -14,7 +14,7 @@ import { isUuid } from "@/lib/validate";
 
 type Params = { params: Promise<{ id: string }> };
 
-// List collaborators — visible to anyone who can edit the playlist.
+// List collaborators - visible to anyone who can edit the playlist.
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 const addSchema = z.object({ userId: z.string().uuid() });
 
-// Add a collaborator — owner only; the collaborator must be an accepted friend.
+// Add a collaborator - owner only; the collaborator must be an accepted friend.
 export async function POST(req: NextRequest, { params }: Params) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json(await listCollaborators(id), { status: 201 });
 }
 
-// Remove a collaborator — the owner may remove anyone; a collaborator may remove
+// Remove a collaborator - the owner may remove anyone; a collaborator may remove
 // themselves ("leave"). Anyone else is forbidden.
 export async function DELETE(req: NextRequest, { params }: Params) {
   const user = await requireUser();

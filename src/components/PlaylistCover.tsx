@@ -9,7 +9,7 @@ import CoverImage from "@/components/CoverImage";
  *
  * `className` carries the full box classes (aspect/size/rounding/bg) and is
  * applied to whichever variant renders, so callers control the shape in one
- * place — exactly like CoverImage.
+ * place - exactly like CoverImage.
  */
 export default function PlaylistCover({
   playlistId,
@@ -46,7 +46,7 @@ export default function PlaylistCover({
       {[0, 1, 2, 3].map((i) => (
         <CoverImage
           key={i}
-          // Quarter-tiles render at ~120px — the 256px thumbnail is plenty and
+          // Quarter-tiles render at ~120px - the 256px thumbnail is plenty and
           // avoids fetching four full-res covers per mosaic.
           src={ids[i] ? artSrc(ids[i], { thumb: true }) : null}
           iconSize={cellIconSize}

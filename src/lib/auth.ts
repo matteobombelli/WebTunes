@@ -87,7 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // The credentials provider normally forces stateless JWT sessions. To keep
   // database sessions (and a token a future mobile client can send as a
   // Bearer token), we intercept JWT encoding for credentials sign-ins and
-  // mint a sessions row instead — the cookie then holds the session token.
+  // mint a sessions row instead - the cookie then holds the session token.
   jwt: {
     encode: async (params) => {
       if (params.token?.credentials) {
@@ -109,7 +109,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     // With database sessions the raw adapter user (incl. passwordHash) is
-    // passed in — expose only safe fields.
+    // passed in - expose only safe fields.
     session: async ({ session, user }) => {
       return {
         expires: session.expires,

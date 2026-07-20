@@ -14,11 +14,11 @@ const pool =
     // - jit=off: queries whose *estimated* cost crosses Postgres's jit_above_cost
     //   (notably scope=all/search, inflated by the dedup subplan) otherwise spend
     //   ~400ms compiling machine code to speed up a query that runs in single-digit
-    //   ms — at this data scale JIT is pure overhead.
+    //   ms - at this data scale JIT is pure overhead.
     // - hnsw.iterative_scan=relaxed_order: "play similar"/Discover rank an HNSW
     //   vector index UNDER restrictive WHERE filters (access rule + exclusions +
     //   dedup). Plain HNSW explores only ef_search (~40) nodes, then the filters
-    //   drop most — so a seed whose acoustic neighbours are mostly inaccessible
+    //   drop most - so a seed whose acoustic neighbours are mostly inaccessible
     //   returned as few as 4 of the requested 10. Iterative scan keeps resuming
     //   the index until the LIMIT (POOL_SIZE) is filled; relaxed_order is fine
     //   since we re-score and Gumbel-sample the pool anyway. Only affects HNSW
@@ -46,7 +46,7 @@ export function isUniqueViolation(err: unknown): boolean {
 /**
  * The constraint/index name of a unique violation (23505), or null when the
  * error isn't one. Lets a flow that can trip more than one unique constraint
- * (registration: both email and username are unique) tell which one collided —
+ * (registration: both email and username are unique) tell which one collided -
  * Postgres reports the index name for unique-index violations.
  */
 export function uniqueViolationConstraint(err: unknown): string | null {

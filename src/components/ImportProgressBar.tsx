@@ -130,7 +130,7 @@ export default function ImportProgressBar() {
           {missedItems.map((it, i) => (
             <li key={i} className="truncate py-0.5">
               <span className="text-fg">{it.label}</span>
-              {it.reason && <span> — {it.reason}</span>}
+              {it.reason && <span> - {it.reason}</span>}
             </li>
           ))}
         </ul>

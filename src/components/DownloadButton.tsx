@@ -32,7 +32,7 @@ export default function DownloadButton({
       );
     if (label) {
       return (
-        // Not clickable while in flight — no hover highlight pretending it is.
+        // Not clickable while in flight - no hover highlight pretending it is.
         <div className={`${MENU_ROW_STATIC} cursor-default`} title={title}>
           <span>{label}</span>
           <span className="shrink-0 text-xs tabular-nums text-accent-bright">
@@ -54,7 +54,7 @@ export default function DownloadButton({
   const onClick = () =>
     downloaded ? removeTrack(track.id) : enqueue([track], { pin: true });
   const ariaLabel = downloaded ? "Remove download" : "Download";
-  const title = downloaded ? "Downloaded — click to remove" : "Download";
+  const title = downloaded ? "Downloaded - click to remove" : "Download";
   if (label) {
     return (
       <button
@@ -132,7 +132,7 @@ export function PlaylistDownloadButton({
             });
           if (ok) removePlaylist(playlistId);
         }}
-        title="Downloaded — click to remove"
+        title="Downloaded - click to remove"
         className="flex items-center gap-1.5 rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent-bright hover:border-red-500 hover:text-red-400"
       >
         <DownloadIcon size={15} />

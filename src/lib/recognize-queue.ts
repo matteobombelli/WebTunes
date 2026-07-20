@@ -16,11 +16,11 @@ import {
 } from "@/lib/thumbnail";
 
 // Background queue that fills MISSING artist/album/cover-art for a track via
-// acoustic fingerprinting (lib/recognize.ts) — AcoustID/Chromaprint + Cover Art
+// acoustic fingerprinting (lib/recognize.ts) - AcoustID/Chromaprint + Cover Art
 // Archive, with the iTunes lookup as the art fallback. Enqueued from the upload
 // route after the row exists, exactly like the CLAP embedding queue: a tiny
 // {trackId,s3Key,ext} job, bytes re-fetched from S3 when the worker runs (so an
-// upload burst can't pile big buffers in the queue), best-effort — any failure
+// upload burst can't pile big buffers in the queue), best-effort - any failure
 // just leaves the gaps for the backfill script.
 //
 // It NEVER overwrites existing data: it re-reads the row and every write is a
@@ -29,7 +29,7 @@ import {
 // touched.
 //
 // MAX_WORKERS = 1: unlike CLAP (CPU-local, no external limit, 2 workers), this
-// queue is gated by external politeness — AcoustID ≤3 req/s and Cover Art
+// queue is gated by external politeness - AcoustID ≤3 req/s and Cover Art
 // Archive/MusicBrainz ≤1 req/s on a single shared app key. One serial worker
 // stays under all of them with zero cross-worker coordination, and recognition
 // isn't latency-sensitive (it backfills metadata seconds after the upload).
@@ -91,7 +91,7 @@ async function processJob(job: Job): Promise<void> {
       if (fp) rec = await lookupAcoustId(fp);
     }
 
-    // Conditional, no-overwrite writes — the `IS NULL` guard makes the
+    // Conditional, no-overwrite writes - the `IS NULL` guard makes the
     // "never overwrite existing data" rule atomic at the DB.
     if (needArtist && rec?.artist) {
       await db

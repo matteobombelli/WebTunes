@@ -3,7 +3,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { searchUsers } from "@/lib/users";
 
 // Username search for adding friends. Returns up to 10 matches (id + username
-// only — never email), excluding the searcher. Empty query → [].
+// only - never email), excluding the searcher. Empty query → [].
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();

@@ -162,6 +162,13 @@
       "when": 1784154251147,
       "tag": "0022_illegal_wraith",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784590628606,
+      "tag": "0023_round_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

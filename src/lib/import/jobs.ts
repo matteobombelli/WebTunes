@@ -26,13 +26,13 @@ import type {
 
 // Server-side import jobs: resolve a pasted URL (YouTube video/playlist, or a
 // Spotify/Apple list matched to YouTube) into tracks via yt-dlp and feed each
-// one through ingestTrack — the same pipeline as a web upload. In-process
+// one through ingestTrack - the same pipeline as a web upload. In-process
 // registry like the CLAP/recognition queues: a mid-deploy restart loses only
 // the in-flight job, and re-pasting the link is cheap because ingest's sha256
 // dedupe turns everything already imported into instant duplicates.
 //
 // ONE global worker (not per-user): every download leaves this box's single
-// IP, and YouTube rate-limits aggressively — same politeness rationale as
+// IP, and YouTube rate-limits aggressively - same politeness rationale as
 // recognize-queue. Jobs queue FIFO behind it; a user can queue several.
 
 export type ImportOptions = {
@@ -93,7 +93,7 @@ function isActive(job: Job): boolean {
   );
 }
 
-/** Drop finished jobs after an hour — checked lazily, no timer. */
+/** Drop finished jobs after an hour - checked lazily, no timer. */
 function prune(): void {
   const cutoff = Date.now() - JOB_RETENTION_MS;
   for (const [id, job] of jobs) {
@@ -164,7 +164,7 @@ export function listJobs(userId: string): ImportJobDTO[] {
 export function cancelJob(userId: string, jobId: string): boolean {
   const job = jobs.get(jobId);
   if (!job || job.userId !== userId) return false;
-  if (!isActive(job)) return true; // already terminal — cancel is a no-op
+  if (!isActive(job)) return true; // already terminal - cancel is a no-op
   job.abort.abort();
   // Mark immediately so the next poll reflects the cancel; the worker's own
   // finalization writes the same values (idempotent).
@@ -224,7 +224,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /** Retry a yt-dlp call after a cooldown on YouTube 429 rate-limits. Anything
- * else — including a 403 — propagates to the caller, which records the miss
+ * else - including a 403 - propagates to the caller, which records the miss
  * and moves on. */
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -242,9 +242,9 @@ async function withRetry<T>(
         job,
         `YouTube rate-limiting (HTTP 429). Pausing ${RATE_LIMIT_COOLDOWN_MS / 1000}s, then retrying…`
       );
-      log.info("import", `YouTube 429 — cooling down ${RATE_LIMIT_COOLDOWN_MS / 1000}s`);
+      log.info("import", `YouTube 429 - cooling down ${RATE_LIMIT_COOLDOWN_MS / 1000}s`);
       await sleep(RATE_LIMIT_COOLDOWN_MS, job.abort.signal);
-      jobLog(job, "Cooldown over — resuming.");
+      jobLog(job, "Cooldown over - resuming.");
     }
   }
 }
@@ -261,7 +261,7 @@ async function runJob(job: Job): Promise<void> {
     }
     if (job.items.length > MAX_PLAYLIST_TRACKS) {
       job.status = "error";
-      job.error = `Playlist has ${job.items.length} tracks — the limit is ${MAX_PLAYLIST_TRACKS}`;
+      job.error = `Playlist has ${job.items.length} tracks - the limit is ${MAX_PLAYLIST_TRACKS}`;
       return;
     }
     job.status = "running";
@@ -414,7 +414,7 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
     item.progress = 100;
     const buffer = await readFile(file.path);
     // Source metadata wins (matched path); the YouTube path tags from the
-    // video and square-crops its 16:9 thumbnail — exactly like the desktop
+    // video and square-crops its 16:9 thumbnail - exactly like the desktop
     // importer's extension-import uploads.
     const overrides = item.track
       ? {

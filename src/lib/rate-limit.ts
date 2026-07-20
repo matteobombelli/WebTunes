@@ -30,7 +30,7 @@ export function clearRateLimit(key: string) {
 
 /**
  * Shared limiter for BOTH registration entry points (the web registerAction
- * and POST /api/register) — they count against one bucket, so the limits live
+ * and POST /api/register) - they count against one bucket, so the limits live
  * here rather than drifting apart in two files.
  */
 export function registerRateLimit(ip: string): boolean {

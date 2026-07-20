@@ -119,7 +119,7 @@ export default function SettingsModal({
     usePlayerStore.getState().setSettingsOpen(false);
   };
 
-  // Optimistic toggles: on failure revert AND say so — a checkbox silently
+  // Optimistic toggles: on failure revert AND say so - a checkbox silently
   // flipping itself back reads as a UI glitch.
   const revertToast = () =>
     useToastStore.getState().show("Couldn’t save setting");

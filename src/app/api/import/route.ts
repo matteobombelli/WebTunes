@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ jobId: result.jobId }, { status: 202 });
 }
 
-/** The session user's import jobs (newest first) — the client's poll target. */
+/** The session user's import jobs (newest first) - the client's poll target. */
 export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();

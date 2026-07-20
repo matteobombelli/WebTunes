@@ -11,7 +11,7 @@ export async function POST() {
   // stuck client from filling the table.
   if (!rateLimit(`ext-code:${user.id}`, 10, 10 * 60 * 1000)) {
     return NextResponse.json(
-      { error: "Too many codes requested — try again in a few minutes." },
+      { error: "Too many codes requested - try again in a few minutes." },
       { status: 429 }
     );
   }

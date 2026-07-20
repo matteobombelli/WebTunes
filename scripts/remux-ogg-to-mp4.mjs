@@ -107,7 +107,7 @@ for (const { id, s3_key, title } of rows) {
 
     if ((await audioCodec(inPath)) !== "opus") {
       skip++;
-      console.log(`  SKIP  ${title} — not opus (can't -c:a copy into mp4)`);
+      console.log(`  SKIP  ${title} - not opus (can't -c:a copy into mp4)`);
       continue;
     }
 
@@ -117,14 +117,14 @@ for (const { id, s3_key, title } of rows) {
     ]);
     if (remux.code !== 0 || !existsSync(outPath)) {
       fail++;
-      console.log(`  FAIL  ${title} — ffmpeg: ${(remux.stderr.split("\n").filter(Boolean).pop() || "").slice(0, 80)}`);
+      console.log(`  FAIL  ${title} - ffmpeg: ${(remux.stderr.split("\n").filter(Boolean).pop() || "").slice(0, 80)}`);
       continue;
     }
 
     const [h1, h2] = await Promise.all([streamHash(inPath), streamHash(outPath)]);
     if (!h1 || h1 !== h2) {
       fail++;
-      console.log(`  FAIL  ${title} — encoded-stream hash mismatch (NOT lossless), leaving as-is`);
+      console.log(`  FAIL  ${title} - encoded-stream hash mismatch (NOT lossless), leaving as-is`);
       continue;
     }
 
@@ -138,10 +138,10 @@ for (const { id, s3_key, title } of rows) {
       [newKey, newSize, id]
     );
     ok++;
-    console.log(`  OK    ${title} — ${(buf.length / 1024).toFixed(0)}KB -> ${(newSize / 1024).toFixed(0)}KB`);
+    console.log(`  OK    ${title} - ${(buf.length / 1024).toFixed(0)}KB -> ${(newSize / 1024).toFixed(0)}KB`);
   } catch (err) {
     fail++;
-    console.log(`  FAIL  ${title} — ${err.message}`);
+    console.log(`  FAIL  ${title} - ${err.message}`);
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
   }

@@ -60,7 +60,7 @@ export const friendIdsOf = cache(async function friendIdsOf(
   );
 });
 
-/** All accepted friends of a user (username only — email is never exposed). */
+/** All accepted friends of a user (username only - email is never exposed). */
 export async function friendsOf(userId: string): Promise<FriendDTO[]> {
   const ids = await friendIdsOf(userId);
   if (ids.length === 0) return [];
@@ -128,7 +128,7 @@ export async function suggestedFriendsFor(
   // its OTHER endpoint as a candidate; the candidate joins to `users`. Counting
   // those edges per candidate = the candidate's mutual-friend count. Candidates
   // who are themselves the viewer, an existing friend, or a pending-request user
-  // are excluded — which also drops edges where BOTH endpoints are friends.
+  // are excluded - which also drops edges where BOTH endpoints are friends.
   const candidateId = sql`case when ${friendships.requesterId} in (${friendIdList}) then ${friendships.addresseeId} else ${friendships.requesterId} end`;
 
   return db

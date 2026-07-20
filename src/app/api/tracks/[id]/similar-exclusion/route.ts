@@ -5,8 +5,8 @@ import { addExclusion, removeExclusion } from "@/lib/exclusions";
 import { isUuid } from "@/lib/validate";
 
 // Per-listener "exclude from Play Similar" toggle: POST excludes the track from
-// the caller's radio, DELETE re-includes it. Self-scoped — it only filters the
-// caller's own feed — so no access check is needed (an inaccessible track never
+// the caller's radio, DELETE re-includes it. Self-scoped - it only filters the
+// caller's own feed - so no access check is needed (an inaccessible track never
 // surfaces in the feed anyway). Also intentional public surface for a future
 // mobile client.
 export async function POST(
@@ -25,7 +25,7 @@ export async function POST(
     await addExclusion(user.id, id);
   } catch (err) {
     // The only FK the row references is the track, so a violation means it's
-    // gone (e.g. a stale client) — a 404, not a 500.
+    // gone (e.g. a stale client) - a 404, not a 500.
     if (isForeignKeyViolation(err)) {
       return NextResponse.json({ error: "Track not found" }, { status: 404 });
     }

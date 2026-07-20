@@ -10,7 +10,7 @@ const MAX_EMBEDDED_ART_BYTES = 10 * 1024 * 1024;
 // Field caps: no ingest path may store unbounded tag text. A crafted multi-MB
 // title/USLT tag would otherwise blow past the 1 MB tsvector limit on the
 // search_vector generated column (drizzle/0001) and 500 the upload after the
-// S3 objects are already up (orphaning them) — and a merely-huge value ships
+// S3 objects are already up (orphaning them) - and a merely-huge value ships
 // in every list/search payload. 200 matches the web PATCH route's cap.
 export const MAX_TAG_CHARS = 200;
 export const MAX_LYRICS_CHARS = 100_000;
@@ -106,7 +106,7 @@ export async function extractTrackMetadata(
       { duration: true }
     );
   } catch {
-    // Unparseable tags — fall back to the filename.
+    // Unparseable tags - fall back to the filename.
   }
 
   const fallbackTitle = filename.replace(/\.[^.]+$/, "");
@@ -131,7 +131,7 @@ export async function extractTrackMetadata(
   }
 
   const picture = meta?.common.picture?.[0];
-  // Drop over-cap art like any other best-effort art failure — the upload still
+  // Drop over-cap art like any other best-effort art failure - the upload still
   // succeeds; it just stores no embedded cover.
   const artBuffer =
     picture?.data && picture.data.byteLength <= MAX_EMBEDDED_ART_BYTES

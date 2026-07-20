@@ -1,14 +1,14 @@
 // Backfill missing cover art for tracks that have no stored art, in two phases
 // (run in order unless --phase selects one):
-//   reextract — local: a few tracks have embedded art that was never pulled at
+//   reextract - local: a few tracks have embedded art that was never pulled at
 //               upload; recover it cheaply before any network call.
-//   art       — iTunes Search (no key): cover art for tracks that have an
+//   art       - iTunes Search (no key): cover art for tracks that have an
 //               artist+album but no art.
 //
 //   node scripts/backfill-online-metadata.mjs [--phase=reextract|art] [--apply] [--limit=N]
 //
 // Default is DRY-RUN: performs the network reads (proposals are real) but does
-// NO S3 puts and NO DB updates — each proposal is appended to
+// NO S3 puts and NO DB updates - each proposal is appended to
 // backfill-online-review.jsonl for eyeballing. --apply performs the writes and
 // logs old->new to backfill-online-revert.jsonl (both files are append-only).
 //
@@ -252,7 +252,7 @@ async function phaseReextract() {
       where art_s3_key is null and artist is not null and album is not null
       order by created_at` + limitSql
   );
-  console.log(`\n[reextract] ${rows.length} arted-less track(s) — checking for embedded art.`);
+  console.log(`\n[reextract] ${rows.length} arted-less track(s) - checking for embedded art.`);
   let found = 0,
     none = 0,
     failed = 0,
@@ -274,7 +274,7 @@ async function phaseReextract() {
         try {
           meta = await parseBuffer(buffer, { mimeType, size: buffer.length }, { duration: false });
         } catch {
-          // unparseable — nothing to recover
+          // unparseable - nothing to recover
         }
         const picture = meta?.common?.picture?.[0];
         if (!picture?.data) {
@@ -288,16 +288,16 @@ async function phaseReextract() {
           );
           await revert({ phase: "reextract", id, old: { art_s3_key: null }, new: { art_s3_key: key } });
           found++;
-          console.log(`  ${id} — embedded art recovered`);
+          console.log(`  ${id} - embedded art recovered`);
         } else {
           const kind = imageKindFromMime(picture.format ?? null);
           await review({ phase: "reextract", id, art: { source: "embedded", ext: kind.ext } });
           found++;
-          console.log(`  ${id} — embedded art FOUND (dry-run)`);
+          console.log(`  ${id} - embedded art FOUND (dry-run)`);
         }
       } catch (err) {
         failed++;
-        console.warn(`  ${id} — failed: ${err.message}`);
+        console.warn(`  ${id} - failed: ${err.message}`);
       }
       if (++processed % 100 === 0) console.log(`  … ${processed}/${rows.length}`);
     }
@@ -331,15 +331,15 @@ async function phaseArt() {
         );
         await revert({ phase: "art", id, old: { art_s3_key: null }, new: { art_s3_key: key } });
         found++;
-        console.log(`  ${id} — art via ${art.source}`);
+        console.log(`  ${id} - art via ${art.source}`);
       } else {
         await review({ phase: "art", id, artist, album, title, art: { source: art.source, url: art.url, ext: art.kind.ext } });
         found++;
-        console.log(`  ${id} — art via ${art.source} (dry-run): ${art.url}`);
+        console.log(`  ${id} - art via ${art.source} (dry-run): ${art.url}`);
       }
     } catch (err) {
       failed++;
-      console.warn(`  ${id} — failed: ${err.message}`);
+      console.warn(`  ${id} - failed: ${err.message}`);
     }
     if (++processed % 50 === 0) console.log(`  … ${processed}/${rows.length}`);
   }
@@ -347,7 +347,7 @@ async function phaseArt() {
 }
 
 console.log(
-  `backfill-online-metadata — ${APPLY ? "APPLY" : "DRY-RUN"} | phases: ${PHASES.join(", ")}${LIMIT ? ` | limit ${LIMIT}` : ""}`
+  `backfill-online-metadata - ${APPLY ? "APPLY" : "DRY-RUN"} | phases: ${PHASES.join(", ")}${LIMIT ? ` | limit ${LIMIT}` : ""}`
 );
 if (!APPLY) console.log(`(dry-run: no S3/DB writes; proposals -> ${REVIEW_LOG})`);
 

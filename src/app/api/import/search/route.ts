@@ -7,7 +7,7 @@ const SEARCH_TIMEOUT_MS = 60_000;
 
 /**
  * YouTube catalog search for the Import dialog's Search tab: a flat ytsearchN
- * query — fast because nothing is resolved until the user imports a row (which
+ * query - fast because nothing is resolved until the user imports a row (which
  * goes through the normal POST /api/import with the row's watch URL).
  */
 export async function GET(req: NextRequest) {

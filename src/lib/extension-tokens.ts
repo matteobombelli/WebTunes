@@ -9,7 +9,7 @@ import type { ExtensionTokenDTO } from "@/lib/types";
 // short-lived code (createPairingCode), the user types it into the extension,
 // and the extension redeems it (redeemPairingCode) for a long-lived bearer
 // token it sends as `Authorization: Bearer <token>` on uploads. Both secrets
-// are stored hashed, mirroring the password-reset/verification tokens — never
+// are stored hashed, mirroring the password-reset/verification tokens - never
 // the plaintext.
 
 export const PAIR_CODE_TTL_MS = 10 * 60 * 1000;
@@ -178,7 +178,7 @@ export async function revokeExtensionToken(
   return Boolean(revoked);
 }
 
-/** Self-revoke by token value — the extension's "Disconnect" button. */
+/** Self-revoke by token value - the extension's "Disconnect" button. */
 export async function revokeExtensionTokenByValue(
   authorization: string | null
 ): Promise<boolean> {

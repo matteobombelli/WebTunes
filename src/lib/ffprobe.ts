@@ -7,7 +7,7 @@ import { withFfmpeg } from "@/lib/ffmpeg-gate";
 import { log } from "@/lib/log";
 
 // Measure a track's true duration with ffprobe, reading the container's format
-// duration. This is the authoritative length of the exact bytes we store/serve —
+// duration. This is the authoritative length of the exact bytes we store/serve -
 // unlike music-metadata's value, which is measured on the ORIGINAL upload buffer
 // and can diverge from the remuxed MP4 that actually plays (Ogg/WebM-Opus granule
 // vs MP4 edit-list; approximate WebM container durations; header-less VBR MP3).

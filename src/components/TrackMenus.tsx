@@ -2,7 +2,7 @@
 
 // The per-track action menus (add-to-playlist, the three-dot kebab, and the
 // current-track kebab), split out of TrackList so surfaces that only need a
-// menu — PlayerBar on every authenticated page, the queue/now-playing sheets —
+// menu - PlayerBar on every authenticated page, the queue/now-playing sheets -
 // don't pull the whole table plus @dnd-kit into their JS graph.
 
 import Link from "next/link";
@@ -33,8 +33,8 @@ import { useToastStore } from "@/stores/toast";
 // Create-or-fetch the track's public share link, copy it to the clipboard, then
 // flash a toast. Must be CALLED synchronously from the click gesture: Safari/iOS
 // only allow a clipboard write tied to a user gesture, so when ClipboardItem is
-// available we hand it a *promise* of the link — the async POST resolves without
-// losing the gesture's permission — and only fall back to writeText otherwise.
+// available we hand it a *promise* of the link - the async POST resolves without
+// losing the gesture's permission - and only fall back to writeText otherwise.
 export function copyShareLink(trackId: string) {
   const { show } = useToastStore.getState();
   const fetchUrl = () =>
@@ -59,7 +59,7 @@ export function copyShareLink(trackId: string) {
 
 // Decide the vertical anchor for a portalled (position: fixed) menu of measured
 // height `menuH`: open downward from the trigger, but flip above it when it
-// wouldn't fit below and there's more room above — like an OS right-click menu.
+// wouldn't fit below and there's more room above - like an OS right-click menu.
 // Flipping anchors by the bottom edge (just above the trigger) so the resting
 // spot is already correct and the pop-in animation doesn't fight a shift.
 const MENU_GAP = 4;
@@ -70,7 +70,7 @@ function menuVerticalAnchor(
 ): { top: number } | { bottom: number } {
   const spaceBelow = window.innerHeight - rect.bottom;
   const spaceAbove = rect.top;
-  // Flip above the trigger only when the menu actually fits there — otherwise a
+  // Flip above the trigger only when the menu actually fits there - otherwise a
   // tall menu would run off the top of the screen. Default to opening downward.
   if (menuH + MENU_GAP > spaceBelow && menuH + MENU_GAP <= spaceAbove) {
     return { bottom: window.innerHeight - rect.top + MENU_GAP };
@@ -102,7 +102,7 @@ export function AddToPlaylistMenu({
   label?: string;
   onAdded?: () => void;
   /** Anchor the dropdown to <body> with outside-click dismissal (like bulk),
-   *  but keep the plain "+" icon trigger — for use outside the track table. */
+   *  but keep the plain "+" icon trigger - for use outside the track table. */
   floating?: boolean;
   /** Overrides the default icon-trigger classes (no label, non-bulk). */
   triggerClassName?: string;
@@ -155,7 +155,7 @@ export function AddToPlaylistMenu({
 
   // Once mounted (and again when the playlist list loads and changes its
   // height), flip the menu above the trigger if it would overflow the bottom.
-  // useLayoutEffect so the flip is applied before the browser paints — otherwise
+  // useLayoutEffect so the flip is applied before the browser paints - otherwise
   // the provisional downward anchor flashes for a frame before snapping up.
   useLayoutEffect(() => {
     if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
@@ -395,7 +395,7 @@ function TrackActions({
         </span>
         <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
       </button>
-      {/* Share any accessible track — your own OR a friend's (the server checks
+      {/* Share any accessible track - your own OR a friend's (the server checks
           canAccessTrack). Click copies the public link straight to the
           clipboard (no dialog). */}
       <button
@@ -481,7 +481,7 @@ export function TrackActionsMenu({
 
   // After the menu mounts, flip it above the trigger if it would overflow the
   // bottom of the viewport (OS-style). Scrolling/resizing dismisses it instead.
-  // useLayoutEffect so the flip lands before paint — otherwise the provisional
+  // useLayoutEffect so the flip lands before paint - otherwise the provisional
   // downward anchor flashes for a frame before snapping up (most visible on
   // mobile, where the kebab usually sits low enough to need the flip).
   useLayoutEffect(() => {
@@ -587,7 +587,7 @@ export function CurrentTrackKebab({
       />
       {/* Portalled to <body> so the queue popover's transform/overflow can't
           clip it. Guarded since the portal target is client-only (this kebab
-          isn't server-rendered — there's no current track during SSR). */}
+          isn't server-rendered - there's no current track during SSR). */}
       {typeof document !== "undefined" &&
         createPortal(
           <EditTrackDialog

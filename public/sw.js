@@ -5,20 +5,20 @@
 // import it).
 //
 // Caches:
-//   wt-shell-vN — app shell (static assets + navigation HTML). Versioned;
+//   wt-shell-vN - app shell (static assets + navigation HTML). Versioned;
 //                 stale versions are deleted on activate. Bump N only when the
 //                 cached data format or keys change (a read-strategy change
 //                 doesn't warrant wiping the primed offline shell).
-//   wt-audio    — downloaded track audio, keyed by the stable stream URL
+//   wt-audio    - downloaded track audio, keyed by the stable stream URL
 //                 (/api/tracks/:id/stream). Written by the download manager
 //                 (src/lib/offline/), read here. NEVER deleted on activate:
 //                 it holds user downloads that must outlive SW updates.
-//   wt-art      — downloaded track cover art, keyed by the stable art URL
+//   wt-art      - downloaded track cover art, keyed by the stable art URL
 //                 (/api/tracks/:id/art). Same lifecycle as wt-audio.
-//   wt-prefetch — the next few upcoming tracks' audio, pre-cached (keyed by the
+//   wt-prefetch - the next few upcoming tracks' audio, pre-cached (keyed by the
 //                 stable stream URL) while the current track plays so consecutive
 //                 background auto-advances are served from here instead of a live
-//                 fetch — iOS throttles network for a backgrounded PWA, which
+//                 fetch - iOS throttles network for a backgrounded PWA, which
 //                 otherwise leaves a streamed next track silently stuck. Holds
 //                 only the next few tracks (pruned client-side); ephemeral and
 //                 safe to drop. Written by src/lib/offline/prefetch.ts, read here.
@@ -178,7 +178,7 @@ const NAV_TIMEOUT_MS = 2000;
  * fresh. A fast network wins as before; after NAV_TIMEOUT_MS (or a hard
  * network error) we fall back to the cached copy of the same page, then to
  * the downloads page (the one route designed to render fully offline). If
- * nothing is cached we keep waiting on the slow network — a late page always
+ * nothing is cached we keep waiting on the slow network - a late page always
  * beats an instant 503. A timed-out fetch is kept alive (event.waitUntil) so
  * its response still refreshes the cache for next time.
  */
@@ -219,13 +219,13 @@ async function serveNavigation(event) {
     return cached;
   }
 
-  // Nothing cached. On a timeout, keep waiting — never replace a possible
+  // Nothing cached. On a timeout, keep waiting - never replace a possible
   // slow success with an error page.
   if (winner === "timeout") {
     const response = await networkSafe;
     if (response) return response;
   }
-  return new Response("Offline — open the Downloads page while online once to enable offline mode.", {
+  return new Response("Offline - open the Downloads page while online once to enable offline mode.", {
     status: 503,
     headers: { "Content-Type": "text/plain" },
   });

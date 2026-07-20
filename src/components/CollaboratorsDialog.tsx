@@ -119,7 +119,7 @@ function CollaboratorsBody({
         {friends?.length === 0 && (
           <p className="p-4 text-sm text-fg-muted">
             {loadFailed
-              ? "Couldn’t load your friends — check your connection."
+              ? "Couldn’t load your friends - check your connection."
               : "Add friends first to collaborate on playlists."}
           </p>
         )}

@@ -149,7 +149,7 @@ for (const { id, s3_key, title, duration_sec } of rows) {
     );
     if (actual === null) {
       failed++;
-      console.warn(`  ${id} — unmeasurable, leaving as-is`);
+      console.warn(`  ${id} - unmeasurable, leaving as-is`);
       continue;
     }
     const listed = duration_sec; // may be null
@@ -161,7 +161,7 @@ for (const { id, s3_key, title, duration_sec } of rows) {
     const record = { id, title, listed, actual, diff, s3_key };
     appendFileSync(REVIEW_LOG, JSON.stringify(record) + "\n");
     console.log(
-      `  ${id} — listed ${listed ?? "NULL"}s -> actual ${actual}s${diff === null ? "" : ` (${diff > 0 ? "+" : ""}${diff}s)`} — ${title}`
+      `  ${id} - listed ${listed ?? "NULL"}s -> actual ${actual}s${diff === null ? "" : ` (${diff > 0 ? "+" : ""}${diff}s)`} - ${title}`
     );
 
     if (APPLY) {
@@ -171,13 +171,13 @@ for (const { id, s3_key, title, duration_sec } of rows) {
     }
   } catch (err) {
     failed++;
-    console.warn(`  ${id} — failed: ${err.message}`);
+    console.warn(`  ${id} - failed: ${err.message}`);
   }
 }
 
 console.log(
   APPLY
     ? `Done. ${mismatched} mismatched, ${updated} updated, ${failed} skipped. Revert log: ${REVERT_LOG}`
-    : `Done (dry-run). ${mismatched} mismatched, ${failed} skipped. Review: ${REVIEW_LOG} — re-run with --apply to write.`
+    : `Done (dry-run). ${mismatched} mismatched, ${failed} skipped. Review: ${REVIEW_LOG} - re-run with --apply to write.`
 );
 await pool.end();

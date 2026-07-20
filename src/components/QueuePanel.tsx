@@ -207,7 +207,7 @@ export default memo(function QueuePanel({
 
   // On open, jump the window to the playing track (not the top of history) by
   // scrolling it to center. Read index/rowH from refs so this fires only on
-  // open — not when the track advances while the panel is already open (which
+  // open - not when the track advances while the panel is already open (which
   // would yank a user who has scrolled away).
   const centerRef = useRef({ index, rowH });
   useEffect(() => {
@@ -277,7 +277,7 @@ export default memo(function QueuePanel({
       else setDragY(0);
     },
     // A system-interrupted swipe (iOS edge gesture, incoming call) fires
-    // touchcancel, not touchend — reset so it can't pin `dragging` (which would
+    // touchcancel, not touchend - reset so it can't pin `dragging` (which would
     // kill the next slide's transition) or strand a past-threshold dragY that a
     // later tap would read as a dismiss.
     onTouchCancel: () => {

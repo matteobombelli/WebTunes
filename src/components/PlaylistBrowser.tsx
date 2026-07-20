@@ -61,7 +61,7 @@ export default function PlaylistBrowser({
   // Which scope `results` belongs to, so a scope change can tell fresh results
   // from the previous scope's (and fall back to the cache meanwhile).
   const [resultsKey, setResultsKey] = useState<string | null>(null);
-  // The last fetch failed — its empty list means "couldn't load", not "empty".
+  // The last fetch failed - its empty list means "couldn't load", not "empty".
   const [loadFailed, setLoadFailed] = useState(false);
 
   const browsingOwn = scope === "own";
@@ -128,7 +128,7 @@ export default function PlaylistBrowser({
       ) : view.length === 0 ? (
         <p className="py-8 text-center text-sm text-fg-muted">
           {!browsingOwn && loadFailed && resultsKey === scope
-            ? "Couldn’t load playlists — check your connection."
+            ? "Couldn’t load playlists - check your connection."
             : browsingOwn
               ? "No playlists yet. Create one to organize your music."
               : "No playlists to show."}

@@ -99,14 +99,22 @@ export const UsersIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Compass — the Discover nav item. */
+/** Compass - the Discover nav item. */
 export const CompassIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm3.5 4.5-5 2-2 5 5-2 2-5zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
   </Svg>
 );
 
-/** Globe (circle + meridian + equator) — the "Everything" scope. */
+/** Bar chart - the personal listening Stats tab. */
+export const StatsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 13a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7H5v-7zm5-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h-4V8zm5-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v16h-4V4z" />
+    <path d="M4 20h16a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2z" />
+  </Svg>
+);
+
+/** Globe (circle + meridian + equator) - the "Everything" scope. */
 export const GlobeIcon = (p: IconProps) => (
   <Svg {...p}>
     <g fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -124,7 +132,7 @@ export const DownloadIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Chain link — "share" (copy a public link to a track). */
+/** Chain link - "share" (copy a public link to a track). */
 export const ShareIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3.9 12A3.1 3.1 0 0 1 7 8.9h3a1 1 0 1 1 0 2H7a1.1 1.1 0 0 0 0 2.2h3a1 1 0 1 1 0 2H7A3.1 3.1 0 0 1 3.9 12zm10.1-3.1h3a3.1 3.1 0 0 1 0 6.2h-3a1 1 0 1 1 0-2h3a1.1 1.1 0 0 0 0-2.2h-3a1 1 0 1 1 0-2zM8 12a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1z" />
@@ -168,7 +176,7 @@ export const ShuffleIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Graph network (hub + nodes) — "play similar" (related tracks from a seed). */
+/** Graph network (hub + nodes) - "play similar" (related tracks from a seed). */
 export const SimilarIcon = (p: IconProps) => (
   <Svg {...p}>
     <g stroke="currentColor" strokeWidth={1.7} strokeLinecap="round">
@@ -241,7 +249,7 @@ export const ClockIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Headphones — used for the friend play-count column. */
+/** Headphones - used for the friend play-count column. */
 export const HeadphonesIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 4a8 8 0 0 0-8 8v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H6v-0a6 6 0 0 1 12 0v0h-1a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2v-5a8 8 0 0 0-8-8z" />
@@ -255,7 +263,7 @@ export const SettingsIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Trash can — destructive delete. */
+/** Trash can - destructive delete. */
 export const TrashIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 3a1 1 0 0 0-1 1v1H4a1 1 0 1 0 0 2h16a1 1 0 1 0 0-2h-4V4a1 1 0 0 0-1-1H9zm1 2h4v0h-4V5zM6 9a1 1 0 0 1 1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8a1 1 0 1 1 2 0v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-8a1 1 0 0 1 1-1zm4 1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1z" />

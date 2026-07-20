@@ -6,7 +6,7 @@
 // environment when set, otherwise from the first env file present.
 //
 // IMPORTANT: MODEL_ID, DTYPE and the 48 kHz mono decode below must stay in sync
-// with src/lib/clap-embedding.ts — embeddings are only comparable when produced
+// with src/lib/clap-embedding.ts - embeddings are only comparable when produced
 // by identical model + preprocessing.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -24,7 +24,7 @@ const ENV_FILES = [".env.production", ".env", ".env.local"];
 const MODEL_ID = "Xenova/clap-htsat-unfused";
 const DTYPE = "fp32";
 // Cap the decoded PCM (48 kHz mono f32 = 192 KB/s, so 1 GiB ≈ 93 min) to bound
-// RAM on a pathological long / low-bitrate input — mirrors MAX_DECODE_BYTES in
+// RAM on a pathological long / low-bitrate input - mirrors MAX_DECODE_BYTES in
 // src/lib/clap-embedding.ts; CLAP only uses a random 10 s window, so this never
 // affects real tracks.
 const MAX_DECODE_BYTES = 1024 * 1024 * 1024;
@@ -192,7 +192,7 @@ for (const { id, s3_key } of rows) {
     );
     if (vec === null) {
       failed++;
-      console.warn(`  ${id} — unembeddable (decode error), leaving unembedded`);
+      console.warn(`  ${id} - unembeddable (decode error), leaving unembedded`);
       continue;
     }
     await pool.query(
@@ -204,10 +204,10 @@ for (const { id, s3_key } of rows) {
       [id, `[${vec.join(",")}]`]
     );
     done++;
-    console.log(`  ${id} — embedded (${vec.length}-d)`);
+    console.log(`  ${id} - embedded (${vec.length}-d)`);
   } catch (err) {
     failed++;
-    console.warn(`  ${id} — failed: ${err.message}`);
+    console.warn(`  ${id} - failed: ${err.message}`);
   }
 }
 

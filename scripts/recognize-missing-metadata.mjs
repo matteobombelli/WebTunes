@@ -1,5 +1,5 @@
 // Backfill MISSING artist/album/cover-art for existing tracks via acoustic
-// fingerprinting — the offline mirror of the live recognition worker
+// fingerprinting - the offline mirror of the live recognition worker
 // (src/lib/recognize-queue.ts + src/lib/recognize.ts): fpcalc/Chromaprint
 // fingerprint -> AcoustID -> artist/album + release-group MBID -> Cover Art
 // Archive front cover, with the iTunes lookup as the art fallback. Only EMPTY
@@ -9,7 +9,7 @@
 //   node scripts/recognize-missing-metadata.mjs [--apply] [--limit=N]
 //
 // Default is DRY-RUN: performs the network reads (proposals are real) but does
-// NO S3 puts and NO DB updates — each proposal is appended to
+// NO S3 puts and NO DB updates - each proposal is appended to
 // recognize-missing-review.jsonl. --apply performs the writes and logs old->new
 // to recognize-missing-revert.jsonl (both append-only).
 //
@@ -141,7 +141,7 @@ class Limiter {
     this.last = Date.now();
   }
 }
-// AcoustID asks ≤3 req/s; Cover Art Archive ≤1 req/s — share a polite gate.
+// AcoustID asks ≤3 req/s; Cover Art Archive ≤1 req/s - share a polite gate.
 const acoustidLimiter = new Limiter(350);
 const itunesLimiter = new Limiter(3100);
 
@@ -392,7 +392,7 @@ const { rows } = await pool.query(
 );
 
 console.log(
-  `recognize-missing-metadata — ${APPLY ? "APPLY" : "DRY-RUN"}${LIMIT ? ` | limit ${LIMIT}` : ""} | ` +
+  `recognize-missing-metadata - ${APPLY ? "APPLY" : "DRY-RUN"}${LIMIT ? ` | limit ${LIMIT}` : ""} | ` +
     `${ACOUSTID_KEY ? "AcoustID enabled" : "no ACOUSTID_API_KEY (art-fallback only)"}`
 );
 if (!APPLY) console.log(`(dry-run: no S3/DB writes; proposals -> ${REVIEW_LOG})`);
@@ -476,7 +476,7 @@ for (const row of rows) {
       const oldVals = Object.fromEntries(Object.keys(newVals).map((k) => [k, null]));
       await revert({ id: row.id, old: oldVals, new: newVals });
       console.log(
-        `  ${row.id} — ${[newArtist && "artist", newAlbum && "album", art && `art(${art.source})`].filter(Boolean).join(", ")}`
+        `  ${row.id} - ${[newArtist && "artist", newAlbum && "album", art && `art(${art.source})`].filter(Boolean).join(", ")}`
       );
     } else {
       if (newArtist) filledArtist++;
@@ -490,12 +490,12 @@ for (const row of rows) {
         art: art ? { source: art.source, ref: art.ref, ext: art.kind.ext } : null,
       });
       console.log(
-        `  ${row.id} — ${[newArtist && `artist="${newArtist}"`, newAlbum && `album="${newAlbum}"`, art && `art(${art.source})`].filter(Boolean).join(", ")} (dry-run)`
+        `  ${row.id} - ${[newArtist && `artist="${newArtist}"`, newAlbum && `album="${newAlbum}"`, art && `art(${art.source})`].filter(Boolean).join(", ")} (dry-run)`
       );
     }
   } catch (err) {
     failed++;
-    console.warn(`  ${row.id} — failed: ${err.message}`);
+    console.warn(`  ${row.id} - failed: ${err.message}`);
   }
   if (++processed % 25 === 0) console.log(`  … ${processed}/${rows.length}`);
 }

@@ -13,7 +13,7 @@ function formatTime(totalSeconds: number): string {
 /**
  * The player's elapsed/total time readout + seek slider, isolated into its own
  * leaf component so the high-frequency currentTime ticks (the <audio> element's
- * timeupdate, throttled to ~4Hz by PlayerBar) re-render only this — not the
+ * timeupdate, throttled to ~4Hz by PlayerBar) re-render only this - not the
  * whole PlayerBar subtree. It also owns the per-tick MediaSession position
  * update for the same reason.
  *
@@ -22,7 +22,7 @@ function formatTime(totalSeconds: number): string {
  * We use it as the displayed total whenever present, falling back to the <audio>
  * element's own duration only for tracks with no stored value. Browsers misreport
  * element.duration on some files (Ogg/Opus seen ~3x too long; estimated VBR-MP3
- * lengths), which made the player's total disagree with the listed time — so the
+ * lengths), which made the player's total disagree with the listed time - so the
  * stored value wins. We do NOT rescale currentTime: it already advances in real
  * seconds, so the fill (currentTime/total) and seeking stay correct.
  */

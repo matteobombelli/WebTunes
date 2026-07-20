@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { log } from "@/lib/log";
 import { Button } from "@/components/ui/Button";
 
-// Catches render/RSC errors in every segment below the root layout — including
+// Catches render/RSC errors in every segment below the root layout - including
 // (app)/layout.tsx's requirePageUser/getUserSettings. Renders inside the root
 // <body>. Works in both dev and prod (global-error.tsx is the prod-only net for
 // the root layout itself).

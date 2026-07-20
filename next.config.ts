@@ -6,11 +6,11 @@ const isDev = process.env.NODE_ENV !== "production";
 // Content-Security-Policy. Next's app router injects inline bootstrap/hydration
 // scripts and Tailwind injects inline styles, so script/style need
 // 'unsafe-inline' (a nonce-based policy would require threading a nonce through
-// the proxy — a future hardening step). Dev additionally needs 'unsafe-eval'
+// the proxy - a future hardening step). Dev additionally needs 'unsafe-eval'
 // for the webpack/HMR runtime. img/media/connect allow https: so presigned S3
 // redirects (cover art, audio streaming) load without hardcoding the storage
-// host. The high-value directives — object-src, base-uri, frame-ancestors,
-// form-action — stay locked down.
+// host. The high-value directives - object-src, base-uri, frame-ancestors,
+// form-action - stay locked down.
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
     // Proxy buffers request bodies in RAM (default cap 10MB), which truncated
     // track uploads and broke FormData parsing. The app-level file limit is
     // 100MB (MAX_FILE_BYTES); the proxy cap sits above it so a file near the
-    // limit — plus multipart boundary/field overhead — isn't silently
+    // limit - plus multipart boundary/field overhead - isn't silently
     // truncated into a formData() parse error.
     proxyClientMaxBodySize: "110mb",
   },

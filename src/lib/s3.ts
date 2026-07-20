@@ -46,7 +46,7 @@ const PRESIGN_TTL_SEC = 3600;
 // Reuse a freshly-signed URL for up to this long so repeat list loads (e.g. the
 // Playlists grid's covers) return the *same* URL and the browser serves the
 // image from cache instead of re-fetching a newly-signed one each navigation.
-// Kept short so a reused URL always has ≥55 min of validity left — safely above
+// Kept short so a reused URL always has ≥55 min of validity left - safely above
 // the 50-min Cache-Control on the /art and /stream redirects, so a browser that
 // cached one of those redirects can never outlive its target.
 const PRESIGN_REUSE_MS = 5 * 60 * 1000;

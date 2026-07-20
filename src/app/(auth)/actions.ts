@@ -81,7 +81,7 @@ export async function registerAction(
     emailSent = false;
     console.error("Verification email failed:", err);
   }
-  // Don't claim an email is on its way when the send failed — point at the
+  // Don't claim an email is on its way when the send failed - point at the
   // resend path (sign-in blocks unverified accounts and offers a resend).
   return {
     error: null,

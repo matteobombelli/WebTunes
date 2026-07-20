@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string>({
   options: readonly Option<T>[];
   value: T;
   onChange: (value: T) => void;
-  /** "lg" enlarges the control on mobile (used by the Discover/Friends tab). */
+  /** "lg" enlarges the control on mobile (used by the Discover hub tabs). */
   size?: "default" | "lg";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);

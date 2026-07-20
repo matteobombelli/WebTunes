@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Registration is invite-only — the JSON body must carry an invite token.
+  // Registration is invite-only - the JSON body must carry an invite token.
   const invite =
     body && typeof body === "object" && "invite" in body
       ? String((body as Record<string, unknown>).invite ?? "")

@@ -3,13 +3,13 @@ import { log } from "./log";
 import type { TrackDTO } from "./types";
 
 // Client-side fetch wrapper. next/link and the router add the basePath
-// automatically, but plain fetch() does not — this is the one place that
+// automatically, but plain fetch() does not - this is the one place that
 // knows the prefix.
 //
 // REDACTION: this is the chokepoint for nearly all client API traffic, including
 // login/register/password-reset POSTs whose bodies carry passwords and tokens.
-// We log ONLY method, path (UUIDs — safe), status, duration, and the
-// already-user-facing `error` string — NEVER init.body, headers, or response JSON.
+// We log ONLY method, path (UUIDs - safe), status, duration, and the
+// already-user-facing `error` string - NEVER init.body, headers, or response JSON.
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit
@@ -21,7 +21,7 @@ export async function api<T = unknown>(
     res = await fetch(`${BASE_PATH}/api${path}`, init);
   } catch (err) {
     // Network/abort: server unreachable, offline, or a superseded request the
-    // caller aborted. Aborts are routine (e.g. PlaylistBrowser) — don't shout.
+    // caller aborted. Aborts are routine (e.g. PlaylistBrowser) - don't shout.
     const ms = Math.round(performance.now() - t0);
     if (!(err instanceof DOMException && err.name === "AbortError")) {
       log.error(

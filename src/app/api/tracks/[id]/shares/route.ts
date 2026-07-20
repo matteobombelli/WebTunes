@@ -14,7 +14,7 @@ import {
 import { isUuid } from "@/lib/validate";
 
 // Manage a track's public share link. Anyone who can ACCESS the track may mint/
-// read the link (POST/GET, gated on canAccessTrack — minting is idempotent and
+// read the link (POST/GET, gated on canAccessTrack - minting is idempotent and
 // additive); only the track's OWNER may revoke it (DELETE), so a friend can't
 // kill or rotate the owner's distributed URL. The matching public (no-auth)
 // endpoints that serve the audio/art live under /api/share/[token].
@@ -29,7 +29,7 @@ function shareBody(link: ShareLink, headers: Headers) {
 
 // 404 (not 403) for a missing OR inaccessible track: don't reveal track ids the
 // viewer can't see. Anyone who can ACCESS a track (its owner, or a friend for a
-// non-private track) may share it — the resulting link is then an absolute
+// non-private track) may share it - the resulting link is then an absolute
 // capability that ignores later privacy/friendship changes (see lib/shares).
 async function requireShareableTrack(
   id: string,

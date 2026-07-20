@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ userName: user.name });
 }
 
-/** Self-revoke — the extension's Disconnect button. Idempotent-ish: a second
+/** Self-revoke - the extension's Disconnect button. Idempotent-ish: a second
  * call finds the token already revoked and 401s, which the extension treats
  * as disconnected anyway. */
 export async function DELETE(req: NextRequest) {

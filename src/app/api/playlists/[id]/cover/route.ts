@@ -48,7 +48,7 @@ export async function POST(
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
 
-  // A truncated/garbage multipart body makes formData() reject — 400, not 500.
+  // A truncated/garbage multipart body makes formData() reject - 400, not 500.
   const form = await req.formData().catch(() => null);
   if (!form) {
     return NextResponse.json({ error: "Invalid upload body" }, { status: 400 });
@@ -59,7 +59,7 @@ export async function POST(
   }
   const { file, ext } = upload;
 
-  // Key extension and stored Content-Type come from a server-side allowlist —
+  // Key extension and stored Content-Type come from a server-side allowlist -
   // never the untrusted filename/MIME.
   const kind = imageKindFromUpload(ext, file.type);
   const s3Key = `covers/${user.id}/${id}.${kind.ext}`;

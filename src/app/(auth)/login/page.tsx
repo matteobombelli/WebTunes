@@ -25,7 +25,7 @@ function ResendVerification({ email }: { email: string }) {
       setStatus("sent");
     } catch {
       // Don't claim a link is on its way when the request failed
-      // (rate-limited, offline) — let the user retry.
+      // (rate-limited, offline) - let the user retry.
       setStatus("failed");
     }
   };
@@ -35,7 +35,7 @@ function ResendVerification({ email }: { email: string }) {
       <p>Please verify your email before signing in.</p>
       {status === "failed" && (
         <p className="mt-1 text-red-400">
-          Couldn’t send the link — try again in a moment.
+          Couldn’t send the link - try again in a moment.
         </p>
       )}
       {status === "sent" ? (

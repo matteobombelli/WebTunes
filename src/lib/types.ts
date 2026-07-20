@@ -21,6 +21,13 @@ export type TrackDTO = {
   ownerName?: string | null;
 };
 
+/** One keyset-paginated slice of a newest-first track listing. */
+export type TrackPageDTO = {
+  tracks: TrackDTO[];
+  /** Opaque cursor for the next page; null means the listing is exhausted. */
+  nextCursor: string | null;
+};
+
 export type PlaylistDTO = {
   id: string;
   ownerId: string;
@@ -69,6 +76,74 @@ export type FriendSuggestionDTO = {
   id: string;
   name: string;
   mutualCount: number;
+};
+
+export type StatsRange = "7d" | "30d" | "90d" | "6m" | "1y";
+
+export type StatsDailyActivityDTO = {
+  /** Local calendar date in YYYY-MM-DD form. */
+  date: string;
+  listens: number;
+  /** Exact for telemetry rows; full-duration estimate for legacy rows. */
+  listeningSeconds: number;
+};
+
+export type StatsHourlyActivityDTO = {
+  /** Local hour, from 0 through 23. */
+  hour: number;
+  listens: number;
+  averagePerActiveDay: number;
+};
+
+export type StatsRankedTrackDTO = {
+  track: TrackDTO;
+  listens: number;
+  listeningSeconds: number;
+};
+
+export type StatsRankedNameDTO = {
+  /** Null is displayed as Unknown artist / Unknown album. */
+  name: string | null;
+  listens: number;
+  listeningSeconds: number;
+  /** An accessible art-bearing track representing this artist/album. */
+  artTrack: TrackDTO | null;
+};
+
+export type StatsRankedFriendDTO = {
+  id: string;
+  name: string;
+  listens: number;
+};
+
+export type StatsDTO = {
+  range: StatsRange;
+  timeZone: string;
+  period: {
+    start: string;
+    end: string;
+  };
+  summary: {
+    qualifiedListens: number;
+    /** Exact telemetry plus full-duration estimates for legacy rows. */
+    listeningSeconds: number;
+    exactListens: number;
+    /** Legacy listens whose track duration supplied an estimate. */
+    estimatedListens: number;
+    activeDays: number;
+    uniqueTracks: number;
+    newDiscoveries: number;
+    longestStreak: number;
+    busiestDay: { date: string; listens: number } | null;
+    peakHour: { hour: number; listens: number } | null;
+  };
+  daily: StatsDailyActivityDTO[];
+  hourly: StatsHourlyActivityDTO[];
+  topTracks: StatsRankedTrackDTO[];
+  topArtists: StatsRankedNameDTO[];
+  topAlbums: StatsRankedNameDTO[];
+  outgoingFriends: StatsRankedFriendDTO[];
+  incomingFriends: StatsRankedFriendDTO[];
 };
 
 export type InviteDTO = {

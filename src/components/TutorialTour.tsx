@@ -35,7 +35,7 @@ const STEPS: TourStep[] = [
   },
   {
     title: "Friends and sharing",
-    body: "Discover is where you add friends, invite new people, and see what everyone is playing. Friends' tracks appear alongside your own (the switcher in Library picks whose you browse), and any track can be shared with a public link.",
+    body: "Discover is where you add friends, see what everyone is playing, and explore your listening stats. Friends' tracks appear alongside your own (the switcher in Library picks whose you browse), and any track can be shared with a public link.",
     anchor: "nav-discover",
   },
   {

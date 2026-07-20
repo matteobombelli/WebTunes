@@ -7,7 +7,7 @@ export default function Loading() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
-        {/* The heading is statically known — render it (like the other loading
+        {/* The heading is statically known - render it (like the other loading
             shells) instead of flashing a skeleton bar in its place. */}
         <h1 className="font-display text-4xl font-bold tracking-tight">Discover</h1>
         <Skeleton className="h-9 w-48 rounded-md" />

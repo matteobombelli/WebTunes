@@ -17,7 +17,7 @@ export async function GET(
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  // The track row doesn't depend on the session, so fetch both concurrently —
+  // The track row doesn't depend on the session, so fetch both concurrently -
   // one less serial DB hop between the click and the presigned redirect.
   const [user, [track]] = await Promise.all([
     requireUser(),

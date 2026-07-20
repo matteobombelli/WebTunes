@@ -6,7 +6,7 @@ import { resolveShareToken } from "@/lib/shares";
 import { MusicIcon } from "@/components/icons";
 
 // Public, no-auth listen page for a shared track. Lives outside the (app) and
-// (auth) route groups so it inherits only the bare root layout — no
+// (auth) route groups so it inherits only the bare root layout - no
 // requirePageUser, and logged-in users aren't bounced to /discover. Per-token,
 // so never cached.
 export const dynamic = "force-dynamic";

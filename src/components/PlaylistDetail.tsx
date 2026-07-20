@@ -297,8 +297,8 @@ export default function PlaylistDetail({
                 onClick={togglePrivate}
                 title={
                   isPrivate
-                    ? "Private — only you can see this playlist"
-                    : "Shared — friends can see this playlist"
+                    ? "Private - only you can see this playlist"
+                    : "Shared - friends can see this playlist"
                 }
                 className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
               >
@@ -335,7 +335,7 @@ export default function PlaylistDetail({
               </button>
             )}
           </div>
-          {/* Collaborator avatars — shown to anyone viewing so it's clear the
+          {/* Collaborator avatars - shown to anyone viewing so it's clear the
               playlist is shared. */}
           {collaborators.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2">

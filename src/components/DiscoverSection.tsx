@@ -21,7 +21,7 @@ async function playThenRadio(seed: TrackDTO) {
   usePlayerStore.getState().playQueue([seed], 0, { noAutoSimilar: true });
   try {
     const similar = await fetchSimilarTracks(seed.id, [seed.id], 10);
-    // A slow response must not hijack whatever the user started meanwhile —
+    // A slow response must not hijack whatever the user started meanwhile -
     // only start the radio if the seed is still the current track.
     const s = usePlayerStore.getState();
     if (s.index < 0 || s.queue[s.index]?.track.id !== seed.id) return;
@@ -163,7 +163,7 @@ export default function DiscoverSection({
           aria-label={saveState === "done" ? "Saved" : "Save"}
         >
           {/* The error state must read on mobile too, where the label is
-              hidden — swap the icon, not just the text. */}
+              hidden - swap the icon, not just the text. */}
           {saveState === "done" ? (
             <CheckIcon className={ICON} />
           ) : saveState === "error" ? (

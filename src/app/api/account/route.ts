@@ -12,7 +12,7 @@ const patchSchema = z.object({ name: nameSchema });
 
 // Rename the signed-in user (the username). The database session reads
 // users.name fresh per request, so the new name surfaces everywhere on the
-// client's next refresh. Usernames are unique — a clash returns 409.
+// client's next refresh. Usernames are unique - a clash returns 409.
 export async function PATCH(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 // Deletes the signed-in user's own account. Typing the account email is a
-// confirmation gate (the security boundary is requireUser — you can only delete
+// confirmation gate (the security boundary is requireUser - you can only delete
 // yourself). Every user-owned table cascades off users.id, so the row delete
 // clears all DB data (incl. the current session); S3 objects are not covered by
 // the cascade, so collect and best-effort delete them afterwards.

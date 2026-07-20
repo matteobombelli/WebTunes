@@ -3,7 +3,7 @@
 //   node scripts/backup-db-to-r2.mjs
 // pg_dump runs INSIDE the postgres container via `docker compose exec`, so it
 // always matches the server version and the host needs no postgres client
-// installed — but it does require Docker + the compose project to be up, and
+// installed - but it does require Docker + the compose project to be up, and
 // must run from the repo root (the systemd unit sets WorkingDirectory; `cwd:
 // root` covers manual runs). DATABASE_URL + S3_* come from the process
 // environment when set, otherwise merged from the .env files (later files win).
@@ -41,7 +41,7 @@ function parseEnvFile(path) {
 
 function loadEnv() {
   // Merge the .env files in order (later files override earlier), then overlay
-  // process.env LAST so an explicitly exported value wins — matching the
+  // process.env LAST so an explicitly exported value wins - matching the
   // docstring and the apply-s3-*.mjs scripts. (The previous order let the
   // on-disk files silently override an exported DATABASE_URL/S3_*.)
   let fileEnv = {};
@@ -82,7 +82,7 @@ const DB_PASSWORD = decodeURIComponent(dbUrl.password);
 const DB_NAME = dbUrl.pathname.slice(1);
 
 // Dump straight to `outPath` and resolve only once BOTH the process exited 0 and
-// the file finished flushing — staging to disk (rather than streaming pg_dump
+// the file finished flushing - staging to disk (rather than streaming pg_dump
 // straight to R2) lets us reject a truncated archive before it's published.
 // -Fc = compressed custom format, restorable with pg_restore.
 function dumpToFile(outPath) {
@@ -125,7 +125,7 @@ function dumpToFile(outPath) {
 }
 
 async function prune() {
-  // The prefix filter guarantees only backups/ keys are ever listed/deleted —
+  // The prefix filter guarantees only backups/ keys are ever listed/deleted -
   // audio objects elsewhere in the bucket can never be touched.
   const { Contents = [] } = await s3.send(
     new ListObjectsV2Command({ Bucket: BUCKET, Prefix: PREFIX })

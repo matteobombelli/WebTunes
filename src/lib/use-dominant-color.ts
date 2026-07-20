@@ -94,7 +94,7 @@ function buildGradient([r, g, b]: [number, number, number]): string {
 /**
  * A ready-to-use CSS `background` gradient derived from a track's cover art's
  * most prominent colour (shifted darker/saturated), or null while loading or on
- * any failure (no art, fetch error, CORS-tainted canvas) — callers fall back to
+ * any failure (no art, fetch error, CORS-tainted canvas) - callers fall back to
  * a plain background. Reads the CORS-readable presigned URL from `/art-url`
  * (the SW-intercepted `/art` redirect isn't safe to read pixels from).
  */

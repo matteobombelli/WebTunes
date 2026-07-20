@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { BASE_PATH } from "@/lib/base-path";
 
 // Next serves this at {BASE_PATH}/manifest.webmanifest but does NOT prefix
-// the URLs inside it — every path here needs BASE_PATH explicitly.
+// the URLs inside it - every path here needs BASE_PATH explicitly.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: `${BASE_PATH}/`,

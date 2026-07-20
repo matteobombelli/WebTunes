@@ -24,7 +24,7 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
       try {
         lastUser = localStorage.getItem(LAST_USER_KEY);
       } catch {
-        // localStorage unavailable (private mode); can't track — skip the purge.
+        // localStorage unavailable (private mode); can't track - skip the purge.
       }
       if (lastUser && lastUser !== userId) {
         await useDownloadsStore.getState().purgeForAccountSwitch();
@@ -62,14 +62,14 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
 // Cache the downloads page (the offline entry point) so it renders offline
 // even if the user never visited it. The HTML alone is not enough: the page
 // renders client-side from IndexedDB, so without its script/style chunks
-// hydration fails offline and the page stays blank — prime those too.
+// hydration fails offline and the page stays blank - prime those too.
 // Re-primed once per session so it stays fresh across deploys.
 async function primeOfflineFallback() {
   const url = `${BASE_PATH}/downloads`;
   try {
     if (sessionStorage.getItem("wt-offline-primed")) return;
     const res = await fetch(url);
-    // A redirect means we're unauthenticated and got the login page —
+    // A redirect means we're unauthenticated and got the login page -
     // caching that under /downloads would break the offline fallback.
     if (!res.ok || res.redirected) return;
     const html = await res.text();

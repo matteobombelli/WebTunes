@@ -1,9 +1,9 @@
 // Single source of truth for the image types WebTunes accepts in uploads
-// (track cover art — embedded on upload or set explicitly — and playlist
+// (track cover art - embedded on upload or set explicitly - and playlist
 // covers). The browser-supplied MIME type and the filename extension are both
 // attacker-controlled, so neither the stored S3 Content-Type nor the object
 // key's extension is ever echoed back from them: a crafted upload could
-// otherwise have e.g. text/html served from the object — and the offline
+// otherwise have e.g. text/html served from the object - and the offline
 // service worker replays that Content-Type from a *same-origin* cache, turning
 // it into stored XSS. Everything is resolved through this allowlist instead.
 
@@ -81,7 +81,7 @@ export function imageKindFromUpload(ext: string, mime: string | null): ImageKind
  * are not an allowlisted image. For cover art fetched from untrusted *remote*
  * sources (online metadata lookup): the remote URL extension and response
  * Content-Type are attacker-influenced, so the stored kind is derived from the
- * leading bytes instead — same stored-XSS reasoning as the header comment.
+ * leading bytes instead - same stored-XSS reasoning as the header comment.
  */
 export function imageKindFromBytes(buf: Buffer): ImageKind | null {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {

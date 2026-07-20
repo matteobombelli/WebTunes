@@ -17,7 +17,7 @@ import type { AdapterAccountType } from "next-auth/adapters";
 
 // `name` doubles as the public username: it's how friends find each other
 // (search) and the only identifier shown to other users (email is never
-// exposed). It must be unique case-insensitively — enforced by a
+// exposed). It must be unique case-insensitively - enforced by a
 // `UNIQUE (lower(name))` index that, like the search_vector index, lives only in
 // raw SQL (drizzle/0020_username_unique.sql), not here.
 export const users = pgTable("users", {
@@ -118,7 +118,7 @@ export const extensionPairCodes = pgTable("extension_pair_codes", {
 });
 
 // Long-lived bearer tokens for the WebTunes Importer desktop app, issued by
-// redeeming a pairing code. Scope is "import tracks for this user" only — the
+// redeeming a pairing code. Scope is "import tracks for this user" only - the
 // only routes that accept them are /api/extension/me and
 // /api/tracks/extension-import. Hashed at rest; revocable from Settings
 // (revoked_at kept as tombstone rather than deleted so the row can't be
@@ -203,10 +203,10 @@ export const trackEmbeddings = pgTable("track_embeddings", {
 
 // Public "share link" for a single track: an unguessable capability token that
 // lets anyone (no account) stream the track via /share/[token], bypassing the
-// normal access check — the token IS the grant, so it overrides is_private.
+// normal access check - the token IS the grant, so it overrides is_private.
 // One row per track (the UNIQUE track_id frees its slot when revoke/expiry
 // DELETE the row). The token is stored in plaintext on purpose so the owner can
-// re-display/copy it later — low sensitivity, it only grants playback of a track
+// re-display/copy it later - low sensitivity, it only grants playback of a track
 // the owner chose to expose (unlike the hashed auth tokens above). Auto-expires
 // after 7 days; scripts/purge-expired-shares.mjs (daily systemd timer) deletes
 // expired rows so they never accumulate. See lib/shares.ts.
@@ -221,7 +221,7 @@ export const trackShares = pgTable(
     // Nullable + SET NULL: a share is one row per track and is a capability bound
     // to the TRACK, not to whoever first minted it (a friend may mint). So the
     // minter deleting their account must NOT cascade-revoke the owner's still-
-    // valid link. (FK softened out-of-band — drizzle/0019_audit_indexes_and_share_fk.sql.)
+    // valid link. (FK softened out-of-band - drizzle/0019_audit_indexes_and_share_fk.sql.)
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -233,7 +233,7 @@ export const trackShares = pgTable(
 );
 
 // Per-listener "exclude from Play Similar" list. A (user, track) row hides that
-// track from this user's OWN "play similar" radio results only — it stays
+// track from this user's OWN "play similar" radio results only - it stays
 // visible to the track's owner and to friends. Filtered in lib/similar.ts.
 // Cascades away when either the user or the track is deleted. Leading userId in
 // the composite PK makes the per-user lookup index-backed.
@@ -255,7 +255,7 @@ export const similarExclusions = pgTable(
 // (recorded by POST /api/tracks/[id]/play). Powers Discover's "Your top 100"
 // (your most-played in the last 7 days) and "Friends" (what friends played
 // recently). friend_play_count on tracks stays the global, owner-excluded
-// counter behind the "listen count" column — this table is the timestamped,
+// counter behind the "listen count" column - this table is the timestamped,
 // owner-inclusive signal that counter can't express.
 export const listens = pgTable(
   "listens",
@@ -267,6 +267,11 @@ export const listens = pgTable(
     trackId: uuid("track_id")
       .notNull()
       .references(() => tracks.id, { onDelete: "cascade" }),
+    // Present for exact client telemetry; NULL marks legacy listen rows whose
+    // time can only be estimated from the track duration. One session is
+    // updated cumulatively, so retrying a checkpoint never creates a new play.
+    sessionId: uuid("session_id"),
+    listenedSeconds: integer("listened_seconds"),
     playedAt: timestamp("played_at", { mode: "date" }).notNull().defaultNow(),
   },
   (l) => [
@@ -274,6 +279,11 @@ export const listens = pgTable(
     // (user_id IN (friends) AND played_at > ...) both range-scan this.
     index("listens_user_played_idx").on(l.userId, l.playedAt),
     index("listens_track_idx").on(l.trackId),
+    uniqueIndex("listens_session_id_idx").on(l.sessionId),
+    check(
+      "listens_seconds_range",
+      sql`${l.listenedSeconds} IS NULL OR ${l.listenedSeconds} BETWEEN 30 AND 86400`
+    ),
   ]
 );
 
@@ -304,7 +314,7 @@ export const friendships = pgTable(
 // ONE account at /register?invite=<token>, which is then auto-friended with the
 // inviter. Multiple concurrent links per user (no UNIQUE(inviter_id)); each is
 // single-use (used_by_user_id set on registration, then kept as history so the
-// inviter sees "used by <name>"). Plaintext on purpose — re-displayable, low
+// inviter sees "used by <name>"). Plaintext on purpose - re-displayable, low
 // sensitivity, like track_shares (unlike the hashed auth tokens). Auto-expires
 // after 7 days. See lib/invites.ts.
 export const invites = pgTable(

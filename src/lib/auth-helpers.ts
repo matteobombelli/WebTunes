@@ -7,7 +7,7 @@ import { getUserForImportToken } from "@/lib/extension-tokens";
 export type SessionUser = { id: string; email: string; name: string | null };
 
 // Auth.js doesn't React-cache auth(), and with database sessions each call is
-// a session+user DB round-trip — the (app) layout and every page both call
+// a session+user DB round-trip - the (app) layout and every page both call
 // requireUser on the same request. cache() collapses them to one.
 const cachedAuth = cache(() => auth());
 
@@ -32,7 +32,7 @@ export async function requirePageUser(): Promise<SessionUser> {
 /**
  * Returns the user behind a valid `Authorization: Bearer` extension-import
  * token, or null (caller returns 401). The token-auth counterpart of
- * requireUser for the two extension routes — session auth and token auth stay
+ * requireUser for the two extension routes - session auth and token auth stay
  * deliberately separate so the token's scope can't creep.
  */
 export async function requireImportToken(

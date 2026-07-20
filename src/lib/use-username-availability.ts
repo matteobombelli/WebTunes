@@ -10,11 +10,11 @@ export type NameAvailability = "idle" | "checking" | "available" | "taken";
  * the in-app rename. `currentName` (the caller's existing username, if any) is
  * treated as available, so renaming to your own current name never warns.
  * "idle" while empty/unchanged or on a failed check (never asserts "taken" on a
- * network error — the server is the real guard).
+ * network error - the server is the real guard).
  *
  * The displayed status is derived during render (empty/unchanged → idle; a
  * settled result for the current name → its verdict; otherwise → checking), so
- * the effect only ever setState()s from its deferred fetch — not synchronously.
+ * the effect only ever setState()s from its deferred fetch - not synchronously.
  */
 export function useUsernameAvailability(
   name: string,

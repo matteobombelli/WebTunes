@@ -3,7 +3,7 @@
 // DRM-locked, so they are metadata-only sources: each track is later matched
 // to YouTube (lib/import/match.ts) and the audio comes from there.
 //
-// No SSRF surface: the user's URL is only ever parsed — ids are regex-extracted
+// No SSRF surface: the user's URL is only ever parsed - ids are regex-extracted
 // and interpolated into fixed-host templates (open.spotify.com,
 // api-partner.spotify.com, music.apple.com, amp-api.music.apple.com,
 // itunes.apple.com). Art URLs are fetched later through fetchCoverArt's guard.
@@ -11,7 +11,7 @@
 export type SourceKind = "youtube" | "spotify" | "apple";
 
 // A YouTube URL is the only user input passed verbatim to yt-dlp, whose
-// generic extractor will fetch arbitrary hosts — so it gets a strict hostname
+// generic extractor will fetch arbitrary hosts - so it gets a strict hostname
 // allowlist, unlike the Spotify/Apple branches (id-extraction only, above).
 const YOUTUBE_HOSTS = new Set([
   "youtube.com",
@@ -43,7 +43,7 @@ export function classifyUrl(url: string): SourceKind | null {
   try {
     if (YOUTUBE_HOSTS.has(new URL(url).hostname)) return "youtube";
   } catch {
-    // not a parseable URL — fall through
+    // not a parseable URL - fall through
   }
   return null;
 }
@@ -63,7 +63,7 @@ async function get(url: string, headers?: Record<string, string>): Promise<strin
 /* eslint-disable @typescript-eslint/no-explicit-any -- scraped JSON is untyped */
 
 // ---------------------------------------------------------------------------
-// Spotify — via the public web player, no credentials. The documented Web API
+// Spotify - via the public web player, no credentials. The documented Web API
 // requires OAuth and 403s new apps, so we read what the embed page carries: an
 // anonymous access token the web player's GraphQL ("pathfinder") API accepts,
 // including offset pagination, so playlists of any length work.
@@ -85,16 +85,16 @@ async function spotifyEmbedState(
   kind: "playlist" | "album" | "track"
 ) {
   const html = await get(`https://open.spotify.com/embed/${kind}/${itemId}`);
-  // [\s\S] instead of the `s` flag — tsconfig targets pre-es2018.
+  // [\s\S] instead of the `s` flag - tsconfig targets pre-es2018.
   const m = html.match(
     /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/
   );
   // A private/deleted/region-blocked item renders an embed page without the
-  // expected state — surface that readably instead of a TypeError.
+  // expected state - surface that readably instead of a TypeError.
   const state = m ? JSON.parse(m[1])?.props?.pageProps?.state : undefined;
   if (!state?.data?.entity) {
     throw new Error(
-      `couldn't read that Spotify ${kind} — is it public and the link correct?`
+      `couldn't read that Spotify ${kind} - is it public and the link correct?`
     );
   }
   return state;
@@ -124,7 +124,7 @@ async function pathfinderTracks(
         Authorization: `Bearer ${token}`,
       })
     );
-    // GraphQL errors come back 200 with no data — treat as a failure so the
+    // GraphQL errors come back 200 with no data - treat as a failure so the
     // caller falls back to the embed track list.
     const content = body?.data?.playlistV2?.content;
     if (!content) throw new Error("pathfinder returned no playlist data");
@@ -155,7 +155,7 @@ async function spotifyPlaylist(playlistId: string): Promise<SourceTrack[]> {
     if (!token) throw new Error("embed page carried no access token");
     return await pathfinderTracks(playlistId, token);
   } catch {
-    // Web-player API failed — fall back to the embed's own track list
+    // Web-player API failed - fall back to the embed's own track list
     // (max 100 tracks, no album/art info).
     return (state.data.entity.trackList ?? []).map((t: any) => ({
       artist: t.subtitle ?? "",
@@ -207,7 +207,7 @@ export async function spotifyTracks(url: string): Promise<SourceTrack[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Apple Music — keyless iTunes Lookup API for albums/songs; playlists (pl.*
+// Apple Music - keyless iTunes Lookup API for albums/songs; playlists (pl.*
 // ids) are absent from that API, so they go through the amp-api the web player
 // uses, authorized with a bearer JWT scraped from the player's JS bundle (it
 // rotates roughly monthly, hence scraped per job, never cached).
@@ -231,7 +231,7 @@ function appleParse(url: string): {
   throw new Error("Unrecognized Apple Music URL");
 }
 
-/** Scrape the web player's anonymous bearer JWT — the JS bundle ships two;
+/** Scrape the web player's anonymous bearer JWT - the JS bundle ships two;
  * the amp-api one is issued by "AMPWebPlay". */
 async function appleToken(): Promise<string> {
   const html = await get("https://music.apple.com/us/browse");
@@ -253,7 +253,7 @@ async function appleToken(): Promise<string> {
   throw new Error("could not extract the Apple Music player token");
 }
 
-/** Concrete 1200px cover URL from an Apple artwork reference — either an
+/** Concrete 1200px cover URL from an Apple artwork reference - either an
  * amp-api {w}x{h} template or an iTunes 100x100 thumbnail. */
 function appleArtwork(url: string): string {
   return url
@@ -271,7 +271,7 @@ async function applePlaylist(
     Origin: "https://music.apple.com",
   };
   const tracks: SourceTrack[] = [];
-  // `next` is a path the API returns for the following page — appended to the
+  // `next` is a path the API returns for the following page - appended to the
   // fixed amp-api origin, never fetched as a full URL.
   let path: string | undefined =
     `/v1/catalog/${storefront}/playlists/${playlistId}/tracks?limit=100&offset=0`;

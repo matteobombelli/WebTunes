@@ -6,7 +6,7 @@ import { log } from "@/lib/log";
 // Render-nothing component (same shape as ServiceWorkerRegistrar) that surfaces
 // otherwise-invisible uncaught client errors to the F12 console (and the
 // window.__wtLog buffer). Mounted in the ROOT layout so it covers every route
-// group — (app), (auth), and the public share/[token] page. These are errors,
+// group - (app), (auth), and the public share/[token] page. These are errors,
 // so they log regardless of the `wt-log` verbose flag.
 export default function ClientErrorLogger() {
   useEffect(() => {

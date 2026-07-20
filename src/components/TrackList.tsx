@@ -164,7 +164,7 @@ const TrackRow = memo(function TrackRow({
             aria-label={`Select ${track.title}`}
             checked={selected}
             // React backs checkbox onChange with the native click, so the
-            // nativeEvent carries shiftKey — used for range selection.
+            // nativeEvent carries shiftKey - used for range selection.
             onChange={(e) =>
               onToggleSelect(track.id, (e.nativeEvent as MouseEvent).shiftKey)
             }
@@ -206,7 +206,7 @@ const TrackRow = memo(function TrackRow({
             {track.artist}
           </Link>
         ) : (
-          "—"
+          "-"
         )}
       </td>
       <td className="hidden truncate py-2 pr-2 text-fg-muted md:table-cell">
@@ -218,7 +218,7 @@ const TrackRow = memo(function TrackRow({
             {track.album}
           </Link>
         ) : (
-          "—"
+          "-"
         )}
       </td>
       {showOwner && (
@@ -280,7 +280,7 @@ const TrackRow = memo(function TrackRow({
 
 // A stripped sortable row for reorder mode (grip + art + title/artist only),
 // mirroring the player queue's QueueRow. The whole table's row chrome (play,
-// checkbox, kebab) is intentionally dropped here — reordering is the one job.
+// checkbox, kebab) is intentionally dropped here - reordering is the one job.
 const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: track.id });
@@ -297,7 +297,7 @@ const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
       <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
       <div className="min-w-0 flex-1">
         <p className="truncate text-base font-medium sm:text-sm">{track.title}</p>
-        <p className="truncate text-xs text-fg-muted">{track.artist ?? "—"}</p>
+        <p className="truncate text-xs text-fg-muted">{track.artist ?? "-"}</p>
       </div>
       <button
         {...attributes}
@@ -314,7 +314,7 @@ const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
 
 // The drag-and-drop list shown in reorder mode. Self-contained @dnd-kit context
 // (like QueuePanel) so the normal table stays untouched; all rows are mounted
-// (no windowing — playlists are small) so SortableContext can measure them.
+// (no windowing - playlists are small) so SortableContext can measure them.
 function ReorderableTrackList({
   tracks,
   onDragEnd,
@@ -364,7 +364,7 @@ function ReorderableTrackList({
                 {active.title}
               </p>
               <p className="truncate text-xs text-fg-muted">
-                {active.artist ?? "—"}
+                {active.artist ?? "-"}
               </p>
             </div>
             <span className="shrink-0 p-1 text-fg-subtle">
@@ -389,6 +389,9 @@ export default function TrackList({
   onReorder,
   onMutated,
   emptyMessage,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
@@ -409,6 +412,12 @@ export default function TrackList({
   onMutated?: () => void;
   /** Replaces the default "No tracks here yet." empty state (e.g. searches). */
   emptyMessage?: string;
+  /** More server-side pages exist beyond the tracks currently supplied. */
+  hasMore?: boolean;
+  /** A remote page request is currently in flight. */
+  loadingMore?: boolean;
+  /** Fetches the next server-side page as the list sentinel approaches. */
+  onLoadMore?: () => void;
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
@@ -445,30 +454,40 @@ export default function TrackList({
   // row at once. Sort/search/selection still run over the full `view`; only
   // the rendered slice grows, extended as a sentinel near the end scrolls in.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  // Reset the window when the list changes (new search results, re-sort).
+  // Reset for a different/re-sorted list, but retain the window when a remote
+  // page is appended so scrolling does not jump back to the first 50 rows.
   // Render-phase reset per react.dev "storing information from previous renders".
   const [prevView, setPrevView] = useState(view);
   if (view !== prevView) {
+    const isAppend =
+      prevView.length <= view.length &&
+      prevView.every((track, index) => view[index]?.id === track.id);
     setPrevView(view);
-    setVisibleCount(PAGE_SIZE);
+    if (!isAppend) setVisibleCount(PAGE_SIZE);
   }
   const visible = useMemo(() => view.slice(0, visibleCount), [view, visibleCount]);
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (visibleCount >= view.length) return;
+    const canRevealLocalRows = visibleCount < view.length;
+    const canFetchRemoteRows = hasMore && !loadingMore && !!onLoadMore;
+    if (!canRevealLocalRows && !canFetchRemoteRows) return;
     const el = sentinelRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount((c) => Math.min(c + PAGE_SIZE, view.length));
+          if (canRevealLocalRows) {
+            setVisibleCount((c) => Math.min(c + PAGE_SIZE, view.length));
+          } else {
+            onLoadMore?.();
+          }
         }
       },
       { rootMargin: "800px" }
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [visibleCount, view.length]);
+  }, [hasMore, loadingMore, onLoadMore, visibleCount, view.length]);
 
   // Click cycles: ascending → descending → default (server order).
   const cycleSort = (key: SortKey) =>
@@ -494,7 +513,7 @@ export default function TrackList({
         className="relative inline-flex items-center uppercase hover:text-fg-muted"
       >
         {label}
-        {/* Positioned outside the flow so the chevron never shifts the label —
+        {/* Positioned outside the flow so the chevron never shifts the label -
             keeps the centered icon columns (duration, plays) truly centered. */}
         {sort?.key === key && (
           <span className="absolute inset-y-0 left-full flex w-3.5 items-center justify-center">
@@ -516,7 +535,7 @@ export default function TrackList({
     (id: string, shiftKey: boolean) => {
       const anchor = rangeAnchorRef.current;
       // Shift+click selects every row between the anchor and this one
-      // (inclusive), in display order — no anchor yet falls through to a plain
+      // (inclusive), in display order - no anchor yet falls through to a plain
       // toggle. The anchor stays put so the range can be re-extended.
       if (shiftKey && anchor && anchor !== id) {
         const from = view.findIndex((t) => t.id === anchor);
@@ -542,7 +561,7 @@ export default function TrackList({
     [view]
   );
   // Selection can hold ids of tracks that were since deleted (router.refresh
-  // keeps client state) — only count ids present in the current list.
+  // keeps client state) - only count ids present in the current list.
   const validSelected = useMemo(() => {
     const ids = new Set(tracks.map((t) => t.id));
     return new Set([...selected].filter((id) => ids.has(id)));
@@ -917,9 +936,9 @@ export default function TrackList({
     </table>
     {/* Sentinel lives outside the table so its width has no effect on the
         fixed table column layout; it extends the rendered window on scroll. */}
-    {visibleCount < view.length && (
+    {(visibleCount < view.length || hasMore) && (
       <div ref={sentinelRef} aria-hidden className="py-4 text-center text-xs text-fg-subtle">
-        Loading more…
+        {loadingMore ? "Loading more…" : "More tracks below"}
       </div>
     )}
       </>

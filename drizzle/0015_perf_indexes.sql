@@ -2,12 +2,12 @@
 --
 -- These match the EXACT expressions used by the queries in src/lib/tracks.ts,
 -- src/lib/playlists.ts and src/lib/friends.ts, so Postgres can actually use
--- them (a plain btree on `album`/`artist` would NOT be used — the queries wrap
+-- them (a plain btree on `album`/`artist` would NOT be used - the queries wrap
 -- the column in lower(btrim(...)), so a *functional* index on that expression
 -- is required).
 --
 -- !! NOT a drizzle-kit migration !!  Every statement uses CREATE INDEX
--- CONCURRENTLY, which Postgres forbids inside a transaction — and `drizzle-kit
+-- CONCURRENTLY, which Postgres forbids inside a transaction - and `drizzle-kit
 -- migrate` wraps each migration in one. So this file is intentionally NOT in
 -- drizzle/meta/_journal.json. Apply it by hand, one statement at a time, e.g.:
 --

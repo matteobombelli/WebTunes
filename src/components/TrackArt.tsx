@@ -20,7 +20,7 @@ export default function TrackArt({
   size: string;
   className?: string;
   iconSize?: number;
-  /** Request the downscaled thumbnail — for small (<=64px) rows. The route
+  /** Request the downscaled thumbnail - for small (<=64px) rows. The route
    *  falls back to the full art when no thumbnail exists. */
   thumb?: boolean;
 }) {

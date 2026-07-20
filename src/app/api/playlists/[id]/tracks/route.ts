@@ -122,7 +122,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "trackIds array is required" }, { status: 400 });
   }
 
-  // A reorder must be a permutation of the playlist's CURRENT members — reject a
+  // A reorder must be a permutation of the playlist's CURRENT members - reject a
   // partial / padded / duplicated list so positions can't end up colliding or
   // non-contiguous (the web client always sends the full ordered list).
   const members = await db
@@ -147,7 +147,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // One set-based statement instead of one UPDATE per track: a drag-drop in a
     // large playlist would otherwise hold the transaction (and row locks) across
     // hundreds of sequential round-trips. sql.param keeps the id array a single
-    // $1::uuid[] parameter — plain ${array} interpolation expands to ($1, $2, …),
+    // $1::uuid[] parameter - plain ${array} interpolation expands to ($1, $2, …),
     // which Postgres can't cast to uuid[].
     await tx.execute(sql`
       update ${playlistTracks} set "position" = v.ord - 1

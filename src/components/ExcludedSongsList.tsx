@@ -46,7 +46,7 @@ export default function ExcludedSongsList({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-fg">{track.title}</p>
                 <p className="truncate text-xs text-fg-muted">
-                  {track.artist ?? "—"}
+                  {track.artist ?? "-"}
                   {track.ownerName ? ` · ${track.ownerName}` : ""}
                 </p>
               </div>

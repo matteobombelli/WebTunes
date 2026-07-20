@@ -6,7 +6,7 @@ import { users } from "@/db/schema";
 import type { FriendDTO } from "@/lib/types";
 
 // Shared so the register form and the in-app rename (PATCH /api/account) can't
-// validate the username differently. `name` is the public username — kept
+// validate the username differently. `name` is the public username - kept
 // freeform (any characters) but unique case-insensitively (see below).
 export const nameSchema = z
   .string()
@@ -14,7 +14,7 @@ export const nameSchema = z
   .min(1, "Username is required")
   .max(100);
 
-// Name of the `UNIQUE (lower(name))` index (raw SQL — drizzle/0020). Used to
+// Name of the `UNIQUE (lower(name))` index (raw SQL - drizzle/0020). Used to
 // tell a username collision apart from the email one in a 23505.
 export const USERNAME_UNIQUE_INDEX = "users_name_lower_idx";
 export const USERNAME_TAKEN_MESSAGE = "That username is taken";
@@ -72,7 +72,7 @@ export type UpdateNameResult = { name: string } | { error: string };
 
 /**
  * Rename the signed-in user. Usernames are unique case-insensitively: returns
- * `{ error }` (not a throw) when the chosen name is taken — the pre-check is
+ * `{ error }` (not a throw) when the chosen name is taken - the pre-check is
  * friendly, the unique index is the race guard.
  */
 export async function updateDisplayName(

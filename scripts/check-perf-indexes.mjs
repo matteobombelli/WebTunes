@@ -4,7 +4,7 @@
 // transaction), so they are NOT in src/db/schema.ts or the migration journal.
 // A freshly provisioned / rebuilt DB that skipped the hand-apply step would
 // silently degrade every hot list/search/album/artist query to a seq scan with
-// no error from the tooling — this fails loudly instead. Run it after any
+// no error from the tooling - this fails loudly instead. Run it after any
 // provisioning, or in CI.
 //   node scripts/check-perf-indexes.mjs
 // DATABASE_URL comes from the process environment when set, otherwise merged

@@ -16,7 +16,7 @@ export type ShareLink = { token: string; expiresAt: Date };
 // The track fields the public stream/art routes and listen page need. Built by
 // hand (NOT toTrackDTO, which would leak s3Key/isPrivate into the JSON DTO).
 // Note: the owner's id still appears in the presigned S3 URL the recipient is
-// 302'd to (keys are `audio/<ownerId>/…`) — opaque, unusable without a session,
+// 302'd to (keys are `audio/<ownerId>/…`) - opaque, unusable without a session,
 // and identical to the authed stream route (audit I22, accepted).
 export type ResolvedShare = {
   id: string;
@@ -30,7 +30,7 @@ export type ResolvedShare = {
 
 // The currently-active (non-expired) link for a track, or null. Serves the
 // GET /api/tracks/[id]/shares endpoint (unused by the web client, which mints
-// via POST — kept for the future mobile client).
+// via POST - kept for the future mobile client).
 export async function getActiveShare(trackId: string): Promise<ShareLink | null> {
   const [row] = await db
     .select({ token: trackShares.token, expiresAt: trackShares.expiresAt })
@@ -43,7 +43,7 @@ export async function getActiveShare(trackId: string): Promise<ShareLink | null>
 
 // Return the active link for a track, creating one if none exists. Atomic via
 // upsert on the UNIQUE(track_id): an EXPIRED row is replaced (fresh token + 7
-// days), an ACTIVE row is left untouched (re-sharing returns the same URL — to
+// days), an ACTIVE row is left untouched (re-sharing returns the same URL - to
 // reset the clock the owner revokes then re-shares). This closes the
 // create-create race where two callers would otherwise both insert.
 export async function createOrGetShare(
@@ -67,7 +67,7 @@ export async function createOrGetShare(
   const existing = await getActiveShare(trackId);
   if (existing) return existing;
   // The active row expired in the microseconds between the upsert and the read;
-  // retry once — now the setWhere matches and the expired row is replaced.
+  // retry once - now the setWhere matches and the expired row is replaced.
   return createOrGetShare(trackId, userId);
 }
 

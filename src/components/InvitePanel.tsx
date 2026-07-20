@@ -26,7 +26,7 @@ function daysLeft(expiresAt: string): number {
  */
 export default function InvitePanel({ canInvite }: { canInvite: boolean }) {
   const [invites, setInvites] = useState<InviteDTO[] | null>(null);
-  // The list fetch failed — its empty list means "couldn't load", not "none".
+  // The list fetch failed - its empty list means "couldn't load", not "none".
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -95,7 +95,7 @@ export default function InvitePanel({ canInvite }: { canInvite: boolean }) {
       ) : invites.length === 0 ? (
         <p className="text-sm text-fg-muted">
           {loadFailed
-            ? "Couldn’t load invite links — check your connection."
+            ? "Couldn’t load invite links - check your connection."
             : "No invite links yet. Generate one to invite a friend."}
         </p>
       ) : (

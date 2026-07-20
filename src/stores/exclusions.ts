@@ -38,7 +38,7 @@ export const useExclusionsStore = create<ExclusionsState>((set, get) => ({
       );
       set({ tracks, ids: new Set(tracks.map((t) => t.id)), ready: true });
     } catch {
-      // Best effort — leave the list empty; the server still filters the feed.
+      // Best effort - leave the list empty; the server still filters the feed.
       set({ ready: true });
     }
   },
