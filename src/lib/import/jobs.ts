@@ -406,7 +406,7 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
     // Re-check the app's upload cap on the real file before buffering it.
     const { size } = await stat(file.path);
     if (size > MAX_FILE_BYTES) {
-      miss("file exceeds the 100 MB limit");
+      miss("file exceeds the 90 MB limit");
       return;
     }
 

@@ -4,7 +4,7 @@ A self-hosted, web-based music app. Each user has a personal library stored in S
 playable in the browser, organized into playlists, and automatically shared with
 friends. Search covers title, artist, album, and lyrics.
 
-Production target: https://matteob.dev/projects/webtunes
+Production target: https://apps.matteob.dev/projects/webtunes
 
 ## Stack
 

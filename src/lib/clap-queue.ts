@@ -12,7 +12,7 @@ import { getObjectBytes } from "@/lib/s3";
 // missing-row backstop (`scripts/analyze-clap-embeddings.mjs`) recovers it.
 //
 // Jobs hold only ids/keys, not audio bytes: the worker re-fetches the stored
-// bytes from S3 when it runs, so a burst of uploads can't pile up 100 MB buffers
+// bytes from S3 when it runs, so a burst of uploads can't pile up 90 MB buffers
 // in the queue - at most MAX_WORKERS decodes are in flight. (Embedding the
 // stored bytes also matches the backfill script, which downloads the same S3
 // object.) `embedTrack` keeps its own inference gate, so two workers never

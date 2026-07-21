@@ -293,8 +293,8 @@ setup, and architecture rationale.
   viewer's own (`notDuplicateOfOwn` in `lib/tracks.ts`) in scope=all/friends
   listings and search; friend profile pages are intentionally unfiltered.
 - Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
-  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 110mb -
-  deliberately ABOVE the 100 MB `MAX_FILE_BYTES` app limit so a near-limit file
+  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 95mb -
+  deliberately ABOVE the 90 MB `MAX_FILE_BYTES` app limit so a near-limit file
   plus multipart overhead isn't silently truncated; the default 10MB broke
   track uploads).
 - Offline/PWA: the player streams via the stable

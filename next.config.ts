@@ -50,10 +50,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // Proxy buffers request bodies in RAM (default cap 10MB), which truncated
     // track uploads and broke FormData parsing. The app-level file limit is
-    // 100MB (MAX_FILE_BYTES); the proxy cap sits above it so a file near the
+    // 90MB (MAX_FILE_BYTES); the proxy cap sits above it so a file near the
     // limit - plus multipart boundary/field overhead - isn't silently
     // truncated into a formData() parse error.
-    proxyClientMaxBodySize: "110mb",
+    proxyClientMaxBodySize: "95mb",
   },
   // Search lives in the Library page now; keep old links working.
   async redirects() {

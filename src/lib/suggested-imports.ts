@@ -672,7 +672,7 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
       })
     );
     const { size } = await stat(file.path);
-    if (size > MAX_FILE_BYTES) throw new Error("file exceeds the 100 MB limit");
+    if (size > MAX_FILE_BYTES) throw new Error("file exceeds the 90 MB limit");
     const buffer = await readFile(file.path);
     const result = await ingestTrack({
       userId: candidate.userId,

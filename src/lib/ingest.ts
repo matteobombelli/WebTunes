@@ -24,9 +24,9 @@ import {
 } from "@/lib/thumbnail";
 
 // The user-facing upload limit. proxyClientMaxBodySize in next.config.ts sits
-// ABOVE this (110mb) so a file near the limit plus multipart overhead isn't
+// ABOVE this (95mb) so a file near the limit plus multipart overhead isn't
 // silently truncated by the proxy before the route can reject it cleanly.
-export const MAX_FILE_BYTES = 100 * 1024 * 1024;
+export const MAX_FILE_BYTES = 90 * 1024 * 1024;
 
 export const AUDIO_EXTENSIONS = new Set([
   "mp3",
@@ -57,7 +57,7 @@ export function validateAudioUpload(
     return { ok: false, error: `Unsupported file type: ${value.type || ext}` };
   }
   if (value.size > MAX_FILE_BYTES) {
-    return { ok: false, error: "File exceeds the 100 MB limit" };
+    return { ok: false, error: "File exceeds the 90 MB limit" };
   }
   return { ok: true, file: value };
 }
