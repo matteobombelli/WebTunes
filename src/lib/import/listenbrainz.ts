@@ -4,7 +4,9 @@ const ROOT = "https://api.listenbrainz.org/1";
 const USER_AGENT = "WebTunes/0.1 (personal project)";
 const TIMEOUT_MS = 15_000;
 const LOOKUP_BATCH_SIZE = 50;
+const POPULARITY_RETRY_MS = 30 * 60 * 1000;
 let nextRequestAt = 0;
+let popularityRetryAt = 0;
 
 export type SuggestedCandidate = {
   recordingMbid: string;
@@ -246,19 +248,32 @@ async function metadataFor(
   return new Map(Object.entries(body));
 }
 
-/** Balanced candidate set for one seed artist: popular/deeper recordings by
- * the artist plus medium-mode LB Radio recordings from related artists. */
-export async function candidatesForArtist(seed: {
-  artistMbid: string;
-  artistName: string;
-  weight: number;
-}): Promise<SuggestedCandidate[]> {
+async function popularForArtist(artistMbid: string): Promise<PopularRecording[]> {
+  if (Date.now() < popularityRetryAt) return [];
   try {
-    const popularResponse = await politeFetch(
-      `/popularity/top-recordings-for-artist/${seed.artistMbid}`
+    const response = await politeFetch(
+      `/popularity/top-recordings-for-artist/${artistMbid}`
     );
-    const popular = (await popularResponse.json()) as PopularRecording[];
+    return (await response.json()) as PopularRecording[];
+  } catch (error) {
+    // ListenBrainz periodically disables this endpoint under high load. It is
+    // an optional familiar-track source, so open a short process-wide circuit
+    // and let LB Radio keep Suggested Imports working without log floods.
+    popularityRetryAt = Date.now() + POPULARITY_RETRY_MS;
+    log.warn(
+      "suggested-imports",
+      "ListenBrainz popularity unavailable; using radio-only suggestions",
+      error instanceof Error ? error.message : String(error)
+    );
+    return [];
+  }
+}
 
+async function radioForArtist(artistMbid: string): Promise<{
+  recordings: RadioRecording[];
+  metadata: Map<string, MetadataValue>;
+}> {
+  try {
     const radioParams = new URLSearchParams({
       mode: "medium",
       max_similar_artists: "6",
@@ -266,16 +281,40 @@ export async function candidatesForArtist(seed: {
       pop_begin: "10",
       pop_end: "90",
     });
-    const radioResponse = await politeFetch(
-      `/lb-radio/artist/${seed.artistMbid}?${radioParams}`
+    const response = await politeFetch(
+      `/lb-radio/artist/${artistMbid}?${radioParams}`
     );
-    const radioRaw: unknown = await radioResponse.json();
-    const radio: RadioRecording[] = [];
-    collectRadio(radioRaw, radio);
-    const radioIds = [...new Set(radio.flatMap((r) => r.recording_mbid ?? []))];
-    const metadata = await metadataFor(radioIds.slice(0, 100));
+    const raw: unknown = await response.json();
+    const recordings: RadioRecording[] = [];
+    collectRadio(raw, recordings);
+    const ids = [
+      ...new Set(recordings.flatMap((row) => row.recording_mbid ?? [])),
+    ];
+    return {
+      recordings,
+      metadata: await metadataFor(ids.slice(0, 100)),
+    };
+  } catch (error) {
+    log.warn(
+      "suggested-imports",
+      `ListenBrainz radio failed for ${artistMbid}`,
+      error instanceof Error ? error.message : String(error)
+    );
+    return { recordings: [], metadata: new Map() };
+  }
+}
 
-    const familiar = popular.slice(0, 30).flatMap((row, index) => {
+/** Balanced candidate set for one seed artist: popular/deeper recordings by
+ * the artist plus medium-mode LB Radio recordings from related artists. */
+export async function candidatesForArtist(seed: {
+  artistMbid: string;
+  artistName: string;
+  weight: number;
+}): Promise<SuggestedCandidate[]> {
+  const popular = await popularForArtist(seed.artistMbid);
+  const { recordings: radio, metadata } = await radioForArtist(seed.artistMbid);
+
+  const familiar = popular.slice(0, 30).flatMap((row, index) => {
       if (!row.recording_mbid || !row.recording_name || !row.artist_name) return [];
       return [{
         recordingMbid: row.recording_mbid,
@@ -292,7 +331,7 @@ export async function candidatesForArtist(seed: {
       } satisfies SuggestedCandidate];
     });
 
-    const related = radio.flatMap((row, index) => {
+  const related = radio.flatMap((row, index) => {
       if (!row.recording_mbid) return [];
       const meta = metadata.get(row.recording_mbid);
       const title = meta?.recording?.name;
@@ -320,13 +359,5 @@ export async function candidatesForArtist(seed: {
           index / 1000,
       } satisfies SuggestedCandidate];
     });
-    return [...familiar, ...related];
-  } catch (error) {
-    log.warn(
-      "suggested-imports",
-      `ListenBrainz lookup failed for ${seed.artistMbid}`,
-      error instanceof Error ? error.message : String(error)
-    );
-    return [];
-  }
+  return [...familiar, ...related];
 }
