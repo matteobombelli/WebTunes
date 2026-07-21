@@ -88,8 +88,8 @@ export default function DiscoverBrowser({
 
       {tab === "discover" && (
         <div className="flex flex-col gap-4 sm:gap-5">
-          <SuggestedImportsSection initialPool={suggestedImports} />
           <DiscoverSection title="Random" radioSeeds={sections.random} />
+          <SuggestedImportsSection initialPool={suggestedImports} />
           <DiscoverSection
             title="Recommended"
             tracks={sections.recommended}
