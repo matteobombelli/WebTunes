@@ -302,12 +302,16 @@ export async function ingestTrack({
     // this track won't seed/appear in "play similar" until the worker (or the
     // backfill script) fills it in - it must never fail or delay the upload.
     enqueueEmbedding({ trackId, s3Key, ext: audioExt });
-    // Fill any MISSING artist/album/cover-art in the background via acoustic
-    // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup
-    // as the fallback. Never overwrites existing data; the title is left alone.
-    // Overrides that filled these (extension importer) suppress the lookup.
-    if (!identity || !artist || !album || !artS3Key) {
-      enqueueRecognition({ trackId, s3Key, ext: audioExt });
+    // Fill MISSING metadata/art in the background. Acoustic fingerprinting is
+    // reserved for missing tags; well-tagged tracks use the fast batched
+    // ListenBrainz mapper only if they later become recommendation seeds.
+    if (!artist || !album || !artS3Key) {
+      enqueueRecognition({
+        trackId,
+        s3Key,
+        ext: audioExt,
+        identify: !identity && (!artist || !album),
+      });
     }
     return { status: "created", track };
   } catch (err) {

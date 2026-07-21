@@ -85,7 +85,7 @@ export default function SuggestedImportsSection({
 
   const emptyMessage =
     pool.blockedReason === "no_key"
-      ? "AcoustID identification is not configured yet."
+      ? "ListenBrainz identity lookup is not configured yet."
       : pool.blockedReason === "no_seeds"
         ? "Listen to or add a few identifiable tracks to build your suggestions."
         : "Finding and importing your first suggestions…";

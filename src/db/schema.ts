@@ -244,10 +244,10 @@ export const tracks = pgTable(
   ]
 );
 
-// Durable AcoustID/MusicBrainz identity. Recognition used to consume these IDs
-// transiently for metadata/art; Suggested Imports needs them as stable seeds
-// and dedupe keys. Failed/unmatched rows carry retry state without repeatedly
-// re-downloading and fingerprinting the same audio on every refill.
+// Durable MusicBrainz identity. Suggested Imports normally resolves these in a
+// fast ListenBrainz tag batch; AcoustID is the missing-tag/no-match fallback.
+// Failed/unmatched rows carry retry state so neither path is repeated on every
+// refill.
 export const trackIdentities = pgTable(
   "track_identities",
   {

@@ -20,7 +20,8 @@ import type {
   StatsRange,
 } from "@/lib/types";
 
-const TOP_LIMIT = 10;
+const TOP_TRACK_LIMIT = 20;
+const TOP_GROUP_LIMIT = 10;
 
 /** Rejecting invalid zones before SQL avoids turning a bad query into a 500. */
 export function isValidTimeZone(value: string): boolean {
@@ -199,7 +200,7 @@ export async function getUserStats(
       .where(and(libraryPeriod, accessible))
       .groupBy(listens.trackId)
       .orderBy(desc(sql`count(*)`), desc(sql`coalesce(sum(${contributedSeconds}), 0)`))
-      .limit(TOP_LIMIT),
+      .limit(TOP_TRACK_LIMIT),
     db
       .select({
         name: tracks.artist,
@@ -211,7 +212,7 @@ export async function getUserStats(
       .where(and(libraryPeriod, accessible))
       .groupBy(tracks.artist)
       .orderBy(desc(sql`count(*)`), asc(tracks.artist))
-      .limit(TOP_LIMIT),
+      .limit(TOP_GROUP_LIMIT),
     db
       .select({
         name: tracks.album,
@@ -223,7 +224,7 @@ export async function getUserStats(
       .where(and(libraryPeriod, accessible))
       .groupBy(tracks.album)
       .orderBy(desc(sql`count(*)`), asc(tracks.album))
-      .limit(TOP_LIMIT),
+      .limit(TOP_GROUP_LIMIT),
     friendIds.length
       ? db
           .select({
@@ -237,7 +238,7 @@ export async function getUserStats(
           .where(and(libraryPeriod, inArray(tracks.ownerId, friendIds)))
           .groupBy(users.id)
           .orderBy(desc(sql`count(*)`), asc(users.name))
-          .limit(TOP_LIMIT)
+          .limit(TOP_GROUP_LIMIT)
       : Promise.resolve([]),
     friendIds.length
       ? db
@@ -260,7 +261,7 @@ export async function getUserStats(
           )
           .groupBy(users.id)
           .orderBy(desc(sql`count(*)`), asc(users.name))
-          .limit(TOP_LIMIT)
+          .limit(TOP_GROUP_LIMIT)
       : Promise.resolve([]),
   ]);
 

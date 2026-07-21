@@ -15,13 +15,12 @@ import {
   THUMBNAIL_EXT,
 } from "@/lib/thumbnail";
 
-// Background queue that fills MISSING artist/album/cover-art for a track via
-// acoustic fingerprinting (lib/recognize.ts) - AcoustID/Chromaprint + Cover Art
-// Archive, with the iTunes lookup as the art fallback. Enqueued from the upload
-// route after the row exists, exactly like the CLAP embedding queue: a tiny
-// {trackId,s3Key,ext} job, bytes re-fetched from S3 when the worker runs (so an
-// upload burst can't pile big buffers in the queue), best-effort - any failure
-// just leaves the gaps for the backfill script.
+// Background queue that fills MISSING artist/album/cover-art for a track.
+// AcoustID/Chromaprint is reserved for jobs that explicitly need identity;
+// tagged art-only jobs use the iTunes fallback without fetching audio. Enqueued
+// after the row exists, exactly like the CLAP embedding queue: only tiny job
+// metadata is retained, and audio bytes are fetched from S3 only if fpcalc is
+// actually needed. Best-effort - any failure leaves the gaps for the backfill.
 //
 // It NEVER overwrites existing data: it re-reads the row and every write is a
 // conditional `WHERE <col> IS NULL` UPDATE, so a value set between enqueue and
@@ -34,7 +33,15 @@ import {
 // stays under all of them with zero cross-worker coordination, and recognition
 // isn't latency-sensitive (it backfills metadata seconds after the upload).
 
-type Job = { trackId: string; s3Key: string; ext: string };
+type Job = {
+  trackId: string;
+  s3Key: string;
+  ext: string;
+  /** Fingerprint only when tags could not provide a durable identity. */
+  identify?: boolean;
+  /** A textual lookup miss may bypass its newly-written retry window once. */
+  forceIdentity?: boolean;
+};
 
 const MAX_WORKERS = 1;
 const queue: Job[] = [];
@@ -94,9 +101,11 @@ async function processJob(job: Job): Promise<void> {
     const needAlbum = !row.album;
     const needArt = !row.artS3Key;
     const needIdentity =
-      !row.identityStatus ||
-      (row.identityStatus !== "recognized" &&
-        (!row.retryAfter || row.retryAfter.getTime() <= Date.now()));
+      Boolean(job.identify) &&
+      (Boolean(job.forceIdentity) ||
+        !row.identityStatus ||
+        (row.identityStatus !== "recognized" &&
+          (!row.retryAfter || row.retryAfter.getTime() <= Date.now())));
     if (!needArtist && !needAlbum && !needArt && !needIdentity) return;
 
     // Fingerprint + AcoustID only when a key is configured. Without one we skip

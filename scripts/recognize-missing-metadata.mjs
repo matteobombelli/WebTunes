@@ -1,5 +1,7 @@
-// Backfill MISSING artist/album/cover-art for existing tracks via acoustic
-// fingerprinting - the offline mirror of the live recognition worker
+// Backfill MISSING artist/album/cover-art for existing tracks. Acoustic
+// fingerprinting is used only when artist/album tags are missing; art-only
+// rows go straight to the tag-based iTunes fallback. This is the offline mirror
+// of the live recognition worker
 // (src/lib/recognize-queue.ts + src/lib/recognize.ts): fpcalc/Chromaprint
 // fingerprint -> AcoustID -> artist/album + release-group MBID -> Cover Art
 // Archive front cover, with the iTunes lookup as the art fallback. Only EMPTY
@@ -394,7 +396,6 @@ const { rows } = await pool.query(
      from tracks t
      left join track_identities ti on ti.track_id = t.id
     where t.artist is null or t.album is null or t.art_s3_key is null
-       or ti.track_id is null
     order by t.created_at` + limitSql
 );
 
@@ -403,7 +404,7 @@ console.log(
     `${ACOUSTID_KEY ? "AcoustID enabled" : "no ACOUSTID_API_KEY (art-fallback only)"}`
 );
 if (!APPLY) console.log(`(dry-run: no S3/DB writes; proposals -> ${REVIEW_LOG})`);
-console.log(`${rows.length} track(s) with missing metadata/art/identity.`);
+console.log(`${rows.length} track(s) with missing metadata/art.`);
 
 let filledArtist = 0,
   filledAlbum = 0,
@@ -421,7 +422,7 @@ for (const row of rows) {
     const needIdentity = !row.identity_track_id;
 
     let rec = null;
-    if (ACOUSTID_KEY) {
+    if (ACOUSTID_KEY && (needArtist || needAlbum)) {
       const controller = new AbortController();
       const buffer = await withTimeout(
         downloadObject(row.s3_key, controller.signal),

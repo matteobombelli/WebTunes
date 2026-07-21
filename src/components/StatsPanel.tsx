@@ -176,7 +176,7 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
         {stats.topTracks.map((entry, index) => (
           <li
             key={entry.track.id}
-            className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 border-t border-border-subtle px-3 py-2 ${
+            className={`${index >= 10 ? "hidden lg:grid" : "grid"} grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 border-t border-border-subtle px-3 py-2 ${
               current?.id === entry.track.id ? "bg-accent/10" : "hover:bg-surface-2/50"
             }`}
           >

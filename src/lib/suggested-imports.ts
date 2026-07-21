@@ -11,7 +11,13 @@ import {
   type SuggestedImport,
 } from "@/db/schema";
 import { ingestTrack, MAX_FILE_BYTES } from "@/lib/ingest";
-import { candidatesForArtist, type SuggestedCandidate } from "@/lib/import/listenbrainz";
+import {
+  candidatesForArtist,
+  hasListenBrainzToken,
+  lookupTaggedRecordingIdentities,
+  type SuggestedCandidate,
+  type TaggedRecordingIdentity,
+} from "@/lib/import/listenbrainz";
 import { DEFAULT_STRICTNESS, findMatch, MIN_SOURCE_KBPS } from "@/lib/import/match";
 import type { SourceTrack } from "@/lib/import/sources";
 import { downloadAudio, probeVideo } from "@/lib/import/ytdlp";
@@ -37,6 +43,9 @@ const RETRY_FAILED_MS = 24 * 60 * 60 * 1000;
 const LEASE_MS = 30 * 60 * 1000;
 const IDLE_MS = 60_000;
 const MAX_SEED_ARTISTS = 5;
+const IDENTITY_LOOKUP_BATCH = 25;
+const ACOUSTID_FALLBACK_BATCH = 2;
+const IDENTITY_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PER_ARTIST = 2;
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
 const MAX_RATE_LIMIT_RETRIES = 3;
@@ -88,7 +97,7 @@ export async function getSuggestedImportPool(
       )
       .limit(1);
     if (!identity) {
-      if (!process.env.ACOUSTID_API_KEY) {
+      if (!hasListenBrainzToken()) {
         blockedReason = "no_key";
       } else {
         const [owned] = await db
@@ -294,21 +303,84 @@ async function ensureCandidateQueue(userId: string): Promise<void> {
         : []
     )
   );
-  // Historical/cold-start seeds need not wait for an operator-run backfill.
-  // Feed a bounded batch through the existing serial recognition queue; failed
-  // identities are retried only after their cached retry time.
-  for (const row of identities
-    .filter(
-      (identity) =>
-        identity.status !== "recognized" &&
-        (!identity.retryAfter || identity.retryAfter.getTime() <= Date.now())
-    )
-    .slice(0, 10)) {
-    enqueueRecognition({
-      trackId: row.sourceTrackId,
-      s3Key: row.s3Key,
-      ext: row.s3Key.split(".").pop()?.toLowerCase() ?? "bin",
-    });
+  const seedById = new Map(seeds.map((seed) => [seed.id, seed]));
+  const identityDue = identities.filter(
+    (identity) =>
+      identity.status !== "recognized" &&
+      (!identity.retryAfter || identity.retryAfter.getTime() <= Date.now())
+  );
+  const textualRows = identityDue
+    .filter((identity) => Boolean(seedById.get(identity.sourceTrackId)?.artist))
+    .slice(0, IDENTITY_LOOKUP_BATCH);
+  const textualMisses = new Set<string>();
+
+  if (textualRows.length && hasListenBrainzToken()) {
+    try {
+      const lookup = await lookupTaggedRecordingIdentities(
+        textualRows.map((identity) => {
+          const seed = seedById.get(identity.sourceTrackId)!;
+          return {
+            trackId: identity.sourceTrackId,
+            title: seed.title,
+            artist: seed.artist!,
+            album: seed.album,
+          };
+        })
+      );
+      await persistTextualIdentities(
+        textualRows.map((row) => row.sourceTrackId),
+        lookup
+      );
+      lookup.forEach((identity, index) => {
+        if (!identity) textualMisses.add(textualRows[index].sourceTrackId);
+      });
+
+      // Include mappings found in this pass immediately; users need not wait
+      // for another minute-long worker cycle before candidate discovery.
+      for (const identity of lookup) {
+        if (!identity) continue;
+        identityByTrack.set(identity.trackId, {
+          trackId: identity.trackId,
+          artistMbids: identity.artistMbids,
+          status: "recognized",
+          retryAfter: null,
+          sourceTrackId: identity.trackId,
+          s3Key:
+            identities.find((row) => row.sourceTrackId === identity.trackId)
+              ?.s3Key ?? "",
+        });
+      }
+    } catch (error) {
+      // A timeout/auth failure is not an identity miss. Leave the rows due so
+      // the next worker pass can retry instead of needlessly fingerprinting.
+      log.warn(
+        "suggested-imports",
+        "ListenBrainz tag lookup failed",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  // AcoustID is the slow fallback, never the normal seed path: use it only for
+  // absent artist tags or a completed textual lookup that found no safe match.
+  if (process.env.ACOUSTID_API_KEY) {
+    const fallbackIds = new Set([
+      ...identityDue
+        .filter((identity) => !seedById.get(identity.sourceTrackId)?.artist)
+        .map((identity) => identity.sourceTrackId),
+      ...textualMisses,
+    ]);
+    for (const row of identities
+      .filter((identity) => fallbackIds.has(identity.sourceTrackId))
+      .slice(0, ACOUSTID_FALLBACK_BATCH)) {
+      enqueueRecognition({
+        trackId: row.sourceTrackId,
+        s3Key: row.s3Key,
+        ext: row.s3Key.split(".").pop()?.toLowerCase() ?? "bin",
+        identify: true,
+        forceIdentity: textualMisses.has(row.sourceTrackId),
+      });
+    }
   }
   const seedArtists: Array<{ artistMbid: string; artistName: string; weight: number }> = [];
   const seenArtists = new Set<string>();
@@ -429,6 +501,59 @@ async function ensureCandidateQueue(userId: string): Promise<void> {
         await tx.insert(suggestedImports).values(values).onConflictDoNothing();
       }
       remaining--;
+    }
+  });
+}
+
+async function persistTextualIdentities(
+  trackIds: string[],
+  identities: Array<TaggedRecordingIdentity | null>
+): Promise<void> {
+  const attemptedAt = new Date();
+  const retryAfter = new Date(attemptedAt.getTime() + IDENTITY_RETRY_MS);
+  await db.transaction(async (tx) => {
+    for (let index = 0; index < trackIds.length; index++) {
+      const trackId = trackIds[index];
+      const identity = identities[index];
+      const values = identity
+        ? {
+            trackId,
+            status: "recognized" as const,
+            acoustidId: null,
+            recordingMbid: identity.recordingMbid,
+            artistMbids: identity.artistMbids,
+            releaseGroupMbid: identity.releaseGroupMbid,
+            attemptedAt,
+            retryAfter: null,
+          }
+        : {
+            trackId,
+            status: "unmatched" as const,
+            acoustidId: null,
+            recordingMbid: null,
+            artistMbids: [],
+            releaseGroupMbid: null,
+            attemptedAt,
+            retryAfter,
+          };
+      await tx.insert(trackIdentities).values(values).onConflictDoNothing();
+      await tx
+        .update(trackIdentities)
+        .set({
+          status: values.status,
+          acoustidId: values.acoustidId,
+          recordingMbid: values.recordingMbid,
+          artistMbids: values.artistMbids,
+          releaseGroupMbid: values.releaseGroupMbid,
+          attemptedAt: values.attemptedAt,
+          retryAfter: values.retryAfter,
+        })
+        .where(
+          and(
+            eq(trackIdentities.trackId, trackId),
+            sql`${trackIdentities.status} <> 'recognized'`
+          )
+        );
     }
   });
 }

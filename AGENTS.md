@@ -247,12 +247,13 @@ setup, and architecture rationale.
   `image-upload.ts` allowlist (keep in sync) and rate-limits iTunes.
 - Recognition worker (fill MISSING metadata): the upload route enqueues to
   `lib/recognize-queue.ts` (after the row exists, like the CLAP queue) whenever a
-  track lands with a missing artist, album, **or** cover. The worker re-fetches
-  the stored bytes from S3, fingerprints them with **fpcalc/Chromaprint (a runtime
-  dependency on PATH like ffmpeg**, through the shared `ffmpeg-gate`), looks the
-  fingerprint up against **AcoustID** (`meta=recordings+releasegroups`, so artist/
-  album/release-group MBID come back inline - no MusicBrainz call), and resolves
-  art from **Cover Art Archive** (by MBID) → iTunes `findCoverArt` fallback. It
+  track lands with a missing artist, album, **or** cover. It fingerprints with
+  **fpcalc/Chromaprint** only when artist/album tags are missing (a runtime
+  dependency on PATH like ffmpeg, through the shared `ffmpeg-gate`) and looks
+  the fingerprint up against **AcoustID** (`meta=recordings+releasegroups`, so
+  artist/album/release-group MBID come back inline - no MusicBrainz call).
+  Art-only jobs never download/fingerprint audio: they use iTunes by existing
+  tags, or Cover Art Archive when an identity is already present. It
   fills **only empty** fields and the `title` is never touched: it re-reads the
   row and every write is a conditional `... WHERE col IS NULL` UPDATE, so the
   no-overwrite rule is atomic even against a concurrent fill. Recognized art
@@ -271,7 +272,15 @@ setup, and architecture rationale.
   compact fingerprint leaves the box, never the audio.
   `scripts/recognize-missing-metadata.mjs` backfills the existing library
   (dry-run default → `recognize-missing-review.jsonl`; `--apply` → revert log;
-  mirrors the lib + allowlist + thumbnail logic, keep in sync).
+  mirrors the lib + allowlist + thumbnail logic, keep in sync); missing identity
+  alone is deliberately not selected.
+- Suggested Import seed identity uses authenticated, batched ListenBrainz
+  `POST /1/metadata/lookup/` against existing artist/title tags (25 seeds per
+  refill pass), validates the returned names/UUIDs, and persists recording +
+  artist MBIDs in `track_identities`. `LISTENBRAINZ_TOKEN` is a server token used
+  only for that mapping call; no listen history is read or submitted. AcoustID
+  is a bounded fallback (at most 2 queued per pass) only for missing tags or a
+  completed textual mapping miss, never the normal Top-100 path.
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`
