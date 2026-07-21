@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { db, isUniqueViolation } from "@/db";
-import { tracks, type Track } from "@/db/schema";
+import {
+  suggestedImports,
+  trackIdentities,
+  tracks,
+  type Track,
+} from "@/db/schema";
 import { fetchCoverArt } from "@/lib/art-fetch";
 import { enqueueEmbedding } from "@/lib/clap-queue";
 import { imageKindFromMime } from "@/lib/image-upload";
@@ -73,6 +78,13 @@ export type IngestOverrides = {
   artCropSquare?: boolean;
 };
 
+export type KnownTrackIdentity = {
+  acoustidId?: string | null;
+  recordingMbid: string;
+  artistMbids?: string[];
+  releaseGroupMbid?: string | null;
+};
+
 /**
  * The whole track-ingest pipeline, shared by the session-auth upload route
  * (POST /api/tracks) and the extension-import route: dedupe on content hash,
@@ -89,21 +101,53 @@ export async function ingestTrack({
   filename,
   mimeType,
   overrides,
+  suggestedImportId,
+  identity,
 }: {
   userId: string;
   buffer: Buffer;
   filename: string;
   mimeType: string;
   overrides?: IngestOverrides;
+  /** Internal-only staging link used by Suggested Imports. */
+  suggestedImportId?: string;
+  /** Canonical identity already supplied by ListenBrainz/MusicBrainz. */
+  identity?: KnownTrackIdentity;
 }): Promise<IngestResult> {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
 
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   const [duplicate] = await db
-    .select({ title: tracks.title })
+    .select()
     .from(tracks)
     .where(and(eq(tracks.ownerId, userId), eq(tracks.contentHash, contentHash)));
   if (duplicate) {
+    // An explicit upload/import of bytes that are currently only a staged
+    // suggestion is a clear keep action. Promote that existing row instead of
+    // reporting a duplicate the user cannot find in their library.
+    if (duplicate.suggestedImportId && !suggestedImportId) {
+      const suggestionId = duplicate.suggestedImportId;
+      const promoted = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(tracks)
+          .set({ suggestedImportId: null, isPrivate: false })
+          .where(
+            and(
+              eq(tracks.id, duplicate.id),
+              eq(tracks.suggestedImportId, suggestionId)
+            )
+          )
+          .returning();
+        if (row) {
+          await tx
+            .update(suggestedImports)
+            .set({ status: "accepted", progress: 100, updatedAt: new Date() })
+            .where(eq(suggestedImports.id, suggestionId));
+        }
+        return row;
+      });
+      if (promoted) return { status: "created", track: promoted };
+    }
     return {
       status: "duplicate",
       message: `Already in your library as "${duplicate.title}"`,
@@ -218,26 +262,41 @@ export async function ingestTrack({
   if (!artS3Key) artThumbS3Key = null;
 
   try {
-    const [track] = await db
-      .insert(tracks)
-      .values({
-        id: trackId,
-        ownerId: userId,
-        title,
-        artist,
-        album,
-        durationSec,
-        loudnessLufs,
-        s3Key,
-        artS3Key,
-        artThumbS3Key,
-        mimeType: storedType,
-        fileSize: audioBody.length,
-        contentHash,
-        lyrics: meta.lyrics,
-        lyricsSource: meta.lyricsSource,
-      })
-      .returning();
+    const track = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(tracks)
+        .values({
+          id: trackId,
+          ownerId: userId,
+          suggestedImportId,
+          title,
+          artist,
+          album,
+          durationSec,
+          loudnessLufs,
+          s3Key,
+          artS3Key,
+          artThumbS3Key,
+          mimeType: storedType,
+          fileSize: audioBody.length,
+          contentHash,
+          lyrics: meta.lyrics,
+          lyricsSource: meta.lyricsSource,
+          isPrivate: suggestedImportId ? true : false,
+        })
+        .returning();
+      if (identity) {
+        await tx.insert(trackIdentities).values({
+          trackId,
+          status: "recognized",
+          acoustidId: identity.acoustidId ?? null,
+          recordingMbid: identity.recordingMbid,
+          artistMbids: identity.artistMbids ?? [],
+          releaseGroupMbid: identity.releaseGroupMbid ?? null,
+        });
+      }
+      return created;
+    });
     // Compute the CLAP embedding in the background (the slowest upload step),
     // now that the row + S3 object exist. Best-effort: a missing row just means
     // this track won't seed/appear in "play similar" until the worker (or the
@@ -247,7 +306,7 @@ export async function ingestTrack({
     // fingerprinting (AcoustID) + Cover Art Archive, with the iTunes art lookup
     // as the fallback. Never overwrites existing data; the title is left alone.
     // Overrides that filled these (extension importer) suppress the lookup.
-    if (!artist || !album || !artS3Key) {
+    if (!identity || !artist || !album || !artS3Key) {
       enqueueRecognition({ trackId, s3Key, ext: audioExt });
     }
     return { status: "created", track };

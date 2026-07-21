@@ -379,59 +379,63 @@ function TrackActions({
           <QueueIcon size={16} className="shrink-0 text-fg-muted" />
         </button>
       </div>
-      <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
-      <DownloadButton track={track} label="Download" />
-      <button
-        onClick={() => {
-          const s = useExclusionsStore.getState();
-          if (excluded) s.include(track.id);
-          else s.exclude(track);
-          onClose();
-        }}
-        className={MENU_ROW}
-      >
-        <span>
-          {excluded ? "Include in Play Similar" : "Exclude from Play Similar"}
-        </span>
-        <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
-      </button>
-      {/* Share any accessible track - your own OR a friend's (the server checks
-          canAccessTrack). Click copies the public link straight to the
-          clipboard (no dialog). */}
-      <button
-        onClick={() => {
-          copyShareLink(track.id);
-          onClose();
-        }}
-        className={MENU_ROW}
-      >
-        <span>Share</span>
-        <ShareIcon size={16} className="shrink-0 text-fg-muted" />
-      </button>
-      {canEdit && !track.ownerName && (
-        <button
-          onClick={() => {
-            onEdit(track);
-            onClose();
-          }}
-          aria-label="Edit track"
-          className={MENU_ROW}
-        >
-          <span>Edit details</span>
-          <PencilIcon size={16} className="shrink-0 text-fg-muted" />
-        </button>
-      )}
-      {(onRemove || (canDelete && !track.ownerName)) && (
-        <button
-          onClick={() => {
-            onDelete(track);
-            onClose();
-          }}
-          className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
-        >
-          <span>{removeLabel ?? "Delete"}</span>
-          <TrashIcon size={16} />
-        </button>
+      {!track.isSuggested && (
+        <>
+          <AddToPlaylistMenu trackIds={[track.id]} label="Add to playlist" />
+          <DownloadButton track={track} label="Download" />
+          <button
+            onClick={() => {
+              const s = useExclusionsStore.getState();
+              if (excluded) s.include(track.id);
+              else s.exclude(track);
+              onClose();
+            }}
+            className={MENU_ROW}
+          >
+            <span>
+              {excluded ? "Include in Play Similar" : "Exclude from Play Similar"}
+            </span>
+            <SimilarIcon size={16} className="shrink-0 text-fg-muted" />
+          </button>
+          {/* Share any accessible track - your own OR a friend's (the server checks
+              canAccessTrack). Click copies the public link straight to the
+              clipboard (no dialog). */}
+          <button
+            onClick={() => {
+              copyShareLink(track.id);
+              onClose();
+            }}
+            className={MENU_ROW}
+          >
+            <span>Share</span>
+            <ShareIcon size={16} className="shrink-0 text-fg-muted" />
+          </button>
+          {canEdit && !track.ownerName && (
+            <button
+              onClick={() => {
+                onEdit(track);
+                onClose();
+              }}
+              aria-label="Edit track"
+              className={MENU_ROW}
+            >
+              <span>Edit details</span>
+              <PencilIcon size={16} className="shrink-0 text-fg-muted" />
+            </button>
+          )}
+          {(onRemove || (canDelete && !track.ownerName)) && (
+            <button
+              onClick={() => {
+                onDelete(track);
+                onClose();
+              }}
+              className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
+            >
+              <span>{removeLabel ?? "Delete"}</span>
+              <TrashIcon size={16} />
+            </button>
+          )}
+        </>
       )}
     </div>
   );

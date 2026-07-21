@@ -5,12 +5,14 @@ import { CompassIcon, StatsIcon, UsersIcon } from "@/components/icons";
 import DiscoverSection from "@/components/DiscoverSection";
 import FriendsPanel from "@/components/FriendsPanel";
 import StatsPanel from "@/components/StatsPanel";
+import SuggestedImportsSection from "@/components/SuggestedImportsSection";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type {
   FriendDTO,
   FriendRequestDTO,
   FriendSuggestionDTO,
   TrackDTO,
+  SuggestedImportPoolDTO,
 } from "@/lib/types";
 
 type Sections = {
@@ -32,6 +34,7 @@ export default function DiscoverBrowser({
   suggestions,
   ownFriendListens,
   canInvite,
+  suggestedImports,
 }: {
   sections: Sections;
   friends: FriendDTO[];
@@ -39,6 +42,7 @@ export default function DiscoverBrowser({
   suggestions: FriendSuggestionDTO[];
   ownFriendListens: number;
   canInvite: boolean;
+  suggestedImports: SuggestedImportPoolDTO;
 }) {
   const [tab, setTab] = useState<"discover" | "friends" | "stats">("discover");
   // Stats stays unmounted until first opened so Discover's initial render does
@@ -84,6 +88,7 @@ export default function DiscoverBrowser({
 
       {tab === "discover" && (
         <div className="flex flex-col gap-4 sm:gap-5">
+          <SuggestedImportsSection initialPool={suggestedImports} />
           <DiscoverSection title="Random" radioSeeds={sections.random} />
           <DiscoverSection
             title="Recommended"

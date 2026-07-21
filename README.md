@@ -65,6 +65,12 @@ registration minimum.
   server never proxies audio bytes.
 - **Uploads** go through `POST /api/tracks` (multipart) so the server can parse
   tags with `music-metadata` before pushing to S3; lyrics fall back to LRCLIB.
+- **Suggested Imports** identify Top-100 (or recent-library) seeds through
+  AcoustID/MusicBrainz, discover a balanced candidate set through ListenBrainz,
+  and keep 20 private, playable imports staged per user. Accept promotes a
+  track into the library; reject deletes its objects and starts a 90-day
+  cooldown. Suggested and manual downloads share one advisory-locked yt-dlp
+  lane, with manual imports prioritized.
 - **Sharing**: an accepted friendship grants mutual read access to whole
   libraries (`lib/friends.ts: canAccessTrack` is the single access check used by
   track, stream, playlist-add, and search routes).
@@ -79,3 +85,11 @@ registration minimum.
 See `.env.example`. Dev values work out of the box with docker-compose.
 Production values (real S3 bucket, prod `AUTH_URL`) belong in `.env.production`,
 which is gitignored on purpose: it holds credentials.
+
+After applying the Suggested Imports migration, populate identities for the
+existing library with a dry-run review followed by apply:
+
+```bash
+node scripts/recognize-missing-metadata.mjs
+node scripts/recognize-missing-metadata.mjs --apply
+```

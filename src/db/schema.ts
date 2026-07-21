@@ -101,6 +101,56 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   usedAt: timestamp("used_at", { mode: "date" }),
 });
 
+// Persistent recommendation/import state. A row survives acceptance/rejection
+// so canonical recording MBIDs can suppress repeats (rejections cool down after
+// 90 days). Downloaded audio is linked from tracks.suggested_import_id while it
+// is staged; accepted tracks clear that link and become normal library rows.
+export const suggestedImports = pgTable(
+  "suggested_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recordingMbid: uuid("recording_mbid").notNull(),
+    artistMbid: uuid("artist_mbid"),
+    releaseGroupMbid: uuid("release_group_mbid"),
+    title: text("title").notNull(),
+    artist: text("artist").notNull(),
+    album: text("album"),
+    durationSec: integer("duration_sec"),
+    artUrl: text("art_url"),
+    normalizedTitle: text("normalized_title").notNull(),
+    normalizedArtist: text("normalized_artist").notNull(),
+    reason: text("reason"),
+    status: text("status", {
+      enum: ["queued", "importing", "ready", "accepted", "rejected", "failed"],
+    })
+      .notNull()
+      .default("queued"),
+    progress: integer("progress").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    error: text("error"),
+    rejectedUntil: timestamp("rejected_until", { mode: "date" }),
+    leaseExpiresAt: timestamp("lease_expires_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (s) => [
+    uniqueIndex("suggested_imports_user_recording_idx").on(
+      s.userId,
+      s.recordingMbid
+    ),
+    index("suggested_imports_user_status_idx").on(s.userId, s.status),
+    index("suggested_imports_status_lease_idx").on(s.status, s.leaseExpiresAt),
+    check(
+      "suggested_imports_progress_range",
+      sql`${s.progress} between 0 and 100`
+    ),
+  ]
+);
+export type SuggestedImport = typeof suggestedImports.$inferSelect;
+
 // Short-lived pairing codes for connecting the WebTunes Importer desktop app
 // (the "extension" naming predates it). The signed-in user mints a code in
 // Settings, types it into the importer, and the importer redeems it for a
@@ -148,6 +198,12 @@ export const tracks = pgTable(
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // Non-null only while this audio is a private Suggested Imports preview.
+    // Every normal library query filters these rows out; accepting clears the
+    // link, while rejecting deletes the track before its S3 objects.
+    suggestedImportId: uuid("suggested_import_id")
+      .unique()
+      .references(() => suggestedImports.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     artist: text("artist"),
     album: text("album"),
@@ -185,6 +241,36 @@ export const tracks = pgTable(
     index("tracks_owner_id_idx").on(t.ownerId),
     // Same file can't enter the same library twice (legacy NULL hashes exempt).
     uniqueIndex("tracks_owner_content_hash_idx").on(t.ownerId, t.contentHash),
+  ]
+);
+
+// Durable AcoustID/MusicBrainz identity. Recognition used to consume these IDs
+// transiently for metadata/art; Suggested Imports needs them as stable seeds
+// and dedupe keys. Failed/unmatched rows carry retry state without repeatedly
+// re-downloading and fingerprinting the same audio on every refill.
+export const trackIdentities = pgTable(
+  "track_identities",
+  {
+    trackId: uuid("track_id")
+      .primaryKey()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["recognized", "unmatched", "failed"] })
+      .notNull(),
+    acoustidId: text("acoustid_id"),
+    recordingMbid: uuid("recording_mbid"),
+    artistMbids: uuid("artist_mbids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    releaseGroupMbid: uuid("release_group_mbid"),
+    attemptedAt: timestamp("attempted_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    retryAfter: timestamp("retry_after", { mode: "date" }),
+  },
+  (i) => [
+    index("track_identities_recording_idx").on(i.recordingMbid),
+    index("track_identities_retry_idx").on(i.status, i.retryAfter),
   ]
 );
 

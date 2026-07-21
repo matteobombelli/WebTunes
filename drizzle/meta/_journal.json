@@ -169,6 +169,13 @@
       "when": 1784590628606,
       "tag": "0023_round_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784594359252,
+      "tag": "0024_mixed_night_nurse",
+      "breakpoints": true
     }
   ]
 }

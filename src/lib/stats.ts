@@ -13,7 +13,7 @@ import {
 import { db } from "@/db";
 import { listens, tracks, users } from "@/db/schema";
 import { friendIdsOf } from "@/lib/friends";
-import { toTrackDTO, trackDtoColumns } from "@/lib/tracks";
+import { isLibraryTrack, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type {
   StatsDailyActivityDTO,
   StatsDTO,
@@ -117,6 +117,7 @@ export async function getUserStats(
       ? and(inArray(tracks.ownerId, friendIds), eq(tracks.isPrivate, false))
       : sql`false`
   );
+  const libraryPeriod = and(inPeriod, isLibraryTrack());
   // `played_at` is stored as a UTC timestamp without a zone. Convert it to the
   const localPlayedAt = sql`(${listens.playedAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}`;
   const dayExpression = sql<string>`to_char(${localPlayedAt}, 'YYYY-MM-DD')`;
@@ -154,7 +155,7 @@ export async function getUserStats(
       })
       .from(listens)
       .innerJoin(tracks, eq(tracks.id, listens.trackId))
-      .where(inPeriod),
+      .where(libraryPeriod),
     db
       .select({
         date: dayExpression,
@@ -163,7 +164,7 @@ export async function getUserStats(
       })
       .from(listens)
       .innerJoin(tracks, eq(tracks.id, listens.trackId))
-      .where(inPeriod)
+      .where(libraryPeriod)
       // Group/order by the selected column ordinal so the parameterized time
       // zone is emitted only once; separate $N params are not SQL-equivalent.
       .groupBy(sql`1`)
@@ -174,7 +175,8 @@ export async function getUserStats(
         listens: sql<number>`count(*)::int`,
       })
       .from(listens)
-      .where(inPeriod)
+      .innerJoin(tracks, eq(tracks.id, listens.trackId))
+      .where(libraryPeriod)
       .groupBy(sql`1`)
       .orderBy(asc(sql`1`)),
     db
@@ -194,7 +196,7 @@ export async function getUserStats(
       })
       .from(listens)
       .innerJoin(tracks, eq(tracks.id, listens.trackId))
-      .where(and(inPeriod, accessible))
+      .where(and(libraryPeriod, accessible))
       .groupBy(listens.trackId)
       .orderBy(desc(sql`count(*)`), desc(sql`coalesce(sum(${contributedSeconds}), 0)`))
       .limit(TOP_LIMIT),
@@ -206,7 +208,7 @@ export async function getUserStats(
       })
       .from(listens)
       .innerJoin(tracks, eq(tracks.id, listens.trackId))
-      .where(and(inPeriod, accessible))
+      .where(and(libraryPeriod, accessible))
       .groupBy(tracks.artist)
       .orderBy(desc(sql`count(*)`), asc(tracks.artist))
       .limit(TOP_LIMIT),
@@ -218,7 +220,7 @@ export async function getUserStats(
       })
       .from(listens)
       .innerJoin(tracks, eq(tracks.id, listens.trackId))
-      .where(and(inPeriod, accessible))
+      .where(and(libraryPeriod, accessible))
       .groupBy(tracks.album)
       .orderBy(desc(sql`count(*)`), asc(tracks.album))
       .limit(TOP_LIMIT),
@@ -232,7 +234,7 @@ export async function getUserStats(
           .from(listens)
           .innerJoin(tracks, eq(tracks.id, listens.trackId))
           .innerJoin(users, eq(users.id, tracks.ownerId))
-          .where(and(inPeriod, inArray(tracks.ownerId, friendIds)))
+          .where(and(libraryPeriod, inArray(tracks.ownerId, friendIds)))
           .groupBy(users.id)
           .orderBy(desc(sql`count(*)`), asc(users.name))
           .limit(TOP_LIMIT)
@@ -250,6 +252,7 @@ export async function getUserStats(
           .where(
             and(
               inArray(listens.userId, friendIds),
+              isLibraryTrack(),
               gte(listens.playedAt, start),
               lte(listens.playedAt, end),
               eq(tracks.ownerId, userId)
@@ -270,7 +273,7 @@ export async function getUserStats(
           .select({ track: trackDtoColumns, ownerName: users.name })
           .from(tracks)
           .innerJoin(users, eq(users.id, tracks.ownerId))
-          .where(inArray(tracks.id, rankedIds))
+          .where(and(isLibraryTrack(), inArray(tracks.id, rankedIds)))
       : Promise.resolve([]),
     artistNames.length
       ? db
@@ -283,6 +286,7 @@ export async function getUserStats(
           .innerJoin(users, eq(users.id, tracks.ownerId))
           .where(
             and(
+              isLibraryTrack(),
               accessible,
               isNotNull(tracks.artS3Key),
               inArray(tracks.artist, artistNames)
@@ -301,6 +305,7 @@ export async function getUserStats(
           .innerJoin(users, eq(users.id, tracks.ownerId))
           .where(
             and(
+              isLibraryTrack(),
               accessible,
               isNotNull(tracks.artS3Key),
               inArray(tracks.album, albumNames)

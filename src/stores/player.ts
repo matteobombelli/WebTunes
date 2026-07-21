@@ -117,6 +117,10 @@ type PlayerState = {
   addToQueue: (tracks: TrackDTO[]) => void;
   /** Remove a non-current entry by queue position. */
   removeFromQueue: (index: number) => void;
+  /** Remove every copy of a deleted track, advancing when it was current. */
+  removeTrackEverywhere: (trackId: string) => void;
+  /** Refresh metadata/privacy for every queued copy without changing order. */
+  replaceTrackEverywhere: (track: TrackDTO) => void;
   /** Drop everything after the current track. */
   clearUpcoming: () => void;
   /** Move a queue entry to a new position (drag-to-reorder). */
@@ -344,6 +348,74 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       context: s.context
         ? s.context.filter((it) => it.uid !== removed.uid)
         : null,
+    });
+  },
+
+  removeTrackEverywhere: (trackId) => {
+    const s = get();
+    if (!s.queue.some((item) => item.track.id === trackId)) return;
+    const currentWasRemoved =
+      s.index >= 0 && s.queue[s.index]?.track.id === trackId;
+    const before = s.queue
+      .slice(0, Math.max(0, s.index))
+      .filter((item) => item.track.id !== trackId);
+    const after = s.queue
+      .slice(Math.max(0, s.index + 1))
+      .filter((item) => item.track.id !== trackId);
+    const context = s.context?.filter((item) => item.track.id !== trackId) ?? null;
+    const unshuffledQueue =
+      s.unshuffledQueue?.filter((item) => item.track.id !== trackId) ?? null;
+    if (currentWasRemoved) {
+      if (!after.length) {
+        set({
+          queue: [],
+          index: -1,
+          context: null,
+          unshuffledQueue: null,
+          isPlaying: false,
+          currentTime: 0,
+          duration: 0,
+        });
+      } else {
+        set({
+          queue: [...before, ...after],
+          index: before.length,
+          context,
+          unshuffledQueue,
+          isPlaying: true,
+          currentTime: 0,
+        });
+      }
+      return;
+    }
+    const queue = s.queue.filter((item) => item.track.id !== trackId);
+    const removedBefore = s.queue
+      .slice(0, Math.max(0, s.index))
+      .filter((item) => item.track.id === trackId).length;
+    set({
+      queue,
+      index: s.index - removedBefore,
+      context,
+      unshuffledQueue,
+    });
+  },
+
+  replaceTrackEverywhere: (track) => {
+    const s = get();
+    const replacements = new Map<string, QueueItem>();
+    const replace = (item: QueueItem) => {
+      if (item.track.id !== track.id) return item;
+      let next = replacements.get(item.uid);
+      if (!next) {
+        next = { ...item, track };
+        replacements.set(item.uid, next);
+      }
+      return next;
+    };
+    set({
+      queue: s.queue.map(replace),
+      context: s.context?.map(replace) ?? null,
+      unshuffledQueue: s.unshuffledQueue?.map(replace) ?? null,
     });
   },
 

@@ -39,6 +39,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       id: tracks.id,
       ownerId: tracks.ownerId,
       isPrivate: tracks.isPrivate,
+      suggestedImportId: tracks.suggestedImportId,
     })
     .from(tracks)
     .where(inArray(tracks.id, requestedIds));

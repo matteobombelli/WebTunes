@@ -37,7 +37,11 @@ async function requireShareableTrack(
 ): Promise<boolean> {
   if (!isUuid(id)) return false;
   const [track] = await db
-    .select({ ownerId: tracks.ownerId, isPrivate: tracks.isPrivate })
+    .select({
+      ownerId: tracks.ownerId,
+      isPrivate: tracks.isPrivate,
+      suggestedImportId: tracks.suggestedImportId,
+    })
     .from(tracks)
     .where(eq(tracks.id, id));
   return !!track && (await canAccessTrack(userId, track));

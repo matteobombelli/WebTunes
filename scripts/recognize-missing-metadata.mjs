@@ -273,6 +273,9 @@ async function lookupAcoustId(fp) {
     );
     if (!rec) return null;
     return {
+      acoustidId: best.id,
+      recordingMbid: rec.id,
+      artistMbids: (rec.artists ?? []).map((artist) => artist.id),
       artist: joinArtists(rec.artists),
       ...pickReleaseGroup(rec.releasegroups),
     };
@@ -386,9 +389,13 @@ async function putObject(key, body, contentType) {
 // --- main --------------------------------------------------------------------
 const limitSql = LIMIT ? ` limit ${LIMIT}` : "";
 const { rows } = await pool.query(
-  `select id, owner_id, s3_key, title, artist, album, art_s3_key from tracks
-    where artist is null or album is null or art_s3_key is null
-    order by created_at` + limitSql
+  `select t.id, t.owner_id, t.s3_key, t.title, t.artist, t.album, t.art_s3_key,
+          ti.track_id as identity_track_id
+     from tracks t
+     left join track_identities ti on ti.track_id = t.id
+    where t.artist is null or t.album is null or t.art_s3_key is null
+       or ti.track_id is null
+    order by t.created_at` + limitSql
 );
 
 console.log(
@@ -396,11 +403,12 @@ console.log(
     `${ACOUSTID_KEY ? "AcoustID enabled" : "no ACOUSTID_API_KEY (art-fallback only)"}`
 );
 if (!APPLY) console.log(`(dry-run: no S3/DB writes; proposals -> ${REVIEW_LOG})`);
-console.log(`${rows.length} track(s) with a missing artist/album/art.`);
+console.log(`${rows.length} track(s) with missing metadata/art/identity.`);
 
 let filledArtist = 0,
   filledAlbum = 0,
   filledArt = 0,
+  filledIdentity = 0,
   miss = 0,
   failed = 0,
   processed = 0;
@@ -410,6 +418,7 @@ for (const row of rows) {
     const needArtist = !row.artist;
     const needAlbum = !row.album;
     const needArt = !row.art_s3_key;
+    const needIdentity = !row.identity_track_id;
 
     let rec = null;
     if (ACOUSTID_KEY) {
@@ -435,7 +444,7 @@ for (const row of rows) {
         })
       : null;
 
-    if (!newArtist && !newAlbum && !art) {
+    if (!newArtist && !newAlbum && !art && !(needIdentity && rec)) {
       miss++;
       if (++processed % 25 === 0) console.log(`  … ${processed}/${rows.length}`);
       continue;
@@ -443,6 +452,29 @@ for (const row of rows) {
 
     if (APPLY) {
       const newVals = {};
+      if (needIdentity && rec) {
+        await pool.query(
+          `insert into track_identities
+             (track_id, status, acoustid_id, recording_mbid, artist_mbids,
+              release_group_mbid, attempted_at)
+           values ($1, 'recognized', $2, $3, $4::uuid[], $5, now())
+           on conflict (track_id) do nothing`,
+          [
+            row.id,
+            rec.acoustidId,
+            rec.recordingMbid,
+            rec.artistMbids,
+            rec.releaseGroupMbid,
+          ]
+        );
+        newVals.track_identity = {
+          acoustid_id: rec.acoustidId,
+          recording_mbid: rec.recordingMbid,
+          artist_mbids: rec.artistMbids,
+          release_group_mbid: rec.releaseGroupMbid,
+        };
+        filledIdentity++;
+      }
       if (newArtist) {
         await pool.query(
           `update tracks set artist = $1 where id = $2 and artist is null`,
@@ -476,21 +508,31 @@ for (const row of rows) {
       const oldVals = Object.fromEntries(Object.keys(newVals).map((k) => [k, null]));
       await revert({ id: row.id, old: oldVals, new: newVals });
       console.log(
-        `  ${row.id} - ${[newArtist && "artist", newAlbum && "album", art && `art(${art.source})`].filter(Boolean).join(", ")}`
+        `  ${row.id} - ${[needIdentity && rec && "identity", newArtist && "artist", newAlbum && "album", art && `art(${art.source})`].filter(Boolean).join(", ")}`
       );
     } else {
       if (newArtist) filledArtist++;
       if (newAlbum) filledAlbum++;
       if (art) filledArt++;
+      if (needIdentity && rec) filledIdentity++;
       await review({
         id: row.id,
         title: row.title,
         artist: newArtist,
         album: newAlbum,
         art: art ? { source: art.source, ref: art.ref, ext: art.kind.ext } : null,
+        identity:
+          needIdentity && rec
+            ? {
+                acoustidId: rec.acoustidId,
+                recordingMbid: rec.recordingMbid,
+                artistMbids: rec.artistMbids,
+                releaseGroupMbid: rec.releaseGroupMbid,
+              }
+            : null,
       });
       console.log(
-        `  ${row.id} - ${[newArtist && `artist="${newArtist}"`, newAlbum && `album="${newAlbum}"`, art && `art(${art.source})`].filter(Boolean).join(", ")} (dry-run)`
+        `  ${row.id} - ${[needIdentity && rec && "identity", newArtist && `artist="${newArtist}"`, newAlbum && `album="${newAlbum}"`, art && `art(${art.source})`].filter(Boolean).join(", ")} (dry-run)`
       );
     }
   } catch (err) {
@@ -501,6 +543,6 @@ for (const row of rows) {
 }
 
 console.log(
-  `Done${APPLY ? "" : " (dry-run)"}. artist: ${filledArtist}, album: ${filledAlbum}, art: ${filledArt}, no match: ${miss}, failed: ${failed}.`
+  `Done${APPLY ? "" : " (dry-run)"}. identity: ${filledIdentity}, artist: ${filledArtist}, album: ${filledAlbum}, art: ${filledArt}, no match: ${miss}, failed: ${failed}.`
 );
 await pool.end();

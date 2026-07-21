@@ -35,6 +35,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (track.ownerId !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if (track.suggestedImportId) {
+    return NextResponse.json(
+      { error: "Use Suggested Imports to accept or reject this track" },
+      { status: 409 }
+    );
+  }
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
@@ -80,6 +86,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!track) return trackNotFound();
   if (track.ownerId !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (track.suggestedImportId) {
+    return NextResponse.json(
+      { error: "Use Suggested Imports to accept or reject this track" },
+      { status: 409 }
+    );
   }
 
   // Deleting a track cascades rows out of playlists (the owner's and

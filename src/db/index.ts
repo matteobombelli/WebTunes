@@ -28,6 +28,11 @@ const pool =
 
 if (process.env.NODE_ENV !== "production") globalForDb.webtunesPool = pool;
 
+// Long-running background work occasionally needs a session-scoped Postgres
+// advisory lock (the global yt-dlp lane). Export the existing pool so it can
+// hold and release that lock on the same physical connection.
+export const dbPool = pool;
+
 export const db = drizzle(pool, { schema });
 
 /**

@@ -10,6 +10,7 @@ import {
 import { friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
+  isLibraryTrack,
   notDuplicateOfOwn,
   toTrackDTO,
   trackDtoColumns,
@@ -28,16 +29,19 @@ function accessWhere(
   friendIds: string[],
   hideFriendDuplicates: boolean
 ) {
-  return or(
-    eq(tracks.ownerId, userId),
-    friendIds.length
-      ? and(
-          inArray(tracks.ownerId, friendIds),
-          eq(tracks.isPrivate, false),
-          hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
-          hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
-        )
-      : sql`false`
+  return and(
+    isLibraryTrack(),
+    or(
+      eq(tracks.ownerId, userId),
+      friendIds.length
+        ? and(
+            inArray(tracks.ownerId, friendIds),
+            eq(tracks.isPrivate, false),
+            hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+            hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
+          )
+        : sql`false`
+    )
   );
 }
 

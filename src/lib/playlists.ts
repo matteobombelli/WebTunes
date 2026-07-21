@@ -9,7 +9,7 @@ import {
   type Playlist,
 } from "@/db/schema";
 import { areFriends, friendIdsOf } from "@/lib/friends";
-import { toTrackDTO, trackDtoColumns } from "@/lib/tracks";
+import { isLibraryTrack, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
 
@@ -191,6 +191,7 @@ async function playlistPreviewArt(
     .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
     .where(
       and(
+        isLibraryTrack(),
         inArray(playlistTracks.playlistId, playlistIds),
         isNotNull(tracks.artS3Key),
         or(
@@ -353,6 +354,7 @@ export async function getPlaylistTracks(
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
       and(
+        isLibraryTrack(),
         eq(playlistTracks.playlistId, playlistId),
         or(
           eq(tracks.ownerId, userId),

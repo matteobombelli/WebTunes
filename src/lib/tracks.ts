@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { tracks, users, type Track } from "@/db/schema";
 import { friendIdsOf } from "@/lib/friends";
@@ -27,6 +27,13 @@ export const trackDtoColumns = {
   friendPlayCount: tracks.friendPlayCount,
   createdAt: tracks.createdAt,
 };
+
+/** Normal library rows only. Suggested-import previews deliberately live in
+ * tracks so they can reuse playback/art/ingest, but must never leak into any
+ * ordinary collection, search, friend, playlist, or recommendation query. */
+export function isLibraryTrack() {
+  return isNull(tracks.suggestedImportId);
+}
 
 type TrackRow = Pick<Track, keyof typeof trackDtoColumns>;
 
@@ -157,6 +164,7 @@ export function notDuplicateOfOwn(userId: string) {
   return sql`not exists (
     select 1 from ${tracks} own
     where own.owner_id = ${userId}
+      and own.suggested_import_id is null
       and lower(btrim(own.title)) = lower(btrim(${tracks.title}))
       and lower(btrim(coalesce(own.artist, ''))) = lower(btrim(coalesce(${tracks.artist}, '')))
   )`;
@@ -180,6 +188,7 @@ export function canonicalFriendCopy(friendIds: string[]) {
   return sql`not exists (
     select 1 from ${tracks} other
     where other.id < ${tracks.id}
+      and other.suggested_import_id is null
       and other.owner_id in (${ids})
       and other.is_private = false
       and lower(btrim(other.title)) = lower(btrim(${tracks.title}))
@@ -196,7 +205,7 @@ export async function listOwnTracks(
   const query = db
     .select(trackDtoColumns)
     .from(tracks)
-    .where(eq(tracks.ownerId, userId))
+    .where(and(eq(tracks.ownerId, userId), isLibraryTrack()))
     .orderBy(desc(tracks.createdAt));
   const rows = await (limit === undefined ? query : query.limit(limit));
   return rows.map((t) => toTrackDTO(t));
@@ -211,7 +220,7 @@ export async function listOwnTracksPage(
   const rows = await db
     .select({ track: trackDtoColumns, cursorCreatedAt })
     .from(tracks)
-    .where(and(eq(tracks.ownerId, userId), afterTrackCursor(cursor)))
+    .where(and(eq(tracks.ownerId, userId), isLibraryTrack(), afterTrackCursor(cursor)))
     .orderBy(desc(tracks.createdAt), desc(tracks.id))
     .limit(limit + 1);
   return toTrackPage(rows, limit, (r) => toTrackDTO(r.track));
@@ -223,7 +232,7 @@ export async function countOwnTracks(userId: string): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(tracks)
-    .where(eq(tracks.ownerId, userId));
+    .where(and(eq(tracks.ownerId, userId), isLibraryTrack()));
   return row?.count ?? 0;
 }
 
@@ -242,16 +251,19 @@ export async function listAccessibleTracks(
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
-      or(
-        eq(tracks.ownerId, userId),
-        friendIds.length
-          ? and(
-              inArray(tracks.ownerId, friendIds),
-              eq(tracks.isPrivate, false),
-              hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
-              hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
-            )
-          : sql`false`
+      and(
+        isLibraryTrack(),
+        or(
+          eq(tracks.ownerId, userId),
+          friendIds.length
+            ? and(
+                inArray(tracks.ownerId, friendIds),
+                eq(tracks.isPrivate, false),
+                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+                hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
+              )
+            : sql`false`
+        )
       )
     )
     .orderBy(desc(tracks.createdAt));
@@ -274,6 +286,7 @@ export async function listAccessibleTracksPage(
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
       and(
+        isLibraryTrack(),
         or(
           eq(tracks.ownerId, userId),
           friendIds.length
@@ -313,6 +326,7 @@ export async function listFriendsTracks(
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
       and(
+        isLibraryTrack(),
         inArray(tracks.ownerId, friendIds),
         eq(tracks.isPrivate, false),
         hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
@@ -338,6 +352,7 @@ export async function listFriendsTracksPage(
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
       and(
+        isLibraryTrack(),
         inArray(tracks.ownerId, friendIds),
         eq(tracks.isPrivate, false),
         hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
@@ -369,6 +384,7 @@ async function listAccessibleTracksByField(
     .innerJoin(users, eq(tracks.ownerId, users.id))
     .where(
       and(
+        isLibraryTrack(),
         matches,
         or(
           eq(tracks.ownerId, userId),
@@ -426,7 +442,13 @@ export async function listTracksOfFriend(
   const rows = await db
     .select(trackDtoColumns)
     .from(tracks)
-    .where(and(eq(tracks.ownerId, friendId), eq(tracks.isPrivate, false)))
+    .where(
+      and(
+        eq(tracks.ownerId, friendId),
+        eq(tracks.isPrivate, false),
+        isLibraryTrack()
+      )
+    )
     .orderBy(desc(tracks.createdAt));
   return rows.map((t) => toTrackDTO(t, ownerName));
 }

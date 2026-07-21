@@ -21,10 +21,20 @@ export async function recordListen(
   telemetry: ListenTelemetry | null
 ): Promise<RecordListenResult> {
   const [track] = await db
-    .select({ ownerId: tracks.ownerId, isPrivate: tracks.isPrivate })
+    .select({
+      ownerId: tracks.ownerId,
+      isPrivate: tracks.isPrivate,
+      suggestedImportId: tracks.suggestedImportId,
+    })
     .from(tracks)
     .where(eq(tracks.id, trackId));
   if (!track) return "not_found";
+  // Previewing staged recommendations must not affect Top 100 or analytics.
+  // The dedicated suggestion access rule already proved ownership before the
+  // player reached this endpoint, so acknowledge telemetry without storing it.
+  if (track.suggestedImportId) {
+    return track.ownerId === userId ? "ok" : "forbidden";
+  }
   if (!(await canAccessTrack(userId, track))) return "forbidden";
 
   await db.transaction(async (tx) => {

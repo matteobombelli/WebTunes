@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { cache } from "react";
 import { db } from "@/db";
@@ -71,7 +71,7 @@ export async function friendsOf(userId: string): Promise<FriendDTO[]> {
       friendListens: sql<number>`coalesce(sum(${tracks.friendPlayCount}), 0)::int`,
     })
     .from(users)
-    .leftJoin(tracks, eq(tracks.ownerId, users.id))
+    .leftJoin(tracks, and(eq(tracks.ownerId, users.id), isNull(tracks.suggestedImportId)))
     .where(inArray(users.id, ids))
     .groupBy(users.id);
 }
@@ -84,7 +84,7 @@ export async function friendListensOf(userId: string): Promise<number> {
       total: sql<number>`coalesce(sum(${tracks.friendPlayCount}), 0)::int`,
     })
     .from(tracks)
-    .where(eq(tracks.ownerId, userId));
+    .where(and(eq(tracks.ownerId, userId), isNull(tracks.suggestedImportId)));
   return row?.total ?? 0;
 }
 
@@ -202,8 +202,9 @@ export const pendingRequestsFor = cache(async function pendingRequestsFor(
  */
 export async function canAccessTrack(
   userId: string,
-  track: { ownerId: string; isPrivate: boolean }
+  track: { ownerId: string; isPrivate: boolean; suggestedImportId: string | null }
 ): Promise<boolean> {
+  if (track.suggestedImportId) return false;
   if (userId === track.ownerId) return true;
   if (track.isPrivate) return false;
   return areFriends(userId, track.ownerId);
@@ -216,9 +217,10 @@ export async function canAccessTrack(
  */
 export function canAccessTrackWithFriends(
   userId: string,
-  track: { ownerId: string; isPrivate: boolean },
+  track: { ownerId: string; isPrivate: boolean; suggestedImportId: string | null },
   friendIds: string[]
 ): boolean {
+  if (track.suggestedImportId) return false;
   if (userId === track.ownerId) return true;
   if (track.isPrivate) return false;
   return friendIds.includes(track.ownerId);

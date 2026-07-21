@@ -19,6 +19,8 @@ export type TrackDTO = {
   createdAt: string;
   /** Present when the track belongs to someone else (friend views, search). */
   ownerName?: string | null;
+  /** Present only for private Suggested Imports preview DTOs. */
+  isSuggested?: boolean;
 };
 
 /** One keyset-paginated slice of a newest-first track listing. */
@@ -26,6 +28,20 @@ export type TrackPageDTO = {
   tracks: TrackDTO[];
   /** Opaque cursor for the next page; null means the listing is exhausted. */
   nextCursor: string | null;
+};
+
+export type SuggestedImportDTO = {
+  id: string;
+  track: TrackDTO;
+  reason: string | null;
+};
+
+export type SuggestedImportPoolDTO = {
+  items: SuggestedImportDTO[];
+  target: number;
+  processing: number;
+  /** Explains why a pool can remain empty even though no job is failing. */
+  blockedReason: "no_key" | "no_seeds" | null;
 };
 
 export type PlaylistDTO = {

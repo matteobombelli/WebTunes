@@ -14,6 +14,7 @@ import {
 import { INVITE_BLOCKED_EMAILS } from "@/lib/invites";
 import { findRecommendedClusters } from "@/lib/similar";
 import { getUserSettings } from "@/lib/users";
+import { getSuggestedImportPool } from "@/lib/suggested-imports";
 import DiscoverBrowser from "@/components/DiscoverBrowser";
 
 export default async function DiscoverPage() {
@@ -35,6 +36,7 @@ export default async function DiscoverPage() {
     requests,
     suggestions,
     ownFriendListens,
+    suggestedImports,
   ] = await Promise.all([
     findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
     randomSeedTracks(user.id, hideFriendDuplicates),
@@ -44,6 +46,7 @@ export default async function DiscoverPage() {
     pendingRequestsFor(user.id),
     suggestedFriendsFor(user.id),
     friendListensOf(user.id),
+    getSuggestedImportPool(user.id),
   ]);
 
   return (
@@ -55,6 +58,7 @@ export default async function DiscoverPage() {
         suggestions={suggestions}
         ownFriendListens={ownFriendListens}
         canInvite={!INVITE_BLOCKED_EMAILS.has(user.email)}
+        suggestedImports={suggestedImports}
       />
     </div>
   );

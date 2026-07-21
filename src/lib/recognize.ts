@@ -48,6 +48,9 @@ async function politeWait(): Promise<void> {
 export type Fingerprint = { duration: number; fingerprint: string };
 
 export type Recognition = {
+  acoustidId: string;
+  recordingMbid: string;
+  artistMbids: string[];
   artist: string | null;
   album: string | null;
   releaseGroupMbid: string | null;
@@ -169,6 +172,9 @@ export async function lookupAcoustId(
     );
     if (!rec) return null;
     return {
+      acoustidId: best.id,
+      recordingMbid: rec.id,
+      artistMbids: rec.artists?.map((artist) => artist.id) ?? [],
       artist: joinArtists(rec.artists),
       ...pickReleaseGroup(rec.releasegroups),
     };

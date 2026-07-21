@@ -2,14 +2,19 @@ import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 import type { ImportQuality, ImportSearchResultDTO } from "@/lib/types";
+import {
+  withYtDlpLane,
+  type ImportLanePriority,
+} from "@/lib/import/lane";
 
 // CLI wrapper around the yt-dlp standalone binary - the only file that spawns
 // it. yt-dlp is a runtime dependency like ffmpeg/fpcalc, but repo-local
 // (bin/yt-dlp, gitignored) because it self-updates in place (`yt-dlp -U`,
 // daily deploy/webtunes-ytdlp-update.timer) - YouTube breakage is its #1
 // failure mode and a distro package would lag. Its ffmpeg post-processing runs
-// outside lib/ffmpeg-gate.ts; acceptable because the import worker (jobs.ts)
-// is strictly serial, so at most one yt-dlp ffmpeg runs at a time.
+// outside lib/ffmpeg-gate.ts; every invocation goes through import/lane.ts,
+// whose local priority queue + Postgres advisory lock keep manual and suggested
+// imports serial even across briefly-overlapping server processes.
 
 /** One row of a flat playlist/search extraction - enough to list and match.
  * Same shape the search route returns to the client. */
@@ -47,9 +52,14 @@ export function ytdlpPath(): string {
 
 function runYtdlp(
   args: string[],
-  opts: { signal: AbortSignal; timeoutMs: number; onLine?: (line: string) => void }
+  opts: {
+    signal: AbortSignal;
+    timeoutMs: number;
+    onLine?: (line: string) => void;
+    priority: ImportLanePriority;
+  }
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return withYtDlpLane(opts.priority, () => new Promise((resolve, reject) => {
     const proc = spawn(ytdlpPath(), [...COMMON_ARGS, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       signal: opts.signal,
@@ -85,7 +95,7 @@ function runYtdlp(
       else if (opts.signal.aborted) reject(new Error("cancelled"));
       else reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
     });
-  });
+  }));
 }
 
 function bestThumbnail(entry: {
@@ -110,11 +120,13 @@ function bestThumbnail(entry: {
  */
 export async function flatExtract(
   target: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  priority: ImportLanePriority = "manual"
 ): Promise<FlatEntry[]> {
   const out = await runYtdlp(["-J", "--flat-playlist", target], {
     signal,
     timeoutMs: EXTRACT_TIMEOUT_MS,
+    priority,
   });
   const info = JSON.parse(out);
   const entries: any[] = "entries" in info ? (info.entries ?? []) : [info];
@@ -138,11 +150,13 @@ export async function flatExtract(
  */
 export async function probeVideo(
   url: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  priority: ImportLanePriority = "manual"
 ): Promise<VideoInfo> {
   const out = await runYtdlp(["-J", "--no-playlist", url], {
     signal,
     timeoutMs: EXTRACT_TIMEOUT_MS,
+    priority,
   });
   const info = JSON.parse(out);
   let bestAudioKbps = 0;
@@ -186,6 +200,7 @@ export async function downloadAudio(opts: {
   dir: string;
   signal: AbortSignal;
   onProgress?: (percent: number) => void;
+  priority?: ImportLanePriority;
 }): Promise<{ path: string; filename: string; mimeType: string }> {
   const args = [
     "--no-playlist",
@@ -225,6 +240,7 @@ export async function downloadAudio(opts: {
     await runYtdlp(args, {
       signal: opts.signal,
       timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      priority: opts.priority ?? "manual",
       onLine: (line) => {
         if (line.startsWith("PROGRESS ")) {
           const [downloaded, total] = line.slice("PROGRESS ".length).split(" ");

@@ -6,6 +6,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
+  isLibraryTrack,
   notDuplicateOfOwn,
   toTrackDTO,
   trackDtoColumns,
@@ -66,7 +67,15 @@ export async function GET(req: NextRequest) {
     })
     .from(tracks)
     .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(and(inArray(tracks.ownerId, ownerIds), visible, matches, noFriendDupes))
+    .where(
+      and(
+        isLibraryTrack(),
+        inArray(tracks.ownerId, ownerIds),
+        visible,
+        matches,
+        noFriendDupes
+      )
+    )
     .orderBy(({ rank }) => [desc(rank), desc(tracks.createdAt)])
     .limit(100);
 

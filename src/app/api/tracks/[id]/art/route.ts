@@ -33,6 +33,7 @@ export async function GET(
         id: tracks.id,
         ownerId: tracks.ownerId,
         isPrivate: tracks.isPrivate,
+        suggestedImportId: tracks.suggestedImportId,
         artS3Key: tracks.artS3Key,
         artThumbS3Key: tracks.artThumbS3Key,
       })
@@ -43,7 +44,8 @@ export async function GET(
   if (!track || !track.artS3Key) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  if (!(await canAccessTrack(user.id, track))) {
+  const canPreview = track.suggestedImportId && track.ownerId === user.id;
+  if (!canPreview && !(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -84,6 +86,12 @@ export async function POST(
   }
   if (track.ownerId !== user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (track.suggestedImportId) {
+    return NextResponse.json(
+      { error: "Accept this suggestion before editing it" },
+      { status: 409 }
+    );
   }
 
   // A truncated/garbage multipart body makes formData() reject - 400, not 500.

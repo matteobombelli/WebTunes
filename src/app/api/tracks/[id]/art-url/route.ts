@@ -26,6 +26,7 @@ export async function GET(
       id: tracks.id,
       ownerId: tracks.ownerId,
       isPrivate: tracks.isPrivate,
+      suggestedImportId: tracks.suggestedImportId,
       artS3Key: tracks.artS3Key,
     })
     .from(tracks)
@@ -33,7 +34,8 @@ export async function GET(
   if (!track || !track.artS3Key) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
-  if (!(await canAccessTrack(user.id, track))) {
+  const canPreview = track.suggestedImportId && track.ownerId === user.id;
+  if (!canPreview && !(await canAccessTrack(user.id, track))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

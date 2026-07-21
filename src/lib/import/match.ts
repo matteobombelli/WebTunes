@@ -1,6 +1,7 @@
 import { flatExtract, type FlatEntry } from "@/lib/import/ytdlp";
 import type { SourceTrack } from "@/lib/import/sources";
 import type { ImportVersionPref } from "@/lib/types";
+import type { ImportLanePriority } from "@/lib/import/lane";
 
 // Resolve a Spotify/Apple track's metadata to the best-matching YouTube video.
 // Port of the desktop importer's core/matching.py: below the strictness
@@ -151,11 +152,16 @@ export async function findMatch(
   track: SourceTrack,
   pref: ImportVersionPref,
   threshold: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  priority: ImportLanePriority = "manual"
 ): Promise<{ url: string; score: number } | { url: null; reason: string }> {
   let query = `${track.artist} ${track.title}`;
   if (pref === "live") query += " live";
-  const results = await flatExtract(`ytsearch${SEARCH_RESULTS}:${query}`, signal);
+  const results = await flatExtract(
+    `ytsearch${SEARCH_RESULTS}:${query}`,
+    signal,
+    priority
+  );
   const entries = results.filter((e) => versionAllowed(e.title, pref));
   if (entries.length === 0) {
     return { url: null, reason: `no ${pref} version in top ${SEARCH_RESULTS} results` };

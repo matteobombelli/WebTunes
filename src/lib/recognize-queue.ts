@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { tracks } from "@/db/schema";
+import { trackIdentities, tracks } from "@/db/schema";
 import { log } from "@/lib/log";
 import {
   fingerprint,
@@ -38,10 +38,13 @@ type Job = { trackId: string; s3Key: string; ext: string };
 
 const MAX_WORKERS = 1;
 const queue: Job[] = [];
+const queuedTrackIds = new Set<string>();
 let workers = 0;
 
 /** Queue a track for background metadata recognition. Returns immediately. */
 export function enqueueRecognition(job: Job): void {
+  if (queuedTrackIds.has(job.trackId)) return;
+  queuedTrackIds.add(job.trackId);
   queue.push(job);
   if (workers < MAX_WORKERS) {
     workers++;
@@ -53,7 +56,11 @@ async function runWorker(): Promise<void> {
   try {
     let job: Job | undefined;
     while ((job = queue.shift())) {
-      await processJob(job);
+      try {
+        await processJob(job);
+      } finally {
+        queuedTrackIds.delete(job.trackId);
+      }
     }
   } finally {
     workers--;
@@ -71,24 +78,85 @@ async function processJob(job: Job): Promise<void> {
         artist: tracks.artist,
         album: tracks.album,
         artS3Key: tracks.artS3Key,
+        identityStatus: trackIdentities.status,
+        acoustidId: trackIdentities.acoustidId,
+        recordingMbid: trackIdentities.recordingMbid,
+        artistMbids: trackIdentities.artistMbids,
+        releaseGroupMbid: trackIdentities.releaseGroupMbid,
+        retryAfter: trackIdentities.retryAfter,
       })
       .from(tracks)
+      .leftJoin(trackIdentities, eq(trackIdentities.trackId, tracks.id))
       .where(eq(tracks.id, job.trackId));
     if (!row) return; // deleted since enqueue
 
     const needArtist = !row.artist;
     const needAlbum = !row.album;
     const needArt = !row.artS3Key;
-    if (!needArtist && !needAlbum && !needArt) return;
+    const needIdentity =
+      !row.identityStatus ||
+      (row.identityStatus !== "recognized" &&
+        (!row.retryAfter || row.retryAfter.getTime() <= Date.now()));
+    if (!needArtist && !needAlbum && !needArt && !needIdentity) return;
 
     // Fingerprint + AcoustID only when a key is configured. Without one we skip
     // straight to the iTunes art fallback below (for tracks that already have an
     // artist but no cover) and never write artist/album.
-    let rec: Recognition | null = null;
-    if (process.env.ACOUSTID_API_KEY) {
+    let rec: Recognition | null =
+      row.identityStatus === "recognized" && row.recordingMbid
+        ? {
+            acoustidId: row.acoustidId ?? "",
+            recordingMbid: row.recordingMbid,
+            artistMbids: row.artistMbids ?? [],
+            artist: row.artist,
+            album: row.album,
+            releaseGroupMbid: row.releaseGroupMbid,
+          }
+        : null;
+    if (needIdentity && process.env.ACOUSTID_API_KEY) {
       const bytes = await getObjectBytes(job.s3Key);
       const fp = await fingerprint(bytes, job.ext);
       if (fp) rec = await lookupAcoustId(fp);
+      const retryAfter = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db
+        .insert(trackIdentities)
+        .values(
+          rec
+            ? {
+                trackId: job.trackId,
+                status: "recognized",
+                acoustidId: rec.acoustidId,
+                recordingMbid: rec.recordingMbid,
+                artistMbids: rec.artistMbids,
+                releaseGroupMbid: rec.releaseGroupMbid,
+                attemptedAt: new Date(),
+                retryAfter: null,
+              }
+            : {
+                trackId: job.trackId,
+                status: fp ? "unmatched" : "failed",
+                attemptedAt: new Date(),
+                retryAfter,
+              }
+        )
+        .onConflictDoUpdate({
+          target: trackIdentities.trackId,
+          set: rec
+            ? {
+                status: "recognized",
+                acoustidId: rec.acoustidId,
+                recordingMbid: rec.recordingMbid,
+                artistMbids: rec.artistMbids,
+                releaseGroupMbid: rec.releaseGroupMbid,
+                attemptedAt: new Date(),
+                retryAfter: null,
+              }
+            : {
+                status: fp ? "unmatched" : "failed",
+                attemptedAt: new Date(),
+                retryAfter,
+              },
+        });
     }
 
     // Conditional, no-overwrite writes - the `IS NULL` guard makes the

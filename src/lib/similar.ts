@@ -19,6 +19,7 @@ import { autoClusterCentroids } from "@/lib/cluster";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import {
   canonicalFriendCopy,
+  isLibraryTrack,
   notDuplicateOfOwn,
   toTrackDTO,
   trackDtoColumns,
@@ -70,6 +71,7 @@ export async function findSimilarTracks(
         .select({
           ownerId: tracks.ownerId,
           isPrivate: tracks.isPrivate,
+          suggestedImportId: tracks.suggestedImportId,
           embedding: trackEmbeddings.embedding,
         })
         .from(tracks)
@@ -264,6 +266,7 @@ async function rankAccessibleByVector(
     .innerJoin(trackEmbeddings, eq(trackEmbeddings.trackId, tracks.id))
     .where(
       and(
+        isLibraryTrack(),
         withinIds && withinIds.length
           ? inArray(tracks.id, withinIds)
           : undefined,
