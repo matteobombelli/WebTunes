@@ -73,7 +73,10 @@ export async function getSuggestedImportPool(
         eq(suggestedImports.status, "ready")
       )
     )
-    .orderBy(asc(suggestedImports.createdAt));
+    // updatedAt becomes the ready time on the final import transition and then
+    // stays unchanged. Sorting by it appends newly-ready cards instead of
+    // inserting them among older cards based on when they were first queued.
+    .orderBy(asc(suggestedImports.updatedAt), asc(suggestedImports.id));
   const [processingRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(suggestedImports)

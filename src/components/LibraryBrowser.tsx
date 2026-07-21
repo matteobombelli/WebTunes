@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { TrackDTO, TrackPageDTO } from "@/lib/types";
 import { usePersistedScope } from "@/lib/use-persisted-scope";
@@ -61,6 +61,12 @@ export default function LibraryBrowser({
   const browsingOwn = !query && scope === "own";
   const cacheKey = `${scope}:${hideDuplicates ? 1 : 0}`;
   const viewKey = query ? `q:${scope}:${query}` : cacheKey;
+  const activeViewKeyRef = useRef(viewKey);
+  const sortLoadPromiseRef = useRef<Promise<boolean> | null>(null);
+
+  useEffect(() => {
+    activeViewKeyRef.current = viewKey;
+  }, [viewKey]);
 
   useEffect(() => {
     // Own-library browsing renders initialPage; stale results are ignored.
@@ -180,6 +186,50 @@ export default function LibraryBrowser({
     viewKey,
   ]);
 
+  // TrackList sorts locally. Before allowing that, replace the current
+  // keyset-paginated slice with the complete current scope. The existing
+  // no-limit GET is intentional API surface and preserves the same access and
+  // friend-duplicate rules as the paginated endpoint.
+  const prepareSort = useCallback((): Promise<boolean> => {
+    if (query || !page?.nextCursor) return Promise.resolve(true);
+    if (sortLoadPromiseRef.current) return sortLoadPromiseRef.current;
+
+    const requestedViewKey = viewKey;
+    const task = (async () => {
+      setLoadingMore(true);
+      setLoadMoreFailed(false);
+      try {
+        const scopeParam = browsingOwn ? "" : `?scope=${scope}`;
+        const allTracks = await api<TrackDTO[]>(`/tracks${scopeParam}`);
+        if (activeViewKeyRef.current !== requestedViewKey) return false;
+
+        const completePage: TrackPageDTO = {
+          tracks: allTracks,
+          totalCount: allTracks.length,
+          nextCursor: null,
+        };
+        if (browsingOwn) {
+          setOwnPage((current) => ({ ...current, page: completePage }));
+        } else {
+          scopeCache.set(cacheKey, completePage);
+          setResults(completePage);
+          setResultsKey(viewKey);
+        }
+        return true;
+      } catch {
+        if (activeViewKeyRef.current === requestedViewKey) {
+          setLoadMoreFailed(true);
+        }
+        return false;
+      } finally {
+        sortLoadPromiseRef.current = null;
+        setLoadingMore(false);
+      }
+    })();
+    sortLoadPromiseRef.current = task;
+    return task;
+  }, [browsingOwn, cacheKey, page?.nextCursor, query, scope, viewKey]);
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -231,6 +281,7 @@ export default function LibraryBrowser({
             hasMore={hasMore && !loadMoreFailed}
             loadingMore={loadingMore}
             onLoadMore={loadMore}
+            prepareSort={prepareSort}
             emptyMessage={
               !browsingOwn && loadFailed && fresh
                 ? "Couldn’t load tracks - check your connection."

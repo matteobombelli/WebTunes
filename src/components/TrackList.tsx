@@ -392,6 +392,7 @@ export default function TrackList({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  prepareSort,
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
@@ -418,6 +419,8 @@ export default function TrackList({
   loadingMore?: boolean;
   /** Fetches the next server-side page as the list sentinel approaches. */
   onLoadMore?: () => void;
+  /** Ensures a remotely-paginated collection is complete before a local sort. */
+  prepareSort?: () => Promise<boolean>;
 }) {
   const router = useRouter();
   const playQueue = usePlayerStore((s) => s.playQueue);
@@ -429,6 +432,7 @@ export default function TrackList({
   // "Select…" button until the user turns this on (Clear turns it back off).
   const [selectMode, setSelectMode] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
+  const [preparingSort, setPreparingSort] = useState(false);
 
   // Drag-to-reorder is opt-in like select, and mutually exclusive with it. Only
   // offered when a persist handler is wired; entering it clears any active sort
@@ -489,15 +493,34 @@ export default function TrackList({
     return () => obs.disconnect();
   }, [hasMore, loadingMore, onLoadMore, visibleCount, view.length]);
 
-  // Click cycles: ascending → descending → default (server order).
-  const cycleSort = (key: SortKey) =>
-    setSort((prev) =>
-      prev?.key !== key
+  // Click cycles: ascending → descending → default (server order). A local
+  // sort must not run over only the currently-loaded keyset page; the library
+  // view uses prepareSort to fetch its complete current scope first.
+  const cycleSort = async (key: SortKey) => {
+    if (preparingSort) return;
+    const next: SortState =
+      sort?.key !== key
         ? { key, dir: 1 }
-        : prev.dir === 1
+        : sort.dir === 1
           ? { key, dir: -1 }
-          : null
-    );
+          : null;
+    if (next && prepareSort) {
+      setPreparingSort(true);
+      const ready = await prepareSort();
+      setPreparingSort(false);
+      if (!ready) return;
+    }
+    setSort(next);
+  };
+
+  // If an active sort survives a data refresh that reintroduces pagination,
+  // restore the complete collection automatically instead of silently sorting
+  // only the refreshed first page.
+  useEffect(() => {
+    if (sort && hasMore && prepareSort && !preparingSort) {
+      void prepareSort();
+    }
+  }, [hasMore, prepareSort, preparingSort, sort]);
 
   const ariaSort = (key: SortKey) =>
     sortable && sort?.key === key
@@ -509,8 +532,9 @@ export default function TrackList({
   const sortHeader = (key: SortKey, label: React.ReactNode) =>
     sortable ? (
       <button
-        onClick={() => cycleSort(key)}
-        className="relative inline-flex items-center uppercase hover:text-fg-muted"
+        onClick={() => void cycleSort(key)}
+        disabled={preparingSort}
+        className="relative inline-flex items-center uppercase hover:text-fg-muted disabled:cursor-wait disabled:opacity-60"
       >
         {label}
         {/* Positioned outside the flow so the chevron never shifts the label -

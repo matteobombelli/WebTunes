@@ -123,6 +123,18 @@ button:not(:disabled):active {
     transform: scaleY(1);
   }
 }
+/* Root route fallback: a softly lit record that fits the player theme. */
+@keyframes loading-record-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes loading-glow {
+  50% {
+    opacity: 0.72;
+    transform: scale(1.08);
+  }
+}
 
 .animate-pop-in {
   animation: pop-in 0.1s ease-out;
@@ -139,9 +151,85 @@ button:not(:disabled):active {
 .animate-fade-in-up {
   animation: fade-in-up 0.22s ease-out both;
 }
-/* Tailwind's default pulse is 2s; tighten it so spinners feel responsive. */
+/* Tailwind's default pulse is 2s; tighten loading placeholders. */
 .animate-pulse {
   animation-duration: 1.2s;
+}
+.loading-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.loading-stage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: min(24rem, 85vw);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(79 70 229 / 0.18),
+    rgb(79 70 229 / 0.05) 42%,
+    transparent 70%
+  );
+  filter: blur(12px);
+  animation: loading-glow 2.4s ease-in-out infinite;
+}
+.loading-record {
+  position: relative;
+  width: 5rem;
+  aspect-ratio: 1;
+  border: 1px solid rgb(129 140 248 / 0.26);
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle,
+      var(--color-accent-bright) 0 5%,
+      var(--color-surface-0) 5.5% 12%,
+      var(--color-accent) 12.5% 23%,
+      transparent 23.5%
+    ),
+    repeating-radial-gradient(
+      circle,
+      transparent 0 4px,
+      rgb(255 255 255 / 0.055) 4.5px 5px
+    ),
+    conic-gradient(
+      from 20deg,
+      var(--color-surface-1),
+      var(--color-surface-3) 12%,
+      var(--color-surface-1) 25%,
+      #31313a 44%,
+      var(--color-surface-1) 62%,
+      var(--color-surface-3) 82%,
+      var(--color-surface-1)
+    );
+  box-shadow:
+    0 14px 40px rgb(0 0 0 / 0.48),
+    0 0 30px rgb(79 70 229 / 0.16),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  animation: loading-record-spin 1.55s linear infinite;
+}
+.loading-record::after {
+  content: "";
+  position: absolute;
+  inset: 7%;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    rgb(255 255 255 / 0.16),
+    transparent 24% 72%,
+    rgb(129 140 248 / 0.08)
+  );
+}
+.loading-record > span {
+  position: absolute;
+  z-index: 1;
+  inset: 47%;
+  border-radius: inherit;
+  background: var(--color-accent-fg);
+  box-shadow: 0 0 8px rgb(255 255 255 / 0.55);
 }
 /* Skeleton shimmer: a soft highlight sweeping across a surface-2 block.
    Transform-based (compositor-friendly); the base transform parks the
