@@ -6,6 +6,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { api, artSrc, fetchSimilarTracks, streamSrc } from "@/lib/api";
 import type { TrackDTO } from "@/lib/types";
 import { BASE_PATH } from "@/lib/base-path";
+import { listenQualificationSeconds } from "@/lib/listen-telemetry";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { useToastStore } from "@/stores/toast";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -42,12 +43,12 @@ const SESSION_KEY = "wt-player-session";
 /** Bounded retry/reload budget per track load, for background play() recovery. */
 const MAX_ATTEMPTS = 4;
 
-const LISTEN_QUALIFY_SECONDS = 30;
 const LISTEN_CHECKPOINT_SECONDS = 60;
 
 type ListenSession = {
   id: string;
   trackId: string;
+  durationSeconds: number | null;
   listenedSeconds: number;
   confirmedSeconds: number;
   nextCheckpointSeconds: number;
@@ -171,8 +172,9 @@ export default function PlayerBar({
   // 0-3s position). Non-null only between a pause and the next resume.
   const pausedPosRef = useRef<number | null>(null);
   // One idempotent telemetry session per queue-slot playback. It accumulates
-  // actual media-clock progress (seeks excluded), reports once at 30 seconds,
-  // then checkpoints every minute and flushes on lifecycle/transport changes.
+  // actual media-clock progress (seeks excluded), reports once half the track
+  // has played, then checkpoints every minute and flushes on lifecycle/transport
+  // changes.
   const listenSessionRef = useRef<ListenSession | null>(null);
   // True from a fresh track load until playback actually begins. A cold first
   // request (slow first byte after a refresh) can let the media clock drift
@@ -376,9 +378,11 @@ export default function PlayerBar({
   };
 
   const reportListen = (session: ListenSession, force = false) => {
+    const qualifySeconds = listenQualificationSeconds(session.durationSeconds);
+    if (qualifySeconds == null) return;
     const listenedSeconds = Math.min(86400, Math.floor(session.listenedSeconds));
     if (
-      listenedSeconds < LISTEN_QUALIFY_SECONDS ||
+      listenedSeconds < qualifySeconds ||
       listenedSeconds <= session.confirmedSeconds ||
       (!force && listenedSeconds < session.nextCheckpointSeconds) ||
       (!force && session.inFlight > 0)
@@ -391,7 +395,11 @@ export default function PlayerBar({
     api(`/tracks/${session.trackId}/play`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: session.id, listenedSeconds }),
+      body: JSON.stringify({
+        sessionId: session.id,
+        listenedSeconds,
+        durationSeconds: session.durationSeconds,
+      }),
       // Allows pagehide/visibility flushes to outlive the document briefly.
       keepalive: true,
     })
@@ -414,13 +422,19 @@ export default function PlayerBar({
       });
   };
 
-  const startListenSession = (trackId: string, mediaTime: number) => {
+  const startListenSession = (
+    trackId: string,
+    mediaTime: number,
+    durationSeconds: number | null
+  ) => {
+    const qualifySeconds = listenQualificationSeconds(durationSeconds);
     listenSessionRef.current = {
       id: crypto.randomUUID(),
       trackId,
+      durationSeconds,
       listenedSeconds: 0,
       confirmedSeconds: 0,
-      nextCheckpointSeconds: LISTEN_QUALIFY_SECONDS,
+      nextCheckpointSeconds: qualifySeconds ?? Number.POSITIVE_INFINITY,
       inFlight: 0,
       lastMediaTime: mediaTime,
     };
@@ -649,7 +663,7 @@ export default function PlayerBar({
       autoAdvanceRef.current = false; // consume the flag
       recoverAttemptsRef.current = 0; // fresh recovery budget, like a load
       audio.currentTime = 0;
-      startListenSession(track.id, 0);
+      startListenSession(track.id, 0, track.durationSec);
       if (usePlayerStore.getState().isPlaying && audio.paused)
         attemptPlay(autoAdvance);
       return;
@@ -673,7 +687,7 @@ export default function PlayerBar({
         : 0;
     audio.src =
       startAt > 0 ? `${streamSrc(track.id)}#t=${startAt}` : streamSrc(track.id);
-    startListenSession(track.id, startAt);
+    startListenSession(track.id, startAt, track.durationSec);
     // A restored start is the intended position, not cold-stream drift - clearing
     // freshLoadRef stops onPlaying's snap-to-0 from resetting it. A normal fresh
     // load arms the drift guard (true).
@@ -1227,6 +1241,21 @@ export default function PlayerBar({
           // single one rarely sticks on a freshly-loaded streamed element on iOS.
           const audio = audioRef.current;
           if (!audio) return;
+          // Very old tracks can lack a probed duration. Use the media element's
+          // measured duration for both the client threshold and the server's
+          // fallback validation in that case.
+          const listenSession = listenSessionRef.current;
+          if (
+            listenSession &&
+            listenSession.durationSeconds == null &&
+            Number.isFinite(audio.duration) &&
+            audio.duration > 0
+          ) {
+            listenSession.durationSeconds = audio.duration;
+            listenSession.nextCheckpointSeconds =
+              listenQualificationSeconds(audio.duration) ??
+              Number.POSITIVE_INFINITY;
+          }
           // No explicit cold-mount target, but the element came back at ~0 while
           // the store knows we were further into THIS track - a warm same-track
           // reload that lost its position (iOS evicts a backgrounded PWA's media

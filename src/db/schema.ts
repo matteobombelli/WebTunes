@@ -231,7 +231,7 @@ export const tracks = pgTable(
       .notNull()
       .default("none"),
     isPrivate: boolean("is_private").notNull().default(false),
-    // Times a non-owner played this track to ≥30s (the "friend play count").
+    // Times a non-owner played at least 50% of this track.
     friendPlayCount: integer("friend_play_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     // search_vector tsvector generated column + GIN index added via raw SQL
@@ -337,7 +337,7 @@ export const similarExclusions = pgTable(
   (se) => [primaryKey({ columns: [se.userId, se.trackId] })]
 );
 
-// Per-user, owner-inclusive play log: one row per track played to >=30s
+// Per-user, owner-inclusive play log: one row per qualified track playback
 // (recorded by POST /api/tracks/[id]/play). Powers Discover's "Your top 100"
 // (your most-played in the last 7 days) and "Friends" (what friends played
 // recently). friend_play_count on tracks stays the global, owner-excluded
@@ -353,11 +353,10 @@ export const listens = pgTable(
     trackId: uuid("track_id")
       .notNull()
       .references(() => tracks.id, { onDelete: "cascade" }),
-    // Present for exact client telemetry; NULL marks legacy listen rows whose
-    // time can only be estimated from the track duration. One session is
-    // updated cumulatively, so retrying a checkpoint never creates a new play.
-    sessionId: uuid("session_id"),
-    listenedSeconds: integer("listened_seconds"),
+    // One session is updated cumulatively, so retrying or reordering a
+    // checkpoint never creates a new play or reduces its listening time.
+    sessionId: uuid("session_id").notNull(),
+    listenedSeconds: integer("listened_seconds").notNull(),
     playedAt: timestamp("played_at", { mode: "date" }).notNull().defaultNow(),
   },
   (l) => [
@@ -368,7 +367,7 @@ export const listens = pgTable(
     uniqueIndex("listens_session_id_idx").on(l.sessionId),
     check(
       "listens_seconds_range",
-      sql`${l.listenedSeconds} IS NULL OR ${l.listenedSeconds} BETWEEN 30 AND 86400`
+      sql`${l.listenedSeconds} BETWEEN 1 AND 86400`
     ),
   ]
 );

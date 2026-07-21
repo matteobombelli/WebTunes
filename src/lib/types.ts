@@ -14,7 +14,7 @@ export type TrackDTO = {
   mimeType: string | null;
   fileSize: number | null;
   isPrivate: boolean;
-  /** Times a non-owner has played this track to ≥30s. */
+  /** Times a non-owner played at least 50% of this track. */
   friendPlayCount: number;
   createdAt: string;
   /** Present when the track belongs to someone else (friend views, search). */
@@ -75,7 +75,7 @@ export type FriendDTO = {
   id: string;
   name: string;
   /**
-   * Total ≥30s plays by non-owners across this friend's whole library
+   * Total 50%-qualified plays by non-owners across this friend's whole library
    * (sum of tracks.friend_play_count). Only set by `friendsOf`; absent in
    * username search results and friend-request users.
    */
@@ -102,7 +102,6 @@ export type StatsDailyActivityDTO = {
   /** Local calendar date in YYYY-MM-DD form. */
   date: string;
   listens: number;
-  /** Exact for telemetry rows; full-duration estimate for legacy rows. */
   listeningSeconds: number;
 };
 
@@ -142,12 +141,8 @@ export type StatsDTO = {
     end: string;
   };
   summary: {
-    qualifiedListens: number;
-    /** Exact telemetry plus full-duration estimates for legacy rows. */
+    listens: number;
     listeningSeconds: number;
-    exactListens: number;
-    /** Legacy listens whose track duration supplied an estimate. */
-    estimatedListens: number;
     activeDays: number;
     uniqueTracks: number;
     newDiscoveries: number;

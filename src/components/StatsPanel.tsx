@@ -51,6 +51,10 @@ function formatHour(hour: number): string {
   );
 }
 
+function formatListenCount(listens: number): string {
+  return `${listens.toLocaleString()} ${listens === 1 ? "listen" : "listens"}`;
+}
+
 function SummaryCard({
   label,
   value,
@@ -89,7 +93,9 @@ function ActivityHeatmap({ stats }: { stats: StatsDTO }) {
     <section className={`${GRAPH_CARD} p-4 sm:p-5`}>
       <div className="mb-4">
         <h2 className="font-display text-lg font-semibold">Daily activity</h2>
-        <p className="text-xs text-fg-muted">Each square is one local calendar day.</p>
+        <p className="text-xs text-fg-muted">
+          Each square is one local calendar day; darker means more listens.
+        </p>
       </div>
       <div className="overflow-x-auto pb-2">
         <div className="grid w-max grid-flow-col grid-rows-7 gap-1">
@@ -133,13 +139,15 @@ function HourlyChart({ stats }: { stats: StatsDTO }) {
     <section className={`${GRAPH_CARD} p-4 sm:p-5`}>
       <div className="mb-4">
         <h2 className="font-display text-lg font-semibold">Listening by time of day</h2>
-        <p className="text-xs text-fg-muted">Average qualified listens per active day.</p>
+        <p className="text-xs text-fg-muted">
+          Average listens in each hour across days with listening activity.
+        </p>
       </div>
       <div className="overflow-x-auto pb-2">
         <div className="grid h-44 min-w-[42rem] grid-cols-[repeat(24,minmax(0,1fr))] items-end gap-1.5 border-b border-border-subtle px-1">
           {stats.hourly.map((hour) => {
             const height = hour.listens ? Math.max(4, (hour.averagePerActiveDay / max) * 100) : 0;
-            const label = `${formatHour(hour.hour)}: ${hour.averagePerActiveDay.toFixed(1)} average, ${hour.listens} total`;
+            const label = `${formatHour(hour.hour)}: ${hour.averagePerActiveDay.toFixed(1)} listens per active day, ${formatListenCount(hour.listens)} total`;
             return (
               <div key={hour.hour} className="flex h-full min-w-0 flex-col justify-end gap-1">
                 <div className="flex min-h-0 flex-1 items-end">
@@ -171,7 +179,10 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
 
   return (
     <section className={`${CARD} overflow-hidden`}>
-      <h2 className="px-4 pb-2 pt-4 font-display text-lg font-semibold">Top tracks</h2>
+      <div className="px-4 pb-3 pt-4">
+        <h2 className="font-display text-lg font-semibold">Top tracks</h2>
+        <p className="text-xs text-fg-muted">Ranked by listens in this period.</p>
+      </div>
       <ol>
         {stats.topTracks.map((entry, index) => (
           <li
@@ -214,7 +225,7 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
               )}
             </div>
             <span className="text-right text-xs tabular-nums text-fg-muted">
-              {entry.listens}×
+              {formatListenCount(entry.listens)}
             </span>
           </li>
         ))}
@@ -223,11 +234,12 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
   );
 }
 
-function EmptyRanking({ title }: { title: string }) {
+function EmptyRanking({ title, hint }: { title: string; hint?: string }) {
   return (
     <section className={`${CARD} p-4`}>
       <h2 className="font-display text-lg font-semibold">{title}</h2>
-      <p className="mt-2 text-sm text-fg-muted">No listening activity yet.</p>
+      {hint && <p className="mt-1 text-xs text-fg-muted">{hint}</p>}
+      <p className="mt-2 text-sm text-fg-muted">No listens in this period.</p>
     </section>
   );
 }
@@ -244,7 +256,10 @@ function NameRanking({
   if (!entries.length) return <EmptyRanking title={title} />;
   return (
     <section className={`${CARD} overflow-hidden`}>
-      <h2 className="px-4 pb-2 pt-4 font-display text-lg font-semibold">{title}</h2>
+      <div className="px-4 pb-3 pt-4">
+        <h2 className="font-display text-lg font-semibold">{title}</h2>
+        <p className="text-xs text-fg-muted">Ranked by listens in this period.</p>
+      </div>
       <ol>
         {entries.map((entry, index) => {
           const label = entry.name ?? `Unknown ${kind}`;
@@ -276,7 +291,9 @@ function NameRanking({
               ) : (
                 <span className="truncate text-fg-muted">{label}</span>
               )}
-              <span className="text-right text-xs tabular-nums text-fg-muted">{entry.listens}×</span>
+              <span className="text-right text-xs tabular-nums text-fg-muted">
+                {formatListenCount(entry.listens)}
+              </span>
             </li>
           );
         })}
@@ -285,11 +302,22 @@ function NameRanking({
   );
 }
 
-function FriendRanking({ title, entries }: { title: string; entries: StatsRankedFriendDTO[] }) {
-  if (!entries.length) return <EmptyRanking title={title} />;
+function FriendRanking({
+  title,
+  hint,
+  entries,
+}: {
+  title: string;
+  hint: string;
+  entries: StatsRankedFriendDTO[];
+}) {
+  if (!entries.length) return <EmptyRanking title={title} hint={hint} />;
   return (
     <section className={`${CARD} overflow-hidden`}>
-      <h2 className="px-4 pb-2 pt-4 font-display text-lg font-semibold">{title}</h2>
+      <div className="px-4 pb-3 pt-4">
+        <h2 className="font-display text-lg font-semibold">{title}</h2>
+        <p className="text-xs text-fg-muted">{hint}</p>
+      </div>
       <ol>
         {entries.map((entry, index) => (
           <li
@@ -303,7 +331,9 @@ function FriendRanking({ title, entries }: { title: string; entries: StatsRanked
             >
               {entry.name}
             </Link>
-            <span className="text-right text-xs tabular-nums text-fg-muted">{entry.listens}×</span>
+            <span className="text-right text-xs tabular-nums text-fg-muted">
+              {formatListenCount(entry.listens)}
+            </span>
           </li>
         ))}
       </ol>
@@ -313,43 +343,54 @@ function FriendRanking({ title, entries }: { title: string; entries: StatsRanked
 
 function StatsContent({ stats }: { stats: StatsDTO }) {
   const { summary } = stats;
-  const unmeasured =
-    summary.qualifiedListens - summary.exactListens - summary.estimatedListens;
-  const coverageHint = [
-    summary.exactListens
-      ? `${summary.exactListens.toLocaleString()} exact`
-      : null,
-    summary.estimatedListens
-      ? `${summary.estimatedListens.toLocaleString()} legacy estimated`
-      : null,
-    unmeasured ? `${unmeasured.toLocaleString()} without duration` : null,
-  ]
-    .filter(Boolean)
-    .join("; ");
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
-      {summary.qualifiedListens === 0 && (
+      {summary.listens === 0 && (
         <div className={`${CARD} p-4 text-sm text-fg-muted`}>
-          Play a track for at least 30 seconds to start building your listening history.
+          Play at least half of a track to start building your listening history.
         </div>
       )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Listening time" value={formatTime(summary.listeningSeconds)} hint={coverageHint} />
-        <SummaryCard label="Qualified listens" value={summary.qualifiedListens.toLocaleString()} hint="A listen is recorded after 30 seconds." />
-        <SummaryCard label="Active days" value={summary.activeDays.toLocaleString()} />
-        <SummaryCard label="Unique tracks" value={summary.uniqueTracks.toLocaleString()} />
-        <SummaryCard label="New discoveries" value={summary.newDiscoveries.toLocaleString()} hint="Tracks first heard during this period." />
-        <SummaryCard label="Longest streak" value={`${summary.longestStreak}d`} />
+        <SummaryCard
+          label="Listening time"
+          value={formatTime(summary.listeningSeconds)}
+          hint="Playback time accumulated within counted listens."
+        />
+        <SummaryCard
+          label="Listens"
+          value={summary.listens.toLocaleString()}
+          hint="A listen counts after at least 50% of a track has played."
+        />
+        <SummaryCard
+          label="Active days"
+          value={summary.activeDays.toLocaleString()}
+          hint="Calendar days with at least one listen."
+        />
+        <SummaryCard
+          label="Unique tracks"
+          value={summary.uniqueTracks.toLocaleString()}
+          hint="Different tracks listened to in this period."
+        />
+        <SummaryCard
+          label="New discoveries"
+          value={summary.newDiscoveries.toLocaleString()}
+          hint="Tracks whose first recorded listen was in this period."
+        />
+        <SummaryCard
+          label="Longest streak"
+          value={`${summary.longestStreak}d`}
+          hint="Most consecutive calendar days with at least one listen."
+        />
         <SummaryCard
           label="Busiest day"
           value={summary.busiestDay ? formatDate(summary.busiestDay.date) : "-"}
-          hint={summary.busiestDay ? `${summary.busiestDay.listens} listens` : undefined}
+          hint={summary.busiestDay ? `${formatListenCount(summary.busiestDay.listens)} that day.` : "No listens in this period."}
         />
         <SummaryCard
           label="Peak hour"
           value={summary.peakHour ? formatHour(summary.peakHour.hour) : "-"}
-          hint={summary.peakHour ? `${summary.peakHour.listens} listens` : undefined}
+          hint={summary.peakHour ? `${formatListenCount(summary.peakHour.listens)} in this local-time hour.` : "No listens in this period."}
         />
       </div>
 
@@ -364,8 +405,16 @@ function StatsContent({ stats }: { stats: StatsDTO }) {
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <FriendRanking title="Friends you listened to" entries={stats.outgoingFriends} />
-        <FriendRanking title="Friends who listened to you" entries={stats.incomingFriends} />
+        <FriendRanking
+          title="Friends’ tracks you played"
+          hint="Ranked by your listens to tracks they own."
+          entries={stats.outgoingFriends}
+        />
+        <FriendRanking
+          title="Friends who played your tracks"
+          hint="Ranked by their listens to tracks you own."
+          entries={stats.incomingFriends}
+        />
       </div>
     </div>
   );
@@ -382,14 +431,11 @@ export default function StatsPanel({ active }: { active: boolean }) {
   const [error, setError] = useState<{ range: StatsRange; message: string } | null>(null);
 
   useEffect(() => {
-    if (
-      !active ||
-      !timeZone ||
-      cache[range] ||
-      error?.range === range
-    ) {
+    if (!active || !timeZone || error?.range === range) {
       return;
     }
+    // Re-entering Stats should pick up listens recorded since the previous
+    // visit. Keep the last response visible while this fresh request runs.
     const controller = new AbortController();
     api<StatsDTO>(`/stats?range=${range}&tz=${encodeURIComponent(timeZone)}`, {
       signal: controller.signal,
@@ -404,13 +450,23 @@ export default function StatsPanel({ active }: { active: boolean }) {
         }
       });
     return () => controller.abort();
-  }, [active, cache, error, range, timeZone]);
+  }, [active, error, range, timeZone]);
 
   const stats = cache[range];
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end overflow-x-auto pb-1">
-        <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-fg-muted">
+          A listen counts after at least 50% of a track has played. Dates and
+          hours use your device’s local time.
+        </p>
+        <div className="flex justify-end overflow-x-auto pb-1">
+          <SegmentedControl
+            options={RANGE_OPTIONS}
+            value={range}
+            onChange={setRange}
+          />
+        </div>
       </div>
       {error?.range === range ? (
         <div className={`${CARD} flex flex-col items-center gap-3 p-8 text-center`}>

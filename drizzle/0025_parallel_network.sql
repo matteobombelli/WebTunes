@@ -1,0 +1,2 @@
+ALTER TABLE "listens" DROP CONSTRAINT "listens_seconds_range";--> statement-breakpoint
+ALTER TABLE "listens" ADD CONSTRAINT "listens_seconds_range" CHECK ("listens"."listened_seconds" IS NULL OR "listens"."listened_seconds" BETWEEN 1 AND 86400);

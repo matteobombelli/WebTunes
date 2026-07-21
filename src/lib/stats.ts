@@ -33,27 +33,6 @@ export function isValidTimeZone(value: string): boolean {
   }
 }
 
-function periodStart(range: StatsRange, end: Date): Date {
-  const start = new Date(end);
-  if (range === "6m") {
-    // Move through day 1 so dates such as August 31 clamp to February's end
-    // instead of overflowing into March.
-    const day = start.getUTCDate();
-    start.setUTCDate(1);
-    start.setUTCMonth(start.getUTCMonth() - 6);
-    const lastDay = new Date(
-      Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)
-    ).getUTCDate();
-    start.setUTCDate(Math.min(day, lastDay));
-  } else if (range === "1y") {
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-  } else {
-    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-    start.setUTCDate(start.getUTCDate() - days);
-  }
-  return start;
-}
-
 function localDateKey(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -64,6 +43,69 @@ function localDateKey(date: Date, timeZone: string): string {
   const value = (kind: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === kind)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+/** Convert a local calendar midnight to its UTC instant, including DST. */
+function zonedMidnight(dateKey: string, timeZone: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const target = Date.UTC(year, month - 1, day);
+  let instant = target;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  // Two passes are enough to resolve the offset on both sides of a DST change;
+  // keep a third for zones with unusual historical transitions.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const parts = formatter.formatToParts(new Date(instant));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((entry) => entry.type === type)?.value ?? 0);
+    const observed = Date.UTC(
+      part("year"),
+      part("month") - 1,
+      part("day"),
+      part("hour"),
+      part("minute"),
+      part("second")
+    );
+    const correction = target - observed;
+    instant += correction;
+    if (correction === 0) break;
+  }
+  return new Date(instant);
+}
+
+function periodStart(
+  range: StatsRange,
+  end: Date,
+  timeZone: string
+): Date {
+  const calendar = new Date(`${localDateKey(end, timeZone)}T12:00:00Z`);
+  if (range === "6m" || range === "1y") {
+    // Clamp month-end dates before adding one day. The +1 makes both endpoints
+    // inclusive without rendering an extra calendar day (Jan 21..Jul 21 is six
+    // months plus one day; Jan 22..Jul 21 is the intended six-month window).
+    const day = calendar.getUTCDate();
+    calendar.setUTCDate(1);
+    calendar.setUTCMonth(
+      calendar.getUTCMonth() - (range === "6m" ? 6 : 12)
+    );
+    const lastDay = new Date(
+      Date.UTC(calendar.getUTCFullYear(), calendar.getUTCMonth() + 1, 0)
+    ).getUTCDate();
+    calendar.setUTCDate(Math.min(day, lastDay) + 1);
+  } else {
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+    calendar.setUTCDate(calendar.getUTCDate() - (days - 1));
+  }
+  return zonedMidnight(calendar.toISOString().slice(0, 10), timeZone);
 }
 
 function denseDays(
@@ -105,7 +147,7 @@ export async function getUserStats(
   timeZone: string
 ): Promise<StatsDTO> {
   const end = new Date();
-  const start = periodStart(range, end);
+  const start = periodStart(range, end, timeZone);
   const friendIds = await friendIdsOf(userId);
   const inPeriod = and(
     eq(listens.userId, userId),
@@ -123,7 +165,7 @@ export async function getUserStats(
   const localPlayedAt = sql`(${listens.playedAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}`;
   const dayExpression = sql<string>`to_char(${localPlayedAt}, 'YYYY-MM-DD')`;
   const hourExpression = sql<number>`extract(hour from ${localPlayedAt})::int`;
-  const contributedSeconds = sql`coalesce(${listens.listenedSeconds}, ${tracks.durationSec}, 0)`;
+  const contributedSeconds = listens.listenedSeconds;
 
   const firstListens = db
     .select({
@@ -148,10 +190,8 @@ export async function getUserStats(
   ] = await Promise.all([
     db
       .select({
-        qualifiedListens: sql<number>`count(*)::int`,
+        listens: sql<number>`count(*)::int`,
         listeningSeconds: sql<number>`coalesce(sum(${contributedSeconds}), 0)::float8`,
-        exactListens: sql<number>`count(${listens.listenedSeconds})::int`,
-        estimatedListens: sql<number>`count(*) filter (where ${listens.listenedSeconds} is null and ${tracks.durationSec} is not null)::int`,
         uniqueTracks: sql<number>`count(distinct ${listens.trackId})::int`,
       })
       .from(listens)
@@ -375,10 +415,8 @@ export async function getUserStats(
     null
   );
   const totals = totalsRows[0] ?? {
-    qualifiedListens: 0,
+    listens: 0,
     listeningSeconds: 0,
-    exactListens: 0,
-    estimatedListens: 0,
     uniqueTracks: 0,
   };
 

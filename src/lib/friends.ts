@@ -76,7 +76,7 @@ export async function friendsOf(userId: string): Promise<FriendDTO[]> {
     .groupBy(users.id);
 }
 
-/** Total ≥30s plays by non-owners across a user's own library (the same
+/** Total 50%-qualified plays by non-owners across a user's own library (the same
  *  metric the friend cards show, for the viewer themselves). */
 export async function friendListensOf(userId: string): Promise<number> {
   const [row] = await db

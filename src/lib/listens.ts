@@ -2,29 +2,37 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { listens, tracks } from "@/db/schema";
 import { canAccessTrack } from "@/lib/friends";
+import { listenQualificationSeconds } from "@/lib/listen-telemetry";
 
 export type ListenTelemetry = {
   sessionId: string;
   listenedSeconds: number;
+  durationSeconds: number;
 };
 
-export type RecordListenResult = "ok" | "not_found" | "forbidden";
+export type RecordListenResult =
+  | "ok"
+  | "not_found"
+  | "forbidden"
+  | "not_qualified";
 
 /**
  * Record a qualified play. Telemetry checkpoints update one session row with
  * the greatest cumulative duration received, so retries and out-of-order
- * requests are idempotent. A body-less legacy client still inserts one row.
+ * requests are idempotent. The stored track duration is authoritative; the
+ * client's media duration only covers older tracks whose duration is missing.
  */
 export async function recordListen(
   userId: string,
   trackId: string,
-  telemetry: ListenTelemetry | null
+  telemetry: ListenTelemetry
 ): Promise<RecordListenResult> {
   const [track] = await db
     .select({
       ownerId: tracks.ownerId,
       isPrivate: tracks.isPrivate,
       suggestedImportId: tracks.suggestedImportId,
+      durationSec: tracks.durationSec,
     })
     .from(tracks)
     .where(eq(tracks.id, trackId));
@@ -37,18 +45,17 @@ export async function recordListen(
   }
   if (!(await canAccessTrack(userId, track))) return "forbidden";
 
-  await db.transaction(async (tx) => {
-    if (!telemetry) {
-      await tx.insert(listens).values({ userId, trackId });
-      if (track.ownerId !== userId) {
-        await tx
-          .update(tracks)
-          .set({ friendPlayCount: sql`${tracks.friendPlayCount} + 1` })
-          .where(eq(tracks.id, trackId));
-      }
-      return;
-    }
+  const qualifySeconds = listenQualificationSeconds(
+    track.durationSec ?? telemetry.durationSeconds
+  );
+  if (
+    qualifySeconds == null ||
+    telemetry.listenedSeconds < qualifySeconds
+  ) {
+    return "not_qualified";
+  }
 
+  await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(listens)
       .values({
@@ -62,7 +69,7 @@ export async function recordListen(
 
     if (inserted.length) {
       // A telemetry session contributes to the owner-excluded friend counter
-      // exactly once, when its listen row is first created at the 30s mark.
+      // exactly once, when its listen row first qualifies at 50% playback.
       if (track.ownerId !== userId) {
         await tx
           .update(tracks)
@@ -77,7 +84,7 @@ export async function recordListen(
     await tx
       .update(listens)
       .set({
-        listenedSeconds: sql`greatest(coalesce(${listens.listenedSeconds}, 30), ${telemetry.listenedSeconds})`,
+        listenedSeconds: sql`greatest(${listens.listenedSeconds}, ${telemetry.listenedSeconds})`,
       })
       .where(
         and(
