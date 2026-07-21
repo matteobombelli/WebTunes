@@ -69,7 +69,7 @@ function AddTracksBody({
       .catch(() => {
         // Distinguish "couldn't load" from "nothing to add".
         if (!controller.signal.aborted) {
-          setAll({ tracks: [], nextCursor: null });
+          setAll({ tracks: [], totalCount: 0, nextCursor: null });
           setLoadFailed(true);
         }
       });
@@ -120,6 +120,7 @@ function AddTracksBody({
             ...current.tracks,
             ...next.tracks.filter((track) => !ids.has(track.id)),
           ],
+          totalCount: next.totalCount,
           nextCursor: next.nextCursor,
         };
       });

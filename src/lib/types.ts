@@ -26,6 +26,8 @@ export type TrackDTO = {
 /** One keyset-paginated slice of a newest-first track listing. */
 export type TrackPageDTO = {
   tracks: TrackDTO[];
+  /** Total rows in this scope, independent of this page's cursor and limit. */
+  totalCount: number;
   /** Opaque cursor for the next page; null means the listing is exhausted. */
   nextCursor: string | null;
 };

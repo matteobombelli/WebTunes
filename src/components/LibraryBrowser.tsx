@@ -24,10 +24,8 @@ const TRACKS_PER_PAGE = 100;
 // pages only as their scroll sentinel approaches.
 export default function LibraryBrowser({
   initialPage,
-  totalTracks,
 }: {
   initialPage: TrackPageDTO;
-  totalTracks: number;
 }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
@@ -79,7 +77,7 @@ export default function LibraryBrowser({
             `/search?q=${encodeURIComponent(query)}&scope=${scope}`,
             { signal: controller.signal }
           );
-          page = { tracks, nextCursor: null };
+          page = { tracks, totalCount: tracks.length, nextCursor: null };
         } else {
           // Browsing without a query: let the server return exactly this scope
           // (scope is "all" or "friends" here - "own" renders initialPage),
@@ -96,7 +94,7 @@ export default function LibraryBrowser({
         setSearching(false);
       } catch {
         if (!controller.signal.aborted) {
-          setResults({ tracks: [], nextCursor: null });
+          setResults({ tracks: [], totalCount: 0, nextCursor: null });
           setResultsKey(viewKey);
           setLoadFailed(true);
           setSearching(false);
@@ -128,11 +126,7 @@ export default function LibraryBrowser({
   const countNoun = query ? "result" : "track";
   const hasMore =
     !query && !!page?.nextCursor && (browsingOwn || (fresh && !searching));
-  const trackCount = !tracks
-    ? 0
-    : browsingOwn
-      ? Math.max(totalTracks, tracks.length)
-      : tracks.length;
+  const trackCount = Math.max(page?.totalCount ?? 0, tracks?.length ?? 0);
 
   const appendPage = useCallback((current: TrackPageDTO, next: TrackPageDTO) => {
     const ids = new Set(current.tracks.map((track) => track.id));
@@ -141,6 +135,7 @@ export default function LibraryBrowser({
         ...current.tracks,
         ...next.tracks.filter((track) => !ids.has(track.id)),
       ],
+      totalCount: next.totalCount,
       nextCursor: next.nextCursor,
     };
   }, []);
@@ -222,7 +217,7 @@ export default function LibraryBrowser({
         >
           <p className="mb-1 text-sm text-fg-muted">
             {trackCount}
-            {!browsingOwn && hasMore ? "+" : ""} {countNoun}
+            {" "}{countNoun}
             {trackCount === 1 ? "" : "s"}
           </p>
           <TrackList

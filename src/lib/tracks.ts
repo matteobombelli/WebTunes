@@ -112,12 +112,14 @@ function afterTrackCursor(cursor?: TrackCursor) {
 function toTrackPage<T extends { cursorCreatedAt: string; track: TrackRow }>(
   rows: T[],
   limit: number,
+  totalCount: number,
   map: (row: T) => TrackDTO
 ): TrackPageDTO {
   const pageRows = rows.slice(0, limit);
   const last = pageRows.at(-1);
   return {
     tracks: pageRows.map(map),
+    totalCount,
     nextCursor:
       rows.length > limit && last
         ? encodeTrackCursor({
@@ -217,22 +219,24 @@ export async function listOwnTracksPage(
   limit: number,
   cursor?: TrackCursor
 ): Promise<TrackPageDTO> {
-  const rows = await db
-    .select({ track: trackDtoColumns, cursorCreatedAt })
-    .from(tracks)
-    .where(and(eq(tracks.ownerId, userId), isLibraryTrack(), afterTrackCursor(cursor)))
-    .orderBy(desc(tracks.createdAt), desc(tracks.id))
-    .limit(limit + 1);
-  return toTrackPage(rows, limit, (r) => toTrackDTO(r.track));
+  const scopeFilter = and(eq(tracks.ownerId, userId), isLibraryTrack());
+  const [rows, totalCount] = await Promise.all([
+    db
+      .select({ track: trackDtoColumns, cursorCreatedAt })
+      .from(tracks)
+      .where(and(scopeFilter, afterTrackCursor(cursor)))
+      .orderBy(desc(tracks.createdAt), desc(tracks.id))
+      .limit(limit + 1),
+    countTracksWhere(scopeFilter),
+  ]);
+  return toTrackPage(rows, limit, totalCount, (r) => toTrackDTO(r.track));
 }
 
-/** How many tracks the user owns - tells the library page whether its partial
- *  initial payload covers the whole library. */
-export async function countOwnTracks(userId: string): Promise<number> {
+async function countTracksWhere(where: ReturnType<typeof and>): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(tracks)
-    .where(and(eq(tracks.ownerId, userId), isLibraryTrack()));
+    .where(where);
   return row?.count ?? 0;
 }
 
@@ -280,30 +284,31 @@ export async function listAccessibleTracksPage(
   cursor?: TrackCursor
 ): Promise<TrackPageDTO> {
   const friendIds = await friendIdsOf(userId);
-  const rows = await db
-    .select({ track: trackDtoColumns, ownerName: users.name, cursorCreatedAt })
-    .from(tracks)
-    .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(
-      and(
-        isLibraryTrack(),
-        or(
-          eq(tracks.ownerId, userId),
-          friendIds.length
-            ? and(
-                inArray(tracks.ownerId, friendIds),
-                eq(tracks.isPrivate, false),
-                hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
-                hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
-              )
-            : sql`false`
-        ),
-        afterTrackCursor(cursor)
-      )
+  const scopeFilter = and(
+    isLibraryTrack(),
+    or(
+      eq(tracks.ownerId, userId),
+      friendIds.length
+        ? and(
+            inArray(tracks.ownerId, friendIds),
+            eq(tracks.isPrivate, false),
+            hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+            hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
+          )
+        : sql`false`
     )
-    .orderBy(desc(tracks.createdAt), desc(tracks.id))
-    .limit(limit + 1);
-  return toTrackPage(rows, limit, (r) =>
+  );
+  const [rows, totalCount] = await Promise.all([
+    db
+      .select({ track: trackDtoColumns, ownerName: users.name, cursorCreatedAt })
+      .from(tracks)
+      .innerJoin(users, eq(tracks.ownerId, users.id))
+      .where(and(scopeFilter, afterTrackCursor(cursor)))
+      .orderBy(desc(tracks.createdAt), desc(tracks.id))
+      .limit(limit + 1),
+    countTracksWhere(scopeFilter),
+  ]);
+  return toTrackPage(rows, limit, totalCount, (r) =>
     toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName)
   );
 }
@@ -345,24 +350,27 @@ export async function listFriendsTracksPage(
   cursor?: TrackCursor
 ): Promise<TrackPageDTO> {
   const friendIds = await friendIdsOf(userId);
-  if (!friendIds.length) return { tracks: [], nextCursor: null };
-  const rows = await db
-    .select({ track: trackDtoColumns, ownerName: users.name, cursorCreatedAt })
-    .from(tracks)
-    .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(
-      and(
-        isLibraryTrack(),
-        inArray(tracks.ownerId, friendIds),
-        eq(tracks.isPrivate, false),
-        hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
-        hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined,
-        afterTrackCursor(cursor)
-      )
-    )
-    .orderBy(desc(tracks.createdAt), desc(tracks.id))
-    .limit(limit + 1);
-  return toTrackPage(rows, limit, (r) => toTrackDTO(r.track, r.ownerName));
+  if (!friendIds.length) return { tracks: [], totalCount: 0, nextCursor: null };
+  const scopeFilter = and(
+    isLibraryTrack(),
+    inArray(tracks.ownerId, friendIds),
+    eq(tracks.isPrivate, false),
+    hideFriendDuplicates ? notDuplicateOfOwn(userId) : undefined,
+    hideFriendDuplicates ? canonicalFriendCopy(friendIds) : undefined
+  );
+  const [rows, totalCount] = await Promise.all([
+    db
+      .select({ track: trackDtoColumns, ownerName: users.name, cursorCreatedAt })
+      .from(tracks)
+      .innerJoin(users, eq(tracks.ownerId, users.id))
+      .where(and(scopeFilter, afterTrackCursor(cursor)))
+      .orderBy(desc(tracks.createdAt), desc(tracks.id))
+      .limit(limit + 1),
+    countTracksWhere(scopeFilter),
+  ]);
+  return toTrackPage(rows, limit, totalCount, (r) =>
+    toTrackDTO(r.track, r.ownerName)
+  );
 }
 
 /**

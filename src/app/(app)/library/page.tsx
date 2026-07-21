@@ -1,5 +1,5 @@
 import { requirePageUser } from "@/lib/auth-helpers";
-import { countOwnTracks, listOwnTracksPage } from "@/lib/tracks";
+import { listOwnTracksPage } from "@/lib/tracks";
 import ImportButton from "@/components/ImportButton";
 import LibraryBrowser from "@/components/LibraryBrowser";
 import UploadButton from "@/components/UploadButton";
@@ -11,10 +11,7 @@ const INITIAL_TRACKS = 200;
 
 export default async function LibraryPage() {
   const user = await requirePageUser();
-  const [initialPage, totalTracks] = await Promise.all([
-    listOwnTracksPage(user.id, INITIAL_TRACKS),
-    countOwnTracks(user.id),
-  ]);
+  const initialPage = await listOwnTracksPage(user.id, INITIAL_TRACKS);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -25,7 +22,7 @@ export default async function LibraryPage() {
           <UploadButton />
         </div>
       </div>
-      <LibraryBrowser initialPage={initialPage} totalTracks={totalTracks} />
+      <LibraryBrowser initialPage={initialPage} />
     </div>
   );
 }
