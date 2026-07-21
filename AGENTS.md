@@ -280,7 +280,11 @@ setup, and architecture rationale.
   artist MBIDs in `track_identities`. `LISTENBRAINZ_TOKEN` is a server token used
   only for that mapping call; no listen history is read or submitted. AcoustID
   is a bounded fallback (at most 2 queued per pass) only for missing tags or a
-  completed textual mapping miss, never the normal Top-100 path.
+  completed textual mapping miss, never the normal Top-100 path. Candidate
+  downloads remain globally serial, but claims are a persistent priority queue:
+  the user with the fewest `ready` + `importing` suggestions goes next, with
+  candidate age as the tie-breaker. This gives round-robin behavior across
+  users and survives restarts without an in-memory cursor.
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`

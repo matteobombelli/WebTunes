@@ -582,7 +582,19 @@ async function claimCandidate(): Promise<SuggestedImport | null> {
       .select()
       .from(suggestedImports)
       .where(eq(suggestedImports.status, "queued"))
-      .orderBy(asc(suggestedImports.createdAt))
+      // Persistent priority queue: give the next import to the user with the
+      // fewest delivered/in-flight suggestions. Unlike an in-memory cursor,
+      // this stays fair across restarts and lets zero-ready users catch up
+      // immediately after an initially FIFO-filled deployment.
+      .orderBy(
+        sql<number>`(
+          select count(*)
+          from suggested_imports as user_pool
+          where user_pool.user_id = ${suggestedImports.userId}
+            and user_pool.status in ('ready', 'importing')
+        )`,
+        asc(suggestedImports.createdAt)
+      )
       .limit(1);
     if (!next) return null;
     const [claimed] = await tx
