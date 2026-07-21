@@ -151,6 +151,7 @@ export async function getUserStats(
   const friendIds = await friendIdsOf(userId);
   const inPeriod = and(
     eq(listens.userId, userId),
+    eq(listens.includeInStats, true),
     gte(listens.playedAt, start),
     lte(listens.playedAt, end)
   );
@@ -173,7 +174,9 @@ export async function getUserStats(
       firstPlayedAt: sql<Date>`min(${listens.playedAt})`.as("first_played_at"),
     })
     .from(listens)
-    .where(eq(listens.userId, userId))
+    .where(
+      and(eq(listens.userId, userId), eq(listens.includeInStats, true))
+    )
     .groupBy(listens.trackId)
     .as("first_listens");
 
@@ -293,6 +296,7 @@ export async function getUserStats(
           .where(
             and(
               inArray(listens.userId, friendIds),
+              eq(listens.includeInStats, true),
               isLibraryTrack(),
               gte(listens.playedAt, start),
               lte(listens.playedAt, end),

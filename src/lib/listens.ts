@@ -84,7 +84,7 @@ export async function recordListen(
     await tx
       .update(listens)
       .set({
-        listenedSeconds: sql`greatest(${listens.listenedSeconds}, ${telemetry.listenedSeconds})`,
+        listenedSeconds: sql`greatest(coalesce(${listens.listenedSeconds}, ${telemetry.listenedSeconds}), ${telemetry.listenedSeconds})`,
       })
       .where(
         and(

@@ -231,7 +231,7 @@ export const tracks = pgTable(
       .notNull()
       .default("none"),
     isPrivate: boolean("is_private").notNull().default(false),
-    // Times a non-owner played at least 50% of this track.
+    // Historical non-owner listens (legacy: 30 seconds; current: 50%).
     friendPlayCount: integer("friend_play_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     // search_vector tsvector generated column + GIN index added via raw SQL
@@ -353,10 +353,12 @@ export const listens = pgTable(
     trackId: uuid("track_id")
       .notNull()
       .references(() => tracks.id, { onDelete: "cascade" }),
-    // One session is updated cumulatively, so retrying or reordering a
-    // checkpoint never creates a new play or reduces its listening time.
-    sessionId: uuid("session_id").notNull(),
-    listenedSeconds: integer("listened_seconds").notNull(),
+    // Present for current telemetry. Recovered pre-telemetry rows keep these
+    // NULL and remain available to Discover/friend activity, but are explicitly
+    // excluded from Stats by includeInStats.
+    sessionId: uuid("session_id"),
+    listenedSeconds: integer("listened_seconds"),
+    includeInStats: boolean("include_in_stats").notNull().default(true),
     playedAt: timestamp("played_at", { mode: "date" }).notNull().defaultNow(),
   },
   (l) => [
@@ -367,7 +369,11 @@ export const listens = pgTable(
     uniqueIndex("listens_session_id_idx").on(l.sessionId),
     check(
       "listens_seconds_range",
-      sql`${l.listenedSeconds} BETWEEN 1 AND 86400`
+      sql`${l.listenedSeconds} IS NULL OR ${l.listenedSeconds} BETWEEN 1 AND 86400`
+    ),
+    check(
+      "listens_stats_require_telemetry",
+      sql`NOT ${l.includeInStats} OR (${l.sessionId} IS NOT NULL AND ${l.listenedSeconds} IS NOT NULL)`
     ),
   ]
 );

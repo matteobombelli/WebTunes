@@ -14,7 +14,7 @@ export type TrackDTO = {
   mimeType: string | null;
   fileSize: number | null;
   isPrivate: boolean;
-  /** Times a non-owner played at least 50% of this track. */
+  /** Historical non-owner listens (legacy 30-second + current 50% rules). */
   friendPlayCount: number;
   createdAt: string;
   /** Present when the track belongs to someone else (friend views, search). */
@@ -75,7 +75,7 @@ export type FriendDTO = {
   id: string;
   name: string;
   /**
-   * Total 50%-qualified plays by non-owners across this friend's whole library
+   * Historical non-owner listens across this friend's whole library
    * (sum of tracks.friend_play_count). Only set by `friendsOf`; absent in
    * username search results and friend-request users.
    */
