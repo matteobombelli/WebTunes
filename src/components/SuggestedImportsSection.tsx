@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckIcon, PlayIcon, XIcon } from "@/components/icons";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlayIcon,
+  XIcon,
+} from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import { sectionHeadingClass } from "@/components/DiscoverSection";
 import { api } from "@/lib/api";
@@ -20,8 +26,46 @@ export default function SuggestedImportsSection({
 }) {
   const [pool, setPool] = useState(initialPool);
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
   const current = useCurrentTrack();
   const router = useRouter();
+
+  const updateScrollControls = useCallback(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    setCanScrollLeft(carousel.scrollLeft > 1);
+    setCanScrollRight(
+      carousel.scrollLeft + carousel.clientWidth < carousel.scrollWidth - 1
+    );
+  }, []);
+
+  useEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    updateScrollControls();
+    const resizeObserver = new ResizeObserver(updateScrollControls);
+    resizeObserver.observe(carousel);
+    window.addEventListener("resize", updateScrollControls);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScrollControls);
+    };
+  }, [pool.items.length, updateScrollControls]);
+
+  const scrollCarousel = (direction: -1 | 1) => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    carousel.scrollBy({
+      left: direction * Math.max(carousel.clientWidth * 0.8, 192),
+      behavior: "smooth",
+    });
+  };
 
   useEffect(() => {
     if (
@@ -99,12 +143,36 @@ export default function SuggestedImportsSection({
             Preview them now. Keep what you love, reject what you don’t.
           </p>
         </div>
-        <span className="shrink-0 text-xs text-fg-subtle">
-          {pool.items.length}/{pool.target}
-          {(pool.processing > 0 || pool.items.length < pool.target) &&
-            !pool.blockedReason &&
-            " · refilling"}
-        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-xs text-fg-subtle">
+            {pool.items.length}/{pool.target}
+            {(pool.processing > 0 || pool.items.length < pool.target) &&
+              !pool.blockedReason &&
+              " · refilling"}
+          </span>
+          {pool.items.length > 0 && (
+            <div className="hidden items-center gap-1 md:flex">
+              <button
+                type="button"
+                onClick={() => scrollCarousel(-1)}
+                disabled={!canScrollLeft}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface-1 text-fg-muted transition hover:border-accent hover:bg-surface-2 hover:text-fg disabled:pointer-events-none disabled:opacity-35"
+                aria-label="Previous suggested imports"
+              >
+                <ChevronLeftIcon size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollCarousel(1)}
+                disabled={!canScrollRight}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface-1 text-fg-muted transition hover:border-accent hover:bg-surface-2 hover:text-fg disabled:pointer-events-none disabled:opacity-35"
+                aria-label="Next suggested imports"
+              >
+                <ChevronRightIcon size={18} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {pool.items.length === 0 ? (
@@ -112,7 +180,11 @@ export default function SuggestedImportsSection({
           {emptyMessage}
         </div>
       ) : (
-        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+        <div
+          ref={carouselRef}
+          onScroll={updateScrollControls}
+          className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth px-1 pb-2 md:overflow-x-hidden"
+        >
           {pool.items.map((item) => {
             const pending = busy.has(item.id);
             return (
@@ -157,19 +229,21 @@ export default function SuggestedImportsSection({
                       type="button"
                       disabled={pending}
                       onClick={() => void mutate(item.id, "accept")}
-                      className="flex items-center justify-center gap-1 rounded-md bg-accent px-2 py-2 text-xs font-semibold text-accent-fg transition hover:bg-accent-hover disabled:opacity-50"
+                      className="flex h-10 items-center justify-center gap-1 rounded-md bg-accent px-2 text-xs font-semibold text-accent-fg transition hover:bg-accent-hover disabled:opacity-50"
                       aria-label={`Keep ${item.track.title}`}
                     >
-                      <CheckIcon className="h-4 w-4" /> Keep
+                      <CheckIcon className="h-5 w-5 md:h-4 md:w-4" />
+                      <span className="hidden md:inline">Keep</span>
                     </button>
                     <button
                       type="button"
                       disabled={pending}
                       onClick={() => void mutate(item.id, "reject")}
-                      className="flex items-center justify-center gap-1 rounded-md border border-border px-2 py-2 text-xs font-semibold text-fg-muted transition hover:border-red-400/60 hover:text-red-400 disabled:opacity-50"
+                      className="flex h-10 items-center justify-center gap-1 rounded-md border border-border px-2 text-xs font-semibold text-fg-muted transition hover:border-red-400/60 hover:text-red-400 disabled:opacity-50"
                       aria-label={`Reject ${item.track.title}`}
                     >
-                      <XIcon className="h-4 w-4" /> Reject
+                      <XIcon className="h-5 w-5 md:h-4 md:w-4" />
+                      <span className="hidden md:inline">Reject</span>
                     </button>
                   </div>
                 </div>
