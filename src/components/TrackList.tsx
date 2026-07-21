@@ -432,7 +432,7 @@ export default function TrackList({
   // "Select…" button until the user turns this on (Clear turns it back off).
   const [selectMode, setSelectMode] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
-  const [preparingSort, setPreparingSort] = useState(false);
+  const [preparingSort, setPreparingSort] = useState<SortKey | null>(null);
 
   // Drag-to-reorder is opt-in like select, and mutually exclusive with it. Only
   // offered when a persist handler is wired; entering it clears any active sort
@@ -505,9 +505,8 @@ export default function TrackList({
           ? { key, dir: -1 }
           : null;
     if (next && prepareSort) {
-      setPreparingSort(true);
-      const ready = await prepareSort();
-      setPreparingSort(false);
+      setPreparingSort(key);
+      const ready = await prepareSort().finally(() => setPreparingSort(null));
       if (!ready) return;
     }
     setSort(next);
@@ -533,13 +532,22 @@ export default function TrackList({
     sortable ? (
       <button
         onClick={() => void cycleSort(key)}
-        disabled={preparingSort}
-        className="relative inline-flex items-center uppercase hover:text-fg-muted disabled:cursor-wait disabled:opacity-60"
+        disabled={preparingSort !== null}
+        aria-busy={preparingSort === key}
+        className="relative inline-flex items-center uppercase hover:text-fg-muted disabled:cursor-default disabled:opacity-70"
       >
         {label}
         {/* Positioned outside the flow so the chevron never shifts the label -
             keeps the centered icon columns (duration, plays) truly centered. */}
-        {sort?.key === key && (
+        {preparingSort === key ? (
+          <span className="absolute inset-y-0 left-full flex w-4 items-center justify-center">
+            <span
+              aria-hidden="true"
+              className="h-3 w-3 animate-spin rounded-full border-2 border-surface-3 border-r-accent-bright border-t-accent-bright shadow-[0_0_8px_rgb(129_140_248/0.35)]"
+            />
+            <span className="sr-only">Preparing sort</span>
+          </span>
+        ) : sort?.key === key ? (
           <span className="absolute inset-y-0 left-full flex w-3.5 items-center justify-center">
             {sort.dir === 1 ? (
               <ChevronUpIcon size={11} />
@@ -547,7 +555,7 @@ export default function TrackList({
               <ChevronDownIcon size={11} />
             )}
           </span>
-        )}
+        ) : null}
       </button>
     ) : (
       label
