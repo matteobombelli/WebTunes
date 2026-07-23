@@ -121,7 +121,7 @@ type TrackRowProps = {
   showOwner: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  playQueue: (tracks: TrackDTO[], startIndex: number) => void;
+  playQueue: (tracks: TrackDTO[], startIndex: number) => number;
   onToggleSelect: (id: string, shiftKey: boolean) => void;
   onRemove?: (track: TrackDTO) => Promise<void>;
   removeLabel?: string;
@@ -393,6 +393,7 @@ export default function TrackList({
   loadingMore = false,
   onLoadMore,
   prepareSort,
+  loadCompleteCollection,
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
@@ -421,9 +422,14 @@ export default function TrackList({
   onLoadMore?: () => void;
   /** Ensures a remotely-paginated collection is complete before a local sort. */
   prepareSort?: () => Promise<boolean>;
+  /**
+   * Returns the complete remotely-paginated collection. Playback starts from
+   * the supplied page immediately, then uses this to expand the active queue.
+   */
+  loadCompleteCollection?: () => Promise<TrackDTO[] | null>;
 }) {
   const router = useRouter();
-  const playQueue = usePlayerStore((s) => s.playQueue);
+  const storePlayQueue = usePlayerStore((s) => s.playQueue);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = useCurrentTrack();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
@@ -433,6 +439,28 @@ export default function TrackList({
   const [selectMode, setSelectMode] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
   const [preparingSort, setPreparingSort] = useState<SortKey | null>(null);
+
+  const playQueue = useCallback(
+    (queueTracks: TrackDTO[], startIndex: number) => {
+      const session = storePlayQueue(queueTracks, startIndex);
+      if (loadCompleteCollection) {
+        void loadCompleteCollection()
+          .then((complete) => {
+            if (complete) {
+              usePlayerStore
+                .getState()
+                .completeCollection(session, complete);
+            }
+          })
+          .catch(() => {
+            // Best-effort: the paginated queue already started and remains
+            // usable. Background completion failures are intentionally silent.
+          });
+      }
+      return session;
+    },
+    [loadCompleteCollection, storePlayQueue]
+  );
 
   // Drag-to-reorder is opt-in like select, and mutually exclusive with it. Only
   // offered when a persist handler is wired; entering it clears any active sort

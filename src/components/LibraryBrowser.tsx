@@ -12,9 +12,9 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 import { SCOPES } from "@/components/ui/scopes";
 
-// Session cache of the pages loaded for each shared scope (+ the duplicate
-// setting, which changes the server result). Navigating back restores the
-// loaded window immediately while its first page revalidates.
+// Session cache of the tracks loaded for each shared scope (+ the duplicate
+// setting, which changes the server result). A cursor page renders first; the
+// complete scope replaces it in the background and is restored on navigation.
 const scopeCache = new Map<string, TrackPageDTO>();
 
 const TRACKS_PER_PAGE = 100;
@@ -30,6 +30,10 @@ export default function LibraryBrowser({
   const [q, setQ] = useState("");
   const [scope, setScope] = usePersistedScope("webtunes:library-scope");
   const [results, setResults] = useState<TrackPageDTO | null>(null);
+  // Changes only when a new first page lands, not when cursor/full results
+  // extend it. It keeps complete-scope promises tied to the snapshot that
+  // started them.
+  const [resultsRevision, setResultsRevision] = useState(0);
   // Which view `results` belongs to, so a scope/query change can tell fresh
   // results from a previous view's (and fall back to the cache meanwhile).
   const [resultsKey, setResultsKey] = useState<string | null>(null);
@@ -52,21 +56,35 @@ export default function LibraryBrowser({
   const [ownPage, setOwnPage] = useState(() => ({
     snapshot: initialPage,
     page: initialPage,
+    revision: 0,
   }));
   if (ownPage.snapshot !== initialPage) {
-    setOwnPage({ snapshot: initialPage, page: initialPage });
+    setOwnPage({
+      snapshot: initialPage,
+      page: initialPage,
+      revision: ownPage.revision + 1,
+    });
   }
 
   const query = q.trim();
   const browsingOwn = !query && scope === "own";
   const cacheKey = `${scope}:${hideDuplicates ? 1 : 0}`;
   const viewKey = query ? `q:${scope}:${query}` : cacheKey;
-  const activeViewKeyRef = useRef(viewKey);
-  const sortLoadPromiseRef = useRef<Promise<boolean> | null>(null);
+  const completeLoadKey = query
+    ? null
+    : `${viewKey}:${
+        browsingOwn
+          ? `own-${ownPage.revision}`
+          : `remote-${resultsRevision}-refresh-${refreshKey}`
+      }`;
+  const activeCompleteLoadKeyRef = useRef(completeLoadKey);
+  const completeLoadPromisesRef = useRef(
+    new Map<string, Promise<TrackDTO[] | null>>()
+  );
 
   useEffect(() => {
-    activeViewKeyRef.current = viewKey;
-  }, [viewKey]);
+    activeCompleteLoadKeyRef.current = completeLoadKey;
+  }, [completeLoadKey]);
 
   useEffect(() => {
     // Own-library browsing renders initialPage; stale results are ignored.
@@ -96,6 +114,7 @@ export default function LibraryBrowser({
         if (!query) scopeCache.set(cacheKey, page);
         setResults(page);
         setResultsKey(viewKey);
+        setResultsRevision((revision) => revision + 1);
         setLoadFailed(false);
         setSearching(false);
       } catch {
@@ -186,49 +205,93 @@ export default function LibraryBrowser({
     viewKey,
   ]);
 
-  // TrackList sorts locally. Before allowing that, replace the current
-  // keyset-paginated slice with the complete current scope. The existing
-  // no-limit GET is intentional API surface and preserves the same access and
-  // friend-duplicate rules as the paginated endpoint.
-  const prepareSort = useCallback((): Promise<boolean> => {
-    if (query || !page?.nextCursor) return Promise.resolve(true);
-    if (sortLoadPromiseRef.current) return sortLoadPromiseRef.current;
+  // Fetch the complete current scope once per first-page snapshot. The same
+  // promise feeds background list completion, local sorting, and a queue that
+  // started before completion, so those paths never duplicate the large pull.
+  const loadCompleteCollection =
+    useCallback((): Promise<TrackDTO[] | null> => {
+      if (query || !page) return Promise.resolve(null);
+      if (!page.nextCursor) return Promise.resolve(page.tracks);
+      if (!completeLoadKey) return Promise.resolve(null);
 
-    const requestedViewKey = viewKey;
-    const task = (async () => {
-      setLoadingMore(true);
-      setLoadMoreFailed(false);
-      try {
-        const scopeParam = browsingOwn ? "" : `?scope=${scope}`;
-        const allTracks = await api<TrackDTO[]>(`/tracks${scopeParam}`);
-        if (activeViewKeyRef.current !== requestedViewKey) return false;
+      const existing = completeLoadPromisesRef.current.get(completeLoadKey);
+      if (existing) return existing;
 
-        const completePage: TrackPageDTO = {
-          tracks: allTracks,
-          totalCount: allTracks.length,
-          nextCursor: null,
-        };
-        if (browsingOwn) {
-          setOwnPage((current) => ({ ...current, page: completePage }));
-        } else {
-          scopeCache.set(cacheKey, completePage);
-          setResults(completePage);
-          setResultsKey(viewKey);
+      const requestedLoadKey = completeLoadKey;
+      const scopeParam = browsingOwn ? "" : `?scope=${scope}`;
+      const task = (async () => {
+        try {
+          const allTracks = await api<TrackDTO[]>(`/tracks${scopeParam}`);
+          const completePage: TrackPageDTO = {
+            tracks: allTracks,
+            totalCount: allTracks.length,
+            nextCursor: null,
+          };
+
+          // Cache an inactive shared scope for an instant return visit, but
+          // mutate visible state only when this exact snapshot is still active.
+          if (!browsingOwn) scopeCache.set(cacheKey, completePage);
+          if (activeCompleteLoadKeyRef.current === requestedLoadKey) {
+            if (browsingOwn) {
+              setOwnPage((current) => ({ ...current, page: completePage }));
+            } else {
+              setResults(completePage);
+              setResultsKey(viewKey);
+            }
+          }
+          return allTracks;
+        } catch {
+          // Allow a later sort/play action to retry. Ordinary background
+          // completion is best-effort and deliberately has no visible error.
+          completeLoadPromisesRef.current.delete(requestedLoadKey);
+          return null;
         }
-        return true;
-      } catch {
-        if (activeViewKeyRef.current === requestedViewKey) {
-          setLoadMoreFailed(true);
-        }
-        return false;
-      } finally {
-        sortLoadPromiseRef.current = null;
-        setLoadingMore(false);
-      }
-    })();
-    sortLoadPromiseRef.current = task;
-    return task;
-  }, [browsingOwn, cacheKey, page?.nextCursor, query, scope, viewKey]);
+      })();
+      completeLoadPromisesRef.current.set(requestedLoadKey, task);
+      return task;
+    }, [
+      browsingOwn,
+      cacheKey,
+      completeLoadKey,
+      page,
+      query,
+      scope,
+      viewKey,
+    ]);
+
+  // Preserve the fast cursor-page paint, then backfill the complete scope in
+  // the background. Cursor loading remains available while this request runs.
+  useEffect(() => {
+    if (!query && page?.nextCursor && (browsingOwn || fresh)) {
+      void loadCompleteCollection();
+    }
+  }, [
+    browsingOwn,
+    fresh,
+    loadCompleteCollection,
+    page?.nextCursor,
+    query,
+  ]);
+
+  // TrackList sorts locally, so an explicit sort waits for the shared complete
+  // request. Unlike background playback completion, a failure keeps the
+  // existing retry affordance visible.
+  const prepareSort = useCallback(async (): Promise<boolean> => {
+    if (query || !page?.nextCursor) return true;
+    const requestedLoadKey = completeLoadKey;
+    setLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const allTracks = await loadCompleteCollection();
+      const stillActive =
+        requestedLoadKey !== null &&
+        activeCompleteLoadKeyRef.current === requestedLoadKey;
+      if (!allTracks && stillActive) setLoadMoreFailed(true);
+      return !!allTracks && stillActive;
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [completeLoadKey, loadCompleteCollection, page?.nextCursor, query]);
 
   return (
     <>
@@ -282,6 +345,11 @@ export default function LibraryBrowser({
             loadingMore={loadingMore}
             onLoadMore={loadMore}
             prepareSort={prepareSort}
+            loadCompleteCollection={
+              !query && page?.nextCursor
+                ? loadCompleteCollection
+                : undefined
+            }
             emptyMessage={
               !browsingOwn && loadFailed && fresh
                 ? "Couldn’t load tracks - check your connection."

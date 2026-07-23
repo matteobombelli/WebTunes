@@ -57,23 +57,29 @@ export function copyShareLink(trackId: string) {
   );
 }
 
-// Decide the vertical anchor for a portalled (position: fixed) menu of measured
-// height `menuH`: open downward from the trigger, but flip above it when it
-// wouldn't fit below and there's more room above - like an OS right-click menu.
-// Flipping anchors by the bottom edge (just above the trigger) so the resting
-// spot is already correct and the pop-in animation doesn't fight a shift.
+// Decide the viewport-safe anchor for a portalled (position: fixed) menu.
+// Vertically, open downward from the trigger but flip above it when it fits
+// there better. Horizontally, honor the preferred edge and clamp the measured
+// panel inside the viewport. The latter matters for mobile toolbar/row triggers
+// near the right edge, where a left-anchored playlist picker used to spill off
+// screen.
 const MENU_GAP = 4;
 const MENU_MARGIN = 8; // keep the menu at least this far from the viewport edges
-function menuVerticalAnchor(
+function menuViewportAnchor(
   rect: DOMRect,
-  menuH: number
-): { top: number } | { bottom: number } {
+  menuW: number,
+  menuH: number,
+  align: "left" | "right"
+): ({ top: number } | { bottom: number }) & { left: number } {
   const spaceBelow = window.innerHeight - rect.bottom;
   const spaceAbove = rect.top;
+  const desiredLeft = align === "left" ? rect.left : rect.right - menuW;
+  const maxLeft = Math.max(MENU_MARGIN, window.innerWidth - menuW - MENU_MARGIN);
+  const left = Math.min(maxLeft, Math.max(MENU_MARGIN, desiredLeft));
   // Flip above the trigger only when the menu actually fits there - otherwise a
   // tall menu would run off the top of the screen. Default to opening downward.
   if (menuH + MENU_GAP > spaceBelow && menuH + MENU_GAP <= spaceAbove) {
-    return { bottom: window.innerHeight - rect.top + MENU_GAP };
+    return { bottom: window.innerHeight - rect.top + MENU_GAP, left };
   }
   // Anchored below: clamp the top so a menu taller than the space below stays
   // on-screen instead of overflowing the bottom edge (never above MENU_MARGIN).
@@ -81,7 +87,7 @@ function menuVerticalAnchor(
     rect.bottom + MENU_GAP,
     Math.max(MENU_MARGIN, window.innerHeight - menuH - MENU_MARGIN)
   );
-  return { top };
+  return { top, left };
 }
 
 export function AddToPlaylistMenu({
@@ -109,8 +115,9 @@ export function AddToPlaylistMenu({
   /** Size of the "+" trigger icon (non-bulk, no label). Default 16. */
   iconSize?: number;
 }) {
-  // Floating shares the portal + outside-click machinery the bulk menu uses.
-  const portalled = bulk || floating;
+  // Labelled pickers live inside the already-portalled track kebab. Portal them
+  // too so the parent menu's overflow scrolling cannot clip the playlist list.
+  const portalled = bulk || floating || label !== undefined;
   const [open, setOpen] = useState(false);
   // Keeps the menu mounted briefly after close so it can animate out.
   const [menuClosing, setMenuClosing] = useState(false);
@@ -160,11 +167,15 @@ export function AddToPlaylistMenu({
   useLayoutEffect(() => {
     if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setPos({
-      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
-      left: rect.left,
-    });
-  }, [open, portalled, playlists]);
+    setPos(
+      menuViewportAnchor(
+        rect,
+        menuRef.current.offsetWidth,
+        menuRef.current.offsetHeight,
+        align
+      )
+    );
+  }, [align, open, portalled, playlists]);
 
   const load = async () => {
     if (open) {
@@ -174,7 +185,16 @@ export function AddToPlaylistMenu({
     const rect = triggerRef.current?.getBoundingClientRect();
     // Provisional downward anchor; the effect below flips it up once the menu
     // has mounted and its real height is known.
-    if (rect) setPos({ top: rect.bottom + MENU_GAP, left: rect.left });
+    if (rect) {
+      setPos(
+        menuViewportAnchor(
+          rect,
+          bulk || floating || label ? 224 : 0,
+          0,
+          align
+        )
+      );
+    }
     setOpen(true);
     setMessage(null);
     if (!playlists) {
@@ -271,13 +291,15 @@ export function AddToPlaylistMenu({
           createPortal(
             <div
               ref={menuRef}
+              data-track-actions-submenu
+              onPointerDown={(e) => e.stopPropagation()}
               style={{
                 position: "fixed",
                 top: pos.top,
                 bottom: pos.bottom,
                 left: pos.left,
               }}
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-50 max-h-[80vh] w-56 overflow-y-auto py-1`}
+              className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[72] max-h-[80vh] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto py-1`}
             >
               {items}
             </div>,
@@ -460,7 +482,7 @@ export function TrackActionsMenu({
   const [pos, setPos] = useState<{
     top?: number;
     bottom?: number;
-    right: number;
+    left: number;
   } | null>(null);
 
   const close = useCallback(() => {
@@ -478,7 +500,7 @@ export function TrackActionsMenu({
     // Right-align the menu under the button; the effect below flips it above
     // the button once its real height is known if it would overflow.
     if (rect) {
-      setPos({ top: rect.bottom + MENU_GAP, right: window.innerWidth - rect.right });
+      setPos(menuViewportAnchor(rect, 240, 0, "right"));
     }
     setOpen(true);
   };
@@ -491,10 +513,14 @@ export function TrackActionsMenu({
   useLayoutEffect(() => {
     if (!open || !menuRef.current || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setPos({
-      ...menuVerticalAnchor(rect, menuRef.current.offsetHeight),
-      right: window.innerWidth - rect.right,
-    });
+    setPos(
+      menuViewportAnchor(
+        rect,
+        menuRef.current.offsetWidth,
+        menuRef.current.offsetHeight,
+        "right"
+      )
+    );
   }, [open]);
 
   // Detached from the trigger, so dismiss on outside click and on
@@ -504,7 +530,16 @@ export function TrackActionsMenu({
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      const nestedPlaylistMenu =
+        e.target instanceof Element &&
+        e.target.closest("[data-track-actions-submenu]");
+      if (
+        nestedPlaylistMenu ||
+        menuRef.current?.contains(t) ||
+        triggerRef.current?.contains(t)
+      ) {
+        return;
+      }
       close();
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -537,8 +572,8 @@ export function TrackActionsMenu({
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
-            className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[70] max-h-[80vh] w-60 overflow-y-auto p-2`}
+            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left }}
+            className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[70] max-h-[80vh] w-60 max-w-[calc(100vw-1rem)] overflow-y-auto p-2`}
           >
             <TrackActions {...props} onClose={close} />
           </div>,

@@ -22,6 +22,7 @@ function shuffle<T>(items: T[]): T[] {
 export type QueueItem = { uid: string; track: TrackDTO };
 
 let uidSeq = 0;
+let collectionSessionSeq = 0;
 const wrap = (tracks: TrackDTO[]): QueueItem[] =>
   tracks.map((track) => ({ uid: `q${uidSeq++}`, track }));
 
@@ -43,6 +44,11 @@ type PlayerState = {
    * never in `queue`'s history - so shuffling always reshuffles all of them.
    */
   context: QueueItem[] | null;
+  /**
+   * Identifies a collection that may still be expanded from a paginated
+   * snapshot. Manual queue edits clear it so a late response cannot undo them.
+   */
+  collectionSession: number | null;
   /** Sticky across playQueue calls: new queues start shuffled too. */
   shuffled: boolean;
   /**
@@ -108,7 +114,9 @@ type PlayerState = {
     tracks: TrackDTO[],
     startIndex: number,
     opts?: { collection?: boolean; noAutoSimilar?: boolean }
-  ) => void;
+  ) => number;
+  /** Expand a paginated collection without restarting the playing track. */
+  completeCollection: (session: number, tracks: TrackDTO[]) => void;
   /** Jump to a queue position (queue panel row click). */
   playAt: (index: number) => void;
   /** Insert right after the current track. */
@@ -166,6 +174,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
   index: -1,
   context: null,
+  collectionSession: null,
   shuffled: false,
   unshuffledQueue: null,
   playSimilar: false,
@@ -192,6 +201,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       tracks[startIndex]?.title
     );
     const prev = get();
+    const collectionSession = ++collectionSessionSeq;
     // Starting a brand-new queue means the user picked new content - end any
     // "play similar" radio so it doesn't keep refilling from the old seed.
     const stopSim = {
@@ -230,6 +240,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         queue: [items[startIndex], ...shuffle(rest)],
         index: 0,
         context: items,
+        collectionSession,
         unshuffledQueue: null,
         isPlaying: true,
         currentTime: 0,
@@ -247,6 +258,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         queue: items.slice(startIndex),
         index: 0,
         context: items,
+        collectionSession,
         unshuffledQueue: null,
         isPlaying: true,
         currentTime: 0,
@@ -256,6 +268,71 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ...restart,
       });
     }
+    return collectionSession;
+  },
+
+  completeCollection: (session, tracks) => {
+    const s = get();
+    if (
+      s.collectionSession !== session ||
+      !s.context ||
+      s.index < 0 ||
+      !s.queue[s.index]
+    ) {
+      return;
+    }
+
+    // Reuse the original QueueItems so history/current retain their stable uid
+    // and object identity. A response should only expand the active snapshot:
+    // retain any original item absent from it as a stale-snapshot safety net.
+    const byTrackId = new Map<string, QueueItem>();
+    for (const item of s.context) byTrackId.set(item.track.id, item);
+    for (const item of s.queue) {
+      if (!byTrackId.has(item.track.id)) byTrackId.set(item.track.id, item);
+    }
+    const responseIds = new Set<string>();
+    const completed = tracks.map((track) => {
+      responseIds.add(track.id);
+      return byTrackId.get(track.id) ?? wrap([track])[0];
+    });
+    const context = [
+      ...completed,
+      ...s.context.filter((item) => !responseIds.has(item.track.id)),
+    ];
+
+    const history = s.queue.slice(0, s.index);
+    const current = s.queue[s.index];
+    const playedUids = new Set(history.map((item) => item.uid));
+    const pool = context.filter(
+      (item) => !playedUids.has(item.uid) && item.uid !== current.uid
+    );
+
+    if (s.shuffled) {
+      // The paginated slice supplied instant feedback. Once complete, give all
+      // still-unplayed tracks a fair shuffle while history/current stay fixed.
+      set({
+        queue: [...history, current, ...shuffle(pool)],
+        index: s.index,
+        context,
+        collectionSession: null,
+        unshuffledQueue: null,
+      });
+      return;
+    }
+
+    // Restore the complete in-order continuation after the current track.
+    // Tracks before it remain context-only rather than becoming fake history.
+    const currentPos = context.findIndex((item) => item.uid === current.uid);
+    const upcoming = (
+      currentPos >= 0 ? context.slice(currentPos + 1) : pool
+    ).filter((item) => !playedUids.has(item.uid));
+    set({
+      queue: [...history, current, ...upcoming],
+      index: s.index,
+      context,
+      collectionSession: null,
+      unshuffledQueue: null,
+    });
   },
 
   playAt: (index) => {
@@ -280,6 +357,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         queue: items,
         index: 0,
         context: null,
+        collectionSession: null,
         unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
@@ -299,7 +377,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     // A hand-edited queue no longer matches its collection - drop the context so
     // Shuffle works on the actual queue (and can't silently drop these inserts).
-    set({ queue, unshuffledQueue, context: null });
+    set({ queue, unshuffledQueue, context: null, collectionSession: null });
   },
 
   addToQueue: (tracks) => {
@@ -313,6 +391,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         queue: items,
         index: 0,
         context: null,
+        collectionSession: null,
         unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
@@ -326,6 +405,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ? [...s.unshuffledQueue, ...items]
         : null,
       context: null,
+      collectionSession: null,
     });
   },
 
@@ -348,6 +428,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       context: s.context
         ? s.context.filter((it) => it.uid !== removed.uid)
         : null,
+      collectionSession: null,
     });
   },
 
@@ -371,6 +452,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           queue: [],
           index: -1,
           context: null,
+          collectionSession: null,
           unshuffledQueue: null,
           isPlaying: false,
           currentTime: 0,
@@ -381,6 +463,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           queue: [...before, ...after],
           index: before.length,
           context,
+          collectionSession: null,
           unshuffledQueue,
           isPlaying: true,
           currentTime: 0,
@@ -396,6 +479,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue,
       index: s.index - removedBefore,
       context,
+      collectionSession: null,
       unshuffledQueue,
     });
   },
@@ -430,7 +514,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     // Clearing upcoming means "empty" - drop the context so Shuffle doesn't
     // immediately repopulate it from the collection.
-    set({ queue, unshuffledQueue, context: null });
+    set({ queue, unshuffledQueue, context: null, collectionSession: null });
   },
 
   reorder: (from, to) => {
@@ -451,7 +535,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const queue = [...s.queue];
     const [moved] = queue.splice(from, 1);
     queue.splice(to, 0, moved);
-    set({ queue, index: current ? queue.indexOf(current) : s.index });
+    set({
+      queue,
+      index: current ? queue.indexOf(current) : s.index,
+      collectionSession: null,
+    });
   },
 
   toggleShuffle: () => {
@@ -555,6 +643,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: [s.queue[s.index], ...wrap(tracks)],
       index: 0,
       context: null,
+      collectionSession: null,
       shuffled: false,
       unshuffledQueue: null,
       playSimilar: true,
@@ -645,7 +734,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // via PlayerBar's in-gesture play path. Position is restored by PlayerBar's
     // onLoadedMetadata (not seekRequest, which the seek effect clears too early).
     // context stays null - the restored queue is treated as ad-hoc.
-    set({ queue: wrap(tracks), index, context: null, isPlaying: false, currentTime }),
+    set({
+      queue: wrap(tracks),
+      index,
+      context: null,
+      collectionSession: null,
+      isPlaying: false,
+      currentTime,
+    }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),
