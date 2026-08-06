@@ -90,6 +90,13 @@ function menuViewportAnchor(
   return { top, left };
 }
 
+function menuTransformOrigin(
+  pos: { top?: number; bottom?: number },
+  align: "left" | "right"
+) {
+  return `${align} ${pos.bottom !== undefined ? "bottom" : "top"}`;
+}
+
 export function AddToPlaylistMenu({
   trackIds,
   align = "right",
@@ -262,10 +269,17 @@ export function AddToPlaylistMenu({
           onClick={load}
           disabled={trackIds.length === 0}
           aria-label="Add to playlist"
+          aria-expanded={open}
           title="Add to playlist"
           className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:bg-accent-hover disabled:opacity-40"
         >
-          <PlusIcon size={18} />
+          <span
+            className={`inline-flex transition-transform duration-100 ease-out ${
+              open ? "rotate-45" : ""
+            }`}
+          >
+            <PlusIcon size={18} />
+          </span>
           <span className="hidden md:inline">Add to playlist</span>
         </button>
       ) : (
@@ -273,6 +287,7 @@ export function AddToPlaylistMenu({
           ref={triggerRef}
           onClick={load}
           aria-label="Add to playlist"
+          aria-expanded={open}
           className={
             label
               ? MENU_ROW
@@ -282,7 +297,16 @@ export function AddToPlaylistMenu({
           title="Add to playlist"
         >
           {label && <span>{label}</span>}
-          <PlusIcon size={iconSize} className={label ? "shrink-0 text-fg-muted" : undefined} />
+          <span
+            className={`inline-flex shrink-0 transition-transform duration-100 ease-out ${
+              open ? "rotate-45 text-fg" : ""
+            }`}
+          >
+            <PlusIcon
+              size={iconSize}
+              className={label ? "text-fg-muted" : undefined}
+            />
+          </span>
         </button>
       )}
       {portalled
@@ -298,6 +322,7 @@ export function AddToPlaylistMenu({
                 top: pos.top,
                 bottom: pos.bottom,
                 left: pos.left,
+                transformOrigin: menuTransformOrigin(pos, align),
               }}
               className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[72] max-h-[80vh] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto py-1`}
             >
@@ -307,6 +332,7 @@ export function AddToPlaylistMenu({
           )
         : (open || menuClosing) && (
             <div
+              style={{ transformOrigin: `${align} top` }}
               className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-56 py-1`}
             >
               {items}
@@ -488,7 +514,7 @@ export function TrackActionsMenu({
   const close = useCallback(() => {
     setOpen(false);
     setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 150);
+    setTimeout(() => setMenuClosing(false), 100);
   }, []);
 
   const toggle = () => {
@@ -558,21 +584,36 @@ export function TrackActionsMenu({
         ref={triggerRef}
         onClick={toggle}
         aria-label="Track actions"
+        aria-expanded={open}
         title="Track actions"
         className={`flex h-7 w-7 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-fg ${
+          open ? "bg-surface-3 text-fg" : ""
+        } ${
           open || alwaysVisible
             ? ""
             : "md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
         }`}
       >
-        <EllipsisIcon size={20} />
+        <span
+          className={`inline-flex transition-transform duration-100 ease-out ${
+            open ? "rotate-90" : ""
+          }`}
+        >
+          <EllipsisIcon size={20} />
+        </span>
       </button>
       {(open || menuClosing) &&
         pos &&
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left }}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              bottom: pos.bottom,
+              left: pos.left,
+              transformOrigin: menuTransformOrigin(pos, "right"),
+            }}
             className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[70] max-h-[80vh] w-60 max-w-[calc(100vw-1rem)] overflow-y-auto p-2`}
           >
             <TrackActions {...props} onClose={close} />

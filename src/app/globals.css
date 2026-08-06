@@ -64,6 +64,20 @@ button:not(:disabled):active {
   transform: scale(0.97);
 }
 
+/* Touch screens do not have hover feedback. Keep taps crisp and visible while
+   avoiding iOS's delayed/highlight flash on the app's custom controls. */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  a:active {
+    opacity: 0.84;
+    scale: 0.985;
+  }
+}
+
 /* --- Keyframes -------------------------------------------------------- */
 
 @keyframes pop-in {
@@ -125,13 +139,17 @@ button:not(:disabled):active {
 }
 
 .animate-pop-in {
-  animation: pop-in 0.1s ease-out;
+  animation: pop-in 0.1s ease-out both;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
 }
 .animate-fade-in {
   animation: fade-in 0.1s ease-out;
 }
 .animate-pop-out {
   animation: pop-out 0.1s ease-in forwards;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
 }
 .animate-fade-out {
   animation: fade-out 0.1s ease-in forwards;

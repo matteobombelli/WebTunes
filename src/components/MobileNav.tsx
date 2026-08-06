@@ -39,16 +39,26 @@ export function MobileNav({
             prefetch
             aria-label={label}
             data-tour={`nav-${href.slice(1)}`}
-            className={`flex flex-1 items-center justify-center py-3 ${
+            className={`relative flex flex-1 items-center justify-center py-3 ${
               active ? "text-accent-bright" : "text-fg-muted"
             }`}
           >
-            <span className="relative flex items-center justify-center">
+            <span
+              className={`relative flex items-center justify-center transition-transform duration-100 ease-out ${
+                active ? "-translate-y-0.5 scale-105" : ""
+              }`}
+            >
               <Icon size={26} />
               {href === "/discover" && hasIncomingRequests && (
                 <NotificationDot overlay />
               )}
             </span>
+            {active && (
+              <span
+                aria-hidden
+                className="animate-pop-in absolute bottom-1 h-1 w-1 rounded-full bg-accent-bright"
+              />
+            )}
           </Link>
         );
       })}
@@ -70,7 +80,7 @@ export function MobileTopBar() {
         <button
           onClick={() => usePlayerStore.getState().setSettingsOpen(true)}
           aria-label="Settings"
-          className="flex items-center text-fg-muted hover:text-fg"
+          className="flex items-center rounded-full p-2 text-fg-muted hover:bg-surface-2 hover:text-fg"
         >
           <SettingsIcon size={22} />
         </button>
@@ -78,7 +88,7 @@ export function MobileTopBar() {
           <button
             type="submit"
             aria-label="Sign out"
-            className="flex items-center text-fg-muted hover:text-fg"
+            className="flex items-center rounded-full p-2 text-fg-muted hover:bg-surface-2 hover:text-fg"
           >
             <LogoutIcon size={22} />
           </button>
