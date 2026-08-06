@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  friendships,
   playlistCollaborators,
   playlists,
   playlistTracks,
@@ -17,6 +18,22 @@ import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
 
 export type PlaylistRole = "owner" | "collaborator" | null;
+
+function acceptedCollaboratorFriendship() {
+  return and(
+    eq(friendships.status, "accepted"),
+    or(
+      and(
+        eq(friendships.requesterId, playlists.ownerId),
+        eq(friendships.addresseeId, playlistCollaborators.userId)
+      ),
+      and(
+        eq(friendships.requesterId, playlistCollaborators.userId),
+        eq(friendships.addresseeId, playlists.ownerId)
+      )
+    )
+  );
+}
 
 /**
  * ownerName should be null for the viewer's own playlists. `role` marks the
@@ -45,7 +62,7 @@ export async function toPlaylistDTO(
   };
 }
 
-/** True if the user is a collaborator (not the owner) on this playlist. */
+/** True if the user is a current-friend collaborator (not the owner). */
 async function isCollaborator(
   playlistId: string,
   userId: string
@@ -53,12 +70,18 @@ async function isCollaborator(
   const [row] = await db
     .select({ userId: playlistCollaborators.userId })
     .from(playlistCollaborators)
+    .innerJoin(
+      playlists,
+      eq(playlistCollaborators.playlistId, playlists.id)
+    )
+    .innerJoin(friendships, acceptedCollaboratorFriendship())
     .where(
       and(
         eq(playlistCollaborators.playlistId, playlistId),
         eq(playlistCollaborators.userId, userId)
       )
-    );
+    )
+    .limit(1);
   return !!row;
 }
 
@@ -99,9 +122,14 @@ export async function listCollaborators(
   playlistId: string
 ): Promise<FriendDTO[]> {
   const rows = await db
-    .select({ id: users.id, name: users.name })
+    .selectDistinct({ id: users.id, name: users.name })
     .from(playlistCollaborators)
+    .innerJoin(
+      playlists,
+      eq(playlistCollaborators.playlistId, playlists.id)
+    )
     .innerJoin(users, eq(playlistCollaborators.userId, users.id))
+    .innerJoin(friendships, acceptedCollaboratorFriendship())
     .where(eq(playlistCollaborators.playlistId, playlistId))
     .orderBy(asc(users.name));
   return rows.map((r) => ({ id: r.id, name: r.name }));
@@ -248,8 +276,13 @@ export async function listPlaylistsWithCount(
 ): Promise<PlaylistDTO[]> {
   const counts = playlistTrackCounts();
   const collabIds = db
-    .select({ id: playlistCollaborators.playlistId })
+    .selectDistinct({ id: playlistCollaborators.playlistId })
     .from(playlistCollaborators)
+    .innerJoin(
+      playlists,
+      eq(playlistCollaborators.playlistId, playlists.id)
+    )
+    .innerJoin(friendships, acceptedCollaboratorFriendship())
     .where(eq(playlistCollaborators.userId, userId));
   const rows = await db
     .select({
@@ -292,8 +325,13 @@ export async function listAccessiblePlaylists(
   const friendIds = await friendIdsOf(userId);
   const counts = playlistTrackCounts();
   const collabRows = await db
-    .select({ id: playlistCollaborators.playlistId })
+    .selectDistinct({ id: playlistCollaborators.playlistId })
     .from(playlistCollaborators)
+    .innerJoin(
+      playlists,
+      eq(playlistCollaborators.playlistId, playlists.id)
+    )
+    .innerJoin(friendships, acceptedCollaboratorFriendship())
     .where(eq(playlistCollaborators.userId, userId));
   const collabSet = new Set(collabRows.map((r) => r.id));
   const rows = await db

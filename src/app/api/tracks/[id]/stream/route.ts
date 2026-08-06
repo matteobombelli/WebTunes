@@ -42,11 +42,9 @@ export async function GET(
   }
 
   const { url } = await getPresignedGetUrl(track.s3Key);
-  // Cache the redirect per-browser, under the 1h presigned-URL TTL, so replaying
-  // or skipping back to the same track reuses it without a fresh auth + DB +
-  // presign hop. The SW's offline cache (keyed on this stable path) is checked
-  // first on a cache hit; this only affects the online cache-miss path.
+  // This stable URL is shared by every account in a browser profile. Never let
+  // its authenticated redirect survive a logout/account switch.
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, max-age=3000");
+  res.headers.set("Cache-Control", "private, no-store");
   return res;
 }

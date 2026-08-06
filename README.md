@@ -39,6 +39,10 @@ sharing/privacy features can be demonstrated.
 | Demo1 | demo1@demo.demo | Demo1    |
 | Demo2 | demo2@demo.demo | Demo2    |
 
+The published showcase accounts cannot upload or import music, run importer
+searches, create invites, or delete themselves. Their Library add-music
+controls show `Demo accounts are read-only.` instead.
+
 The script is idempotent (safe to re-run), needs the database and S3 bucket
 from `docker compose up -d` plus internet access to download the tracks, and
 reads `.env.local` for credentials. The passwords are deliberately short for

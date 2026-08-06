@@ -43,12 +43,10 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
 }
 
 const PRESIGN_TTL_SEC = 3600;
-// Reuse a freshly-signed URL for up to this long so repeat list loads (e.g. the
-// Playlists grid's covers) return the *same* URL and the browser serves the
-// image from cache instead of re-fetching a newly-signed one each navigation.
-// Kept short so a reused URL always has ≥55 min of validity left - safely above
-// the 50-min Cache-Control on the /art and /stream redirects, so a browser that
-// cached one of those redirects can never outlive its target.
+// Reuse a freshly-signed URL briefly to avoid repeated signing work when list
+// views request the same object. Authenticated redirect routes are no-store;
+// callers that receive the URL directly can still benefit from target caching.
+// The short window also ensures a reused URL retains at least 55 min validity.
 const PRESIGN_REUSE_MS = 5 * 60 * 1000;
 const PRESIGN_CACHE_CAP = 2000;
 const presignCache = new Map<string, { url: string; signedAt: number }>();
@@ -78,6 +76,14 @@ export async function getPresignedGetUrl(
     if (presignCache.size >= PRESIGN_CACHE_CAP) {
       for (const [k, v] of presignCache) {
         if (now - v.signedAt >= PRESIGN_REUSE_MS) presignCache.delete(k);
+      }
+      // A burst can fill the cache entirely with fresh entries, so expiry-only
+      // cleanup is not enough to enforce the advertised bound. Map iteration
+      // order gives us a cheap oldest-entry eviction for the remaining excess.
+      while (presignCache.size >= PRESIGN_CACHE_CAP) {
+        const oldestKey = presignCache.keys().next().value;
+        if (oldestKey === undefined) break;
+        presignCache.delete(oldestKey);
       }
     }
     presignCache.set(key, { url, signedAt: now });

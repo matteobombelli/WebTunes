@@ -147,12 +147,23 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
     init: async () => {
       if (initStarted) return;
       initStarted = true;
-      await refresh();
-      set({ ready: true });
-      if (navigator.onLine) {
-        const toDownload = await offline.syncPlaylists();
+      try {
         await refresh();
-        if (toDownload.length > 0) get().enqueue(toDownload);
+        set({ ready: true });
+        if (navigator.onLine) {
+          const toDownload = await offline.syncPlaylists();
+          await refresh();
+          if (toDownload.length > 0) get().enqueue(toDownload);
+        }
+      } catch (err) {
+        // Let the Downloads page (or a later remount) retry after a transient
+        // IndexedDB/storage failure instead of wedging forever at ready=false.
+        initStarted = false;
+        log.warn(
+          "downloads",
+          "initialization failed",
+          err instanceof Error ? err.message : String(err)
+        );
       }
     },
 
@@ -199,9 +210,19 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
     purgeForAccountSwitch: async () => {
       log.info("downloads", "purgeForAccountSwitch");
       purgeGeneration++;
+      // The next account must be allowed to hydrate after this store's
+      // module-level one-shot guard was consumed by the previous account.
+      initStarted = false;
       // Reset in-memory state synchronously so the UI can't flash the previous
       // user's downloads while the async storage clear runs.
-      set({ tracks: {}, playlists: {}, queue: [], current: null, storage: null });
+      set({
+        ready: false,
+        tracks: {},
+        playlists: {},
+        queue: [],
+        current: null,
+        storage: null,
+      });
       await offline.purgeAllOfflineData();
     },
   };

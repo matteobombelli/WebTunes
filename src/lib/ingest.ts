@@ -23,21 +23,58 @@ import {
   thumbnailS3Key,
 } from "@/lib/thumbnail";
 
-// The user-facing upload limit. proxyClientMaxBodySize in next.config.ts sits
-// ABOVE this (95mb) so a file near the limit plus multipart overhead isn't
-// silently truncated by the proxy before the route can reject it cleanly.
+// The user-facing upload limit. API routes are excluded from Proxy so Next's
+// much smaller proxyClientMaxBodySize does not truncate track uploads.
 export const MAX_FILE_BYTES = 90 * 1024 * 1024;
 
-export const AUDIO_EXTENSIONS = new Set([
-  "mp3",
-  "m4a",
-  "aac",
-  "flac",
-  "ogg",
-  "opus",
-  "wav",
-  "webm",
+type AudioKind = { ext: string; contentType: string };
+
+const AUDIO_KIND_BY_EXTENSION: Record<string, AudioKind> = {
+  mp3: { ext: "mp3", contentType: "audio/mpeg" },
+  m4a: { ext: "m4a", contentType: "audio/mp4" },
+  aac: { ext: "aac", contentType: "audio/aac" },
+  flac: { ext: "flac", contentType: "audio/flac" },
+  ogg: { ext: "ogg", contentType: "audio/ogg" },
+  opus: { ext: "opus", contentType: "audio/ogg" },
+  wav: { ext: "wav", contentType: "audio/wav" },
+  webm: { ext: "webm", contentType: "audio/webm" },
+};
+
+export const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_KIND_BY_EXTENSION));
+
+// Browsers disagree on several audio Content-Types (notably Safari's m4a and
+// WAV values). Accept the common aliases, but always persist the canonical
+// allowlisted value above. Unknown extensions can still be accepted when the
+// browser supplies one of these recognized types.
+const AUDIO_KIND_BY_MIME = new Map<string, AudioKind>([
+  ["audio/mpeg", AUDIO_KIND_BY_EXTENSION.mp3],
+  ["audio/mp3", AUDIO_KIND_BY_EXTENSION.mp3],
+  ["audio/x-mpeg", AUDIO_KIND_BY_EXTENSION.mp3],
+  ["audio/mp4", AUDIO_KIND_BY_EXTENSION.m4a],
+  ["audio/m4a", AUDIO_KIND_BY_EXTENSION.m4a],
+  ["audio/x-m4a", AUDIO_KIND_BY_EXTENSION.m4a],
+  ["audio/aac", AUDIO_KIND_BY_EXTENSION.aac],
+  ["audio/x-aac", AUDIO_KIND_BY_EXTENSION.aac],
+  ["audio/flac", AUDIO_KIND_BY_EXTENSION.flac],
+  ["audio/x-flac", AUDIO_KIND_BY_EXTENSION.flac],
+  ["audio/ogg", AUDIO_KIND_BY_EXTENSION.ogg],
+  ["application/ogg", AUDIO_KIND_BY_EXTENSION.ogg],
+  ["audio/opus", AUDIO_KIND_BY_EXTENSION.opus],
+  ["audio/wav", AUDIO_KIND_BY_EXTENSION.wav],
+  ["audio/wave", AUDIO_KIND_BY_EXTENSION.wav],
+  ["audio/x-wav", AUDIO_KIND_BY_EXTENSION.wav],
+  ["audio/vnd.wave", AUDIO_KIND_BY_EXTENSION.wav],
+  ["audio/webm", AUDIO_KIND_BY_EXTENSION.webm],
 ]);
+
+function audioKind(filename: string, mimeType: string): AudioKind | null {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const byExtension = AUDIO_KIND_BY_EXTENSION[ext];
+  if (byExtension) return byExtension;
+
+  const normalizedMime = mimeType.split(";", 1)[0].trim().toLowerCase();
+  return AUDIO_KIND_BY_MIME.get(normalizedMime) ?? null;
+}
 
 export type IngestResult =
   | { status: "created"; track: Track }
@@ -52,8 +89,9 @@ export function validateAudioUpload(
   value: unknown
 ): { ok: true; file: File } | { ok: false; error: string } {
   if (!(value instanceof File)) return { ok: false, error: "Missing file" };
-  const ext = value.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!value.type.startsWith("audio/") && !AUDIO_EXTENSIONS.has(ext)) {
+  if (value.size === 0) return { ok: false, error: "Audio file is empty" };
+  if (!audioKind(value.name, value.type)) {
+    const ext = value.name.split(".").pop()?.toLowerCase() ?? "";
     return { ok: false, error: `Unsupported file type: ${value.type || ext}` };
   }
   if (value.size > MAX_FILE_BYTES) {
@@ -112,7 +150,10 @@ export async function ingestTrack({
   /** Canonical identity already supplied by ListenBrainz/MusicBrainz. */
   identity?: KnownTrackIdentity;
 }): Promise<IngestResult> {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (buffer.length === 0) throw new Error("Audio file is empty");
+  const kind = audioKind(filename, mimeType);
+  if (!kind) throw new Error(`Unsupported audio type: ${mimeType || filename}`);
+  const { ext, contentType: canonicalMimeType } = kind;
 
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   const [duplicate] = await db
@@ -159,10 +200,10 @@ export async function ingestTrack({
   // The CLAP embedding used to run here too, but it's the slowest step, so it's
   // deferred to a background queue (enqueueEmbedding, after the row exists).
   const [meta, loudnessLufs, remuxed] = await Promise.all([
-    extractTrackMetadata(buffer, mimeType, filename),
+    extractTrackMetadata(buffer, canonicalMimeType, filename),
     analyzeLoudnessLufs(buffer, ext),
     // iOS Safari can't play Opus-in-Ogg; losslessly re-mux Opus to MP4.
-    remuxOpusToMp4(buffer, ext, mimeType),
+    remuxOpusToMp4(buffer, ext, canonicalMimeType),
   ]);
 
   // Caller overrides win over the file's embedded tags;
@@ -196,16 +237,12 @@ export async function ingestTrack({
 
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
-  // client-supplied filename is untrusted, so only allowlisted extensions reach
-  // the key; the claimed MIME type is untrusted too, so we only keep it when
-  // it's audio/* (anything else gets a neutral Content-Type so it can't be
-  // served as active content - the offline service worker replays this from a
-  // same-origin cache).
-  const originalExt = AUDIO_EXTENSIONS.has(ext) ? ext : "bin";
-  const originalType = mimeType.startsWith("audio/") ? mimeType : null;
+  // client-supplied filename and MIME are untrusted. `audioKind` resolves them
+  // through a fixed allowlist, so only canonical extensions and Content-Types
+  // reach S3/DB or the same-origin offline cache.
   const audioBody = remuxed ? remuxed.body : buffer;
-  const audioExt = remuxed ? remuxed.ext : originalExt;
-  const storedType = remuxed ? remuxed.contentType : originalType;
+  const audioExt = remuxed ? remuxed.ext : ext;
+  const storedType = remuxed ? remuxed.contentType : canonicalMimeType;
   const s3Key = `audio/${userId}/${trackId}.${audioExt}`;
 
   // Measure duration on the EXACT bytes we store (post-remux) so the listed time
@@ -219,7 +256,7 @@ export async function ingestTrack({
   let artS3Key: string | null = null;
   let artThumbS3Key: string | null = null;
   const uploads: Promise<unknown>[] = [
-    uploadObject(s3Key, audioBody, storedType ?? undefined),
+    uploadObject(s3Key, audioBody, storedType),
   ];
   if (cover) {
     artS3Key = `art/${userId}/${trackId}.${cover.ext}`;

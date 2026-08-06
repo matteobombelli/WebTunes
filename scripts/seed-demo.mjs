@@ -76,10 +76,11 @@ function slugify(title) {
 async function upsertUser({ name, email, password }) {
   const passwordHash = await bcrypt.hash(password, 12);
   const { rows } = await pool.query(
-    `insert into users (name, email, password_hash)
-     values ($1, $2, $3)
+    `insert into users (name, email, password_hash, email_verified)
+     values ($1, $2, $3, now())
      on conflict (email) do update set name = excluded.name,
-       password_hash = excluded.password_hash
+       password_hash = excluded.password_hash,
+       email_verified = excluded.email_verified
      returning id`,
     [name, email, passwordHash]
   );

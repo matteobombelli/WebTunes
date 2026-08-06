@@ -56,13 +56,10 @@ export async function GET(
       ? track.artThumbS3Key
       : track.artS3Key;
   const { url } = await getPresignedGetUrl(key);
-  // Cache the redirect per-browser, well under the 1h presigned-URL TTL, so a
-  // list's thumbnails reuse across scroll/navigation without re-hitting the
-  // server (session lookup + DB + access check + presign) on every render. The
-  // stable /art path is kept for the SW's offline art cache; this only affects
-  // online browser caching, and `private` keeps it scoped to this user.
+  // This stable URL is shared by every account in a browser profile. Never let
+  // its authenticated redirect survive a logout/account switch.
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, max-age=3000");
+  res.headers.set("Cache-Control", "private, no-store");
   return res;
 }
 

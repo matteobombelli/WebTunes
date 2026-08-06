@@ -48,12 +48,11 @@ const nextConfig: NextConfig = {
   // the build, so keep it external and required from node_modules at runtime.
   serverExternalPackages: ["@huggingface/transformers"],
   experimental: {
-    // Proxy buffers request bodies in RAM (default cap 10MB), which truncated
-    // track uploads and broke FormData parsing. The app-level file limit is
-    // 90MB (MAX_FILE_BYTES); the proxy cap sits above it so a file near the
-    // limit - plus multipart boundary/field overhead - isn't silently
-    // truncated into a formData() parse error.
-    proxyClientMaxBodySize: "95mb",
+    // Proxy only gates page routes; API routes (including the 90 MB upload
+    // endpoint) are excluded by src/proxy.ts. Keep page/Server Action body
+    // buffering small so unauthenticated requests cannot reserve large chunks
+    // of memory before authentication runs.
+    proxyClientMaxBodySize: "1mb",
   },
   // Search lives in the Library page now; keep old links working.
   async redirects() {

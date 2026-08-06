@@ -4,6 +4,10 @@ import { z } from "zod";
 import { db } from "@/db";
 import { playlists, playlistTracks, tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import {
+  DEMO_READ_ONLY_MESSAGE,
+  isDemoAccount,
+} from "@/lib/demo-accounts";
 import { deleteObject } from "@/lib/s3";
 import { nameSchema, updateDisplayName } from "@/lib/users";
 
@@ -36,6 +40,12 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (isDemoAccount(user.email)) {
+    return NextResponse.json(
+      { error: DEMO_READ_ONLY_MESSAGE },
+      { status: 403 }
+    );
+  }
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (

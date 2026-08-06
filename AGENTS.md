@@ -119,8 +119,12 @@ setup, and architecture rationale.
   single-use, 7-day expiry (`invites` table; `used_at` is the consumed flag - set
   before `used_by_user_id` so it survives a redeemer deletion). `INVITE_BLOCKED_
   EMAILS` (the two demo accounts) can't create invites (`POST /api/invites` 403 +
-  the tab hides the button). Expired-unused rows are dead clutter (a purge
-  script/timer mirroring `purge-expired-shares` is a TODO; negligible at ≤100).
+  the tab hides the button). The same shared demo-account set also blocks track
+  uploads, import creation/search, and account deletion server-side; the Library
+  Upload/Import buttons remain visible for the showcase but show the
+  `Demo accounts are read-only.` toast without opening. Expired-unused rows are
+  dead clutter (a purge script/timer mirroring `purge-expired-shares` is a TODO;
+  negligible at ≤100).
 - Friend-request notifications: incoming pending requests light a red
   `NotificationDot` breadcrumb (Discover nav in `Sidebar`/`MobileNav` ← layout
   fetch, the Friends `SegmentedControl` segment, the Requests tab, the Incoming
@@ -296,11 +300,11 @@ setup, and architecture rationale.
   hides friends' tracks whose normalized title+artist matches one of the
   viewer's own (`notDuplicateOfOwn` in `lib/tracks.ts`) in scope=all/friends
   listings and search; friend profile pages are intentionally unfiltered.
-- Because of `src/proxy.ts`, Next buffers request bodies in RAM, capped by
-  `experimental.proxyClientMaxBodySize` in `next.config.ts` (set to 95mb -
-  deliberately ABOVE the 90 MB `MAX_FILE_BYTES` app limit so a near-limit file
-  plus multipart overhead isn't silently truncated; the default 10MB broke
-  track uploads).
+- Next buffers bodies for routes matched by `src/proxy.ts`. API routes are
+  deliberately excluded from the cookie-presence gate (their handlers enforce
+  real auth), so 90 MB track uploads reach the route without Proxy cloning.
+  `experimental.proxyClientMaxBodySize` is therefore only 1 MB for page/Server
+  Action traffic, limiting unauthenticated per-request buffering.
 - Offline/PWA: the player streams via the stable
   `GET /api/tracks/[id]/stream` (302 to presigned URL); `public/sw.js` serves
   downloaded tracks from the `wt-audio` cache with Range-aware 206s (iOS

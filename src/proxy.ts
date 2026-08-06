@@ -42,9 +42,10 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // PWA assets (sw.js, manifest, icons, the iOS keep-alive silence loop) must be
-  // reachable without the cookie gate redirecting them to /login.
+  // API routes enforce real auth themselves and are excluded so large uploads
+  // are never cloned into Proxy's in-memory body buffer. PWA assets (sw.js,
+  // manifest, icons, the iOS keep-alive silence loop) must also remain public.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|apple-icon\\.png|icon-.*\\.png|silence\\.m4a|.*\\.svg$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|apple-icon\\.png|icon-.*\\.png|silence\\.m4a|.*\\.svg$).*)",
   ],
 };

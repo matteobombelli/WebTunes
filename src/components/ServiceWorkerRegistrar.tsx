@@ -27,6 +27,15 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
         // localStorage unavailable (private mode); can't track - skip the purge.
       }
       if (lastUser && lastUser !== userId) {
+        // Remove account-bound snapshots synchronously, before sibling effects
+        // (notably PlayerBar's cold-session hydration) get a chance to read
+        // the previous account's queue. The hard cache/IDB purge follows.
+        try {
+          localStorage.removeItem("wt-player-session");
+          sessionStorage.removeItem("wt-offline-primed");
+        } catch {
+          // Storage may be unavailable; the cache/IDB purge still runs.
+        }
         await useDownloadsStore.getState().purgeForAccountSwitch();
       }
       try {

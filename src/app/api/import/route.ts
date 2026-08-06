@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import {
+  DEMO_READ_ONLY_MESSAGE,
+  isDemoAccount,
+} from "@/lib/demo-accounts";
 import { listJobs, startImport } from "@/lib/import/jobs";
 
 const schema = z.object({
@@ -18,6 +22,12 @@ const schema = z.object({
 export async function POST(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (isDemoAccount(user.email)) {
+    return NextResponse.json(
+      { error: DEMO_READ_ONLY_MESSAGE },
+      { status: 403 }
+    );
+  }
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

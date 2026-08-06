@@ -31,7 +31,8 @@ export async function GET(
 
   const { url } = await getPresignedGetUrl(playlist.coverS3Key);
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, max-age=3000");
+  // The stable path is shared across account switches in a browser profile.
+  res.headers.set("Cache-Control", "private, no-store");
   return res;
 }
 

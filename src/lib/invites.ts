@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db, uniqueViolationConstraint } from "@/db";
 import { friendships, invites, users } from "@/db/schema";
+import { DEMO_ACCOUNT_EMAILS } from "@/lib/demo-accounts";
 import type { InviteDTO } from "@/lib/types";
 import {
   isNameTaken,
@@ -22,10 +23,7 @@ export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_USERS = 100;
 
 // These accounts may use the app but can't send invites.
-export const INVITE_BLOCKED_EMAILS = new Set([
-  "demo1@demo.demo",
-  "demo2@demo.demo",
-]);
+export const INVITE_BLOCKED_EMAILS = DEMO_ACCOUNT_EMAILS;
 
 // Constant key for pg_advisory_xact_lock so concurrent registrations serialize
 // around the user-count cap check (the count+insert would otherwise race).

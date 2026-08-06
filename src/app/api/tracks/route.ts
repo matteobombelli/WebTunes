@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import {
+  DEMO_READ_ONLY_MESSAGE,
+  isDemoAccount,
+} from "@/lib/demo-accounts";
 import { ingestTrack, validateAudioUpload } from "@/lib/ingest";
 import {
   listAccessibleTracks,
@@ -74,6 +78,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (isDemoAccount(user.email)) {
+    return NextResponse.json(
+      { error: DEMO_READ_ONLY_MESSAGE },
+      { status: 403 }
+    );
+  }
 
   // A truncated/garbage multipart body makes formData() reject - 400, not 500.
   const form = await req.formData().catch(() => null);

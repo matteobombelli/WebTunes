@@ -42,21 +42,44 @@ export async function POST(req: NextRequest) {
 
   const passwordHash = await hash(parsed.data.password, 12);
   const consumed = await db.transaction(async (tx) => {
+    // Serialize resets for this account before claiming an individual token.
+    // Otherwise two different valid links could race and leave the password at
+    // whichever request happened to commit last.
+    const [account] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, row.userId))
+      .for("update");
+    if (!account) return false;
+
+    const usedAt = new Date();
     // Burning the token is the atomic claim (the SELECT above is only a cheap
     // pre-check to skip the bcrypt work): two concurrent posts of the same
     // token can't both pass this UPDATE's usedAt guard.
     const [claim] = await tx
       .update(passwordResetTokens)
-      .set({ usedAt: new Date() })
+      .set({ usedAt })
       .where(
         and(
           eq(passwordResetTokens.tokenHash, tokenHash),
+          eq(passwordResetTokens.userId, account.id),
           isNull(passwordResetTokens.usedAt),
-          gt(passwordResetTokens.expiresAt, new Date())
+          gt(passwordResetTokens.expiresAt, usedAt)
         )
       )
       .returning({ userId: passwordResetTokens.userId });
     if (!claim) return false;
+
+    // A password change invalidates every other outstanding reset link too.
+    await tx
+      .update(passwordResetTokens)
+      .set({ usedAt })
+      .where(
+        and(
+          eq(passwordResetTokens.userId, claim.userId),
+          isNull(passwordResetTokens.usedAt)
+        )
+      );
     await tx
       .update(users)
       .set({ passwordHash })

@@ -12,7 +12,9 @@ import Dialog from "@/components/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DEMO_READ_ONLY_MESSAGE } from "@/lib/demo-accounts";
 import { useImportsStore, type ImportOptions } from "@/stores/imports";
+import { useToastStore } from "@/stores/toast";
 
 // In-site importer: Settings / Link / Search tabs, with the Link tab carrying
 // the progress bar, live log view, and missed-tracks list.
@@ -56,12 +58,25 @@ function isActive(job: ImportJobDTO): boolean {
   );
 }
 
-export default function ImportButton() {
+export default function ImportButton({
+  readOnly = false,
+}: {
+  readOnly?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        onClick={() => {
+          if (readOnly) {
+            useToastStore.getState().show(DEMO_READ_ONLY_MESSAGE);
+            return;
+          }
+          setOpen(true);
+        }}
+      >
         Import
       </Button>
       <Dialog title="Import music" open={open} onClose={() => setOpen(false)} wide>

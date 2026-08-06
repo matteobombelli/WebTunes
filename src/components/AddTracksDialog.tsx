@@ -141,16 +141,9 @@ function AddTracksBody({
       : all?.tracks ?? null;
     if (!source) return null;
     const existing = new Set(existingTrackIds);
-    const f = query.toLowerCase();
-    return source
-      .filter((t) => !existing.has(t.id))
-      .filter(
-        (t) =>
-          !f ||
-          t.title.toLowerCase().includes(f) ||
-          t.artist?.toLowerCase().includes(f) ||
-          t.album?.toLowerCase().includes(f)
-      );
+    // Search results are already filtered server-side, including lyric
+    // matches. Re-filtering DTO fields here hid valid lyrics-only results.
+    return source.filter((t) => !existing.has(t.id));
   }, [all, existingTrackIds, query, searchKey, searchResults]);
 
   const toggle = (id: string) => {

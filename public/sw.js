@@ -32,6 +32,26 @@ const OFFLINE_FALLBACK = `${BASE_PATH}/downloads`;
 
 const STREAM_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/stream$`);
 const ART_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/art$`);
+const CANONICAL_AUDIO_TYPE = {
+  "audio/mpeg": "audio/mpeg",
+  "audio/mp3": "audio/mpeg",
+  "audio/x-mpeg": "audio/mpeg",
+  "audio/mp4": "audio/mp4",
+  "audio/m4a": "audio/mp4",
+  "audio/x-m4a": "audio/mp4",
+  "audio/aac": "audio/aac",
+  "audio/x-aac": "audio/aac",
+  "audio/flac": "audio/flac",
+  "audio/x-flac": "audio/flac",
+  "audio/ogg": "audio/ogg",
+  "application/ogg": "audio/ogg",
+  "audio/opus": "audio/ogg",
+  "audio/wav": "audio/wav",
+  "audio/wave": "audio/wav",
+  "audio/x-wav": "audio/wav",
+  "audio/vnd.wave": "audio/wav",
+  "audio/webm": "audio/webm",
+};
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -85,7 +105,7 @@ async function serveStream(request) {
   if (!cached) return fetch(request);
 
   const blob = await cached.blob();
-  const type = cached.headers.get("Content-Type") || "application/octet-stream";
+  const type = safeAudioType(cached.headers.get("Content-Type"));
   const range = parseRange(request.headers.get("Range"), blob.size);
 
   if (range === null) {
@@ -95,13 +115,17 @@ async function serveStream(request) {
         "Content-Type": type,
         "Content-Length": String(blob.size),
         "Accept-Ranges": "bytes",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }
   if (range === "invalid") {
     return new Response(null, {
       status: 416,
-      headers: { "Content-Range": `bytes */${blob.size}` },
+      headers: {
+        "Content-Range": `bytes */${blob.size}`,
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   }
   const { start, end } = range;
@@ -112,8 +136,16 @@ async function serveStream(request) {
       "Content-Length": String(end - start + 1),
       "Content-Range": `bytes ${start}-${end}/${blob.size}`,
       "Accept-Ranges": "bytes",
+      "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+/** Never replay a legacy/browser-supplied active Content-Type from Cache Storage. */
+function safeAudioType(value) {
+  const normalized = value?.split(";", 1)[0].trim().toLowerCase();
+  return (normalized && CANONICAL_AUDIO_TYPE[normalized]) ||
+    "application/octet-stream";
 }
 
 /**

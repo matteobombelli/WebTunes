@@ -272,9 +272,9 @@ export default function SettingsModal({
               <span>Uniform</span>
             </div>
             <p className="mt-2 text-xs text-fg-muted">
-              Higher variation mixes in less-similar tracks so the radio differs
-              each time; &ldquo;Pure uniform&rdquo; always plays the closest
-              matches.
+              More randomness mixes in less-similar tracks so the radio
+              differs each time; &ldquo;Pure uniform&rdquo; always plays the
+              closest matches.
             </p>
           </div>
 

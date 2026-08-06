@@ -7,6 +7,37 @@ import { streamSrc } from "@/lib/api";
 // Must match AUDIO_CACHE in public/sw.js.
 const AUDIO_CACHE = "wt-audio";
 
+const CANONICAL_AUDIO_TYPE: Record<string, string> = {
+  "audio/mpeg": "audio/mpeg",
+  "audio/mp3": "audio/mpeg",
+  "audio/x-mpeg": "audio/mpeg",
+  "audio/mp4": "audio/mp4",
+  "audio/m4a": "audio/mp4",
+  "audio/x-m4a": "audio/mp4",
+  "audio/aac": "audio/aac",
+  "audio/x-aac": "audio/aac",
+  "audio/flac": "audio/flac",
+  "audio/x-flac": "audio/flac",
+  "audio/ogg": "audio/ogg",
+  "application/ogg": "audio/ogg",
+  "audio/opus": "audio/ogg",
+  "audio/wav": "audio/wav",
+  "audio/wave": "audio/wav",
+  "audio/x-wav": "audio/wav",
+  "audio/vnd.wave": "audio/wav",
+  "audio/webm": "audio/webm",
+};
+
+function safeAudioType(...values: (string | null | undefined)[]): string {
+  for (const value of values) {
+    const normalized = value?.split(";", 1)[0].trim().toLowerCase();
+    if (normalized && CANONICAL_AUDIO_TYPE[normalized]) {
+      return CANONICAL_AUDIO_TYPE[normalized];
+    }
+  }
+  return "application/octet-stream";
+}
+
 export async function putAudio(trackId: string, blob: Blob, mimeType: string | null) {
   const cache = await caches.open(AUDIO_CACHE);
   await cache.put(
@@ -15,8 +46,9 @@ export async function putAudio(trackId: string, blob: Blob, mimeType: string | n
       headers: {
         // The SW echoes these when serving (incl. 206 slices); without a
         // real audio Content-Type iOS may refuse to play.
-        "Content-Type": mimeType || blob.type || "application/octet-stream",
+        "Content-Type": safeAudioType(mimeType, blob.type),
         "Content-Length": String(blob.size),
+        "X-Content-Type-Options": "nosniff",
       },
     })
   );

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
+import {
+  DEMO_READ_ONLY_MESSAGE,
+  isDemoAccount,
+} from "@/lib/demo-accounts";
 import { flatExtract } from "@/lib/import/ytdlp";
 
 const SEARCH_TAB_RESULTS = 25;
@@ -13,6 +17,12 @@ const SEARCH_TIMEOUT_MS = 60_000;
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (isDemoAccount(user.email)) {
+    return NextResponse.json(
+      { error: DEMO_READ_ONLY_MESSAGE },
+      { status: 403 }
+    );
+  }
 
   const q = req.nextUrl.searchParams.get("q")?.trim().slice(0, 200);
   if (!q) {
