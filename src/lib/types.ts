@@ -167,15 +167,6 @@ export type InviteDTO = {
   usedByName: string | null;
 };
 
-/** A connected WebTunes Importer extension, for the Settings revoke list. */
-export type ExtensionTokenDTO = {
-  id: string;
-  /** Browser label sent at pairing ("Firefox on Linux"), or null. */
-  label: string | null;
-  createdAt: string;
-  lastUsedAt: string | null;
-};
-
 // --- Server-side imports (lib/import/) ---------------------------------------
 // Types live here (not in lib/import/jobs.ts) so client components can use them
 // without pulling the server-only import modules (fs/child_process) into a
@@ -218,8 +209,7 @@ export type ImportJobDTO = {
   status: ImportJobStatus;
   error: string | null;
   items: ImportItemDTO[];
-  /** Progress log lines, shown in the Import dialog's Link tab (mirrors the
-   * desktop importer's log view). */
+  /** Progress log lines shown in the Import dialog's Link tab. */
   log: string[];
   createdAt: string;
   finishedAt: string | null;

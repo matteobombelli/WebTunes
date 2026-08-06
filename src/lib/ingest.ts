@@ -44,9 +44,9 @@ export type IngestResult =
   | { status: "duplicate"; message: string };
 
 /**
- * Validate an uploaded audio file (shape + claimed type + size), shared by the
- * session-auth upload route and the extension-import route so their rules
- * can't drift. Returns the File, or the 400 message.
+ * Validate an uploaded audio file (shape + claimed type + size), shared by web
+ * uploads and server-side import callers so their rules can't drift. Returns
+ * the File, or the 400 message.
  */
 export function validateAudioUpload(
   value: unknown
@@ -63,12 +63,10 @@ export function validateAudioUpload(
 }
 
 /**
- * Caller-supplied metadata that wins over whatever is embedded in the file.
- * The extension importer sends these: title/artist/album come from the source
- * (the YouTube video, or the Spotify/Apple track it matched), and `artUrl` is
- * that source's cover - a YouTube thumbnail (cropSquare) or Spotify/Apple
- * artwork. Mirrors the reference exporter tagging every file with title/
- * artist/album + embedded cover.
+ * Server-side import metadata that wins over whatever is embedded in the file.
+ * The in-site importer supplies title/artist/album from the source (the
+ * YouTube video, or the Spotify/Apple track it matched), and `artUrl` is that
+ * source's cover - a YouTube thumbnail (cropSquare) or Spotify/Apple artwork.
  */
 export type IngestOverrides = {
   title?: string | null;
@@ -86,14 +84,14 @@ export type KnownTrackIdentity = {
 };
 
 /**
- * The whole track-ingest pipeline, shared by the session-auth upload route
- * (POST /api/tracks) and the extension-import route: dedupe on content hash,
- * metadata/loudness/re-mux, S3 upload (audio + art + thumbnail), row insert,
- * and the background CLAP/recognition enqueues. Callers have already validated
- * type and size; they map the result to their HTTP responses.
+ * The whole track-ingest pipeline, shared by browser uploads, in-site imports,
+ * and Suggested Imports: dedupe on content hash, metadata/loudness/re-mux, S3
+ * upload (audio + art + thumbnail), row insert, and the background CLAP/
+ * recognition enqueues. Callers have already validated type and size; they map
+ * the result to their HTTP responses.
  *
- * `overrides` (extension importer) take precedence over file-embedded tags and
- * supply a cover-art URL to fetch when the file carries no embedded art.
+ * `overrides` take precedence over file-embedded tags and supply a cover-art
+ * URL to fetch when the file carries no embedded art.
  */
 export async function ingestTrack({
   userId,
@@ -167,7 +165,7 @@ export async function ingestTrack({
     remuxOpusToMp4(buffer, ext, mimeType),
   ]);
 
-  // Caller overrides (extension importer) win over the file's embedded tags;
+  // Caller overrides win over the file's embedded tags;
   // fall back to what the file carried. title keeps ingest's non-empty
   // invariant; cleanTag also caps + NFC-normalizes the untrusted overrides.
   const title = cleanTag(overrides?.title) ?? meta.title;

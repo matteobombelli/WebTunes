@@ -17,7 +17,7 @@ import { log } from "@/lib/log";
 
 const REMUX_TIMEOUT_MS = 60_000;
 // Containers worth probing for Opus; the matching MIME types also trigger.
-// webm covers the extension importer: YouTube's best audio is Opus-in-WebM
+// webm covers the in-site importer: YouTube's best audio is Opus-in-WebM
 // (itag 251), which iOS Safari can't play at all - same lossless copy applies.
 const OPUS_EXTS = new Set(["ogg", "opus", "oga", "webm"]);
 const OPUS_MIMES = new Set(["audio/ogg", "audio/webm"]);

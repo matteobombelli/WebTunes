@@ -14,12 +14,8 @@ import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useImportsStore, type ImportOptions } from "@/stores/imports";
 
-// In-site importer, laid out like the desktop WebTunes Importer it ports:
-// Settings / Link / Search tabs, with the Link tab carrying the progress bar,
-// live log view, and missed-tracks list. The desktop app remains available
-// for anyone who prefers a local app (footer link).
-
-const RELEASES_URL = "https://github.com/matteobombelli/webtunes-importer/releases";
+// In-site importer: Settings / Link / Search tabs, with the Link tab carrying
+// the progress bar, live log view, and missed-tracks list.
 
 const QUALITY_CHOICES: { value: ImportQuality; label: string }[] = [
   { value: "128", label: "128 kbps MP3" },
@@ -111,18 +107,6 @@ function ImportForm() {
       {tab === "link" && <LinkTab options={options} />}
       {tab === "search" && <SearchTab options={options} />}
 
-      <p className="border-t border-border-subtle pt-3 text-xs text-fg-subtle">
-        Prefer a local app? The{" "}
-        <a
-          href={RELEASES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-fg-muted underline hover:text-fg"
-        >
-          desktop importer
-        </a>{" "}
-        still works with this site.
-      </p>
     </div>
   );
 }

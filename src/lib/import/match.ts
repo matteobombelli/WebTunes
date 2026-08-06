@@ -3,9 +3,9 @@ import type { SourceTrack } from "@/lib/import/sources";
 import type { ImportVersionPref } from "@/lib/types";
 import type { ImportLanePriority } from "@/lib/import/lane";
 
-// Resolve a Spotify/Apple track's metadata to the best-matching YouTube video.
-// Port of the desktop importer's core/matching.py: below the strictness
-// threshold a track is skipped with a reason, never guessed.
+// Resolve a Spotify/Apple track's metadata to the best-matching YouTube video
+// using Ratcliff/Obershelp similarity on normalized word sets. Below the
+// strictness threshold a track is skipped with a reason, never guessed.
 
 export const DEFAULT_STRICTNESS = 0.7; // match-score floor, user-adjustable 0..1
 const DURATION_TOLERANCE = 15; // seconds

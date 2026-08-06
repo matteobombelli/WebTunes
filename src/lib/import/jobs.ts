@@ -414,8 +414,7 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
     item.progress = 100;
     const buffer = await readFile(file.path);
     // Source metadata wins (matched path); the YouTube path tags from the
-    // video and square-crops its 16:9 thumbnail - exactly like the desktop
-    // importer's extension-import uploads.
+    // video and square-crops its 16:9 thumbnail.
     const overrides = item.track
       ? {
           title: item.track.title,

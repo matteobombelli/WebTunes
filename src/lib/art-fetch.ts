@@ -5,10 +5,9 @@ import { imageKindFromBytes } from "@/lib/image-upload";
 import { log } from "@/lib/log";
 import type { CoverArt } from "@/lib/metadata-lookup";
 
-// Fetch cover art from a URL the client supplied (the extension importer sends
-// Spotify/Apple artwork, or a YouTube thumbnail). Best-effort: null on any
-// failure, so the caller falls back to embedded art / recognition and the
-// upload never fails on a bad art URL.
+// Fetch cover art for server-side import metadata (Spotify/Apple artwork, or a
+// YouTube thumbnail). Best-effort: null on any failure, so the caller falls
+// back to embedded art / recognition and the upload never fails on a bad URL.
 //
 // SECURITY: the URL and its bytes are untrusted. The stored kind is sniffed
 // from the bytes (imageKindFromBytes), never the URL or response Content-Type -

@@ -151,46 +151,6 @@ export const suggestedImports = pgTable(
 );
 export type SuggestedImport = typeof suggestedImports.$inferSelect;
 
-// Short-lived pairing codes for connecting the WebTunes Importer desktop app
-// (the "extension" naming predates it). The signed-in user mints a code in
-// Settings, types it into the importer, and the importer redeems it for a
-// long-lived extension_tokens row. Single-use, 10-minute expiry, stored hashed
-// like the auth tokens above (a code grants upload access, so it's sensitive,
-// unlike the plaintext share/invite capabilities).
-export const extensionPairCodes = pgTable("extension_pair_codes", {
-  codeHash: text("code_hash").primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
-  usedAt: timestamp("used_at", { mode: "date" }),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
-
-// Long-lived bearer tokens for the WebTunes Importer desktop app, issued by
-// redeeming a pairing code. Scope is "import tracks for this user" only - the
-// only routes that accept them are /api/extension/me and
-// /api/tracks/extension-import. Hashed at rest; revocable from Settings
-// (revoked_at kept as tombstone rather than deleted so the row can't be
-// re-paired by id confusion). See lib/extension-tokens.ts.
-export const extensionTokens = pgTable(
-  "extension_tokens",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    tokenHash: text("token_hash").notNull().unique(),
-    // Client-supplied browser label shown in Settings ("Firefox on Linux");
-    // display-only, truncated on write.
-    label: text("label"),
-    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
-    revokedAt: timestamp("revoked_at", { mode: "date" }),
-  },
-  (t) => [index("extension_tokens_user_id_idx").on(t.userId)]
-);
-
 export const tracks = pgTable(
   "tracks",
   {

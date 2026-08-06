@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
-import type { ExtensionTokenDTO } from "@/lib/types";
 import { useUsernameAvailability } from "@/lib/use-username-availability";
 import { usePlayerStore } from "@/stores/player";
 import { useExclusionsStore } from "@/stores/exclusions";
@@ -56,66 +55,10 @@ export default function SettingsModal({
   const [emailInput, setEmailInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // WebTunes Importer pairing section (the desktop-app connector).
-  const [importers, setImporters] = useState<ExtensionTokenDTO[]>([]);
-  const [pairCode, setPairCode] = useState<string | null>(null);
-  const [generatingCode, setGeneratingCode] = useState(false);
-  const [importerError, setImporterError] = useState<string | null>(null);
-
-  // Refresh the connected-importer list each time the modal opens (a pairing
-  // may have completed since the last look). Stale code/error state is reset
-  // in close(), alongside the view reset.
-  useEffect(() => {
-    if (!open) return;
-    api<ExtensionTokenDTO[]>("/extension/tokens")
-      .then(setImporters)
-      .catch(() => setImporters([]));
-  }, [open]);
-
-  const generatePairCode = async () => {
-    setGeneratingCode(true);
-    setImporterError(null);
-    try {
-      const { code } = await api<{ code: string; expiresAt: string }>(
-        "/extension/pairing-code",
-        { method: "POST" }
-      );
-      setPairCode(code);
-    } catch (err) {
-      setImporterError(
-        err instanceof Error ? err.message : "Could not generate a code"
-      );
-    } finally {
-      setGeneratingCode(false);
-    }
-  };
-
-  const copyPairCode = () => {
-    if (!pairCode) return;
-    navigator.clipboard.writeText(pairCode).then(
-      () => useToastStore.getState().show("Copied pairing code to clipboard!"),
-      () => useToastStore.getState().show("Couldn’t copy code")
-    );
-  };
-
-  const revokeImporter = async (id: string) => {
-    setImporterError(null);
-    try {
-      await api(`/extension/tokens/${id}`, { method: "DELETE" });
-      setImporters((list) => list.filter((t) => t.id !== id));
-    } catch (err) {
-      setImporterError(
-        err instanceof Error ? err.message : "Could not disconnect"
-      );
-    }
-  };
-
   // Reset to the main view on close so reopening lands on the settings list,
   // not a stale sub-view. Every close path (X / Escape / backdrop) funnels here.
   const close = () => {
     setView("main");
-    setPairCode(null);
-    setImporterError(null);
     usePlayerStore.getState().setSettingsOpen(false);
   };
 
@@ -372,75 +315,6 @@ export default function SettingsModal({
             <span>Show the tutorial</span>
             <ChevronRightIcon size={14} className="text-fg-muted" />
           </button>
-
-          <div className="mt-6 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-fg">WebTunes Importer</h3>
-            <p className="mt-1 text-xs text-fg-muted">
-              The WebTunes Importer desktop app downloads audio and adds it to
-              your library. Generate a code, then enter it in the importer to
-              connect it.
-            </p>
-            <div className="mt-2 flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={generatePairCode}
-                disabled={generatingCode}
-              >
-                {generatingCode ? "Generating…" : "Generate pairing code"}
-              </Button>
-              {pairCode && (
-                <>
-                  <span className="select-all font-mono text-base tracking-widest text-accent-bright">
-                    {pairCode}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={copyPairCode}>
-                    Copy
-                  </Button>
-                </>
-              )}
-            </div>
-            {pairCode && (
-              <p className="mt-1 text-xs text-fg-muted">
-                Single-use, valid for 10 minutes.
-              </p>
-            )}
-            {importerError && (
-              <p className="mt-1 text-xs text-red-400">{importerError}</p>
-            )}
-            {importers.length > 0 && (
-              <ul className="mt-3 flex flex-col gap-2">
-                {importers.map((importer) => (
-                  <li
-                    key={importer.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-fg">
-                        {importer.label || "Importer"}
-                      </p>
-                      <p className="text-xs text-fg-muted">
-                        Connected{" "}
-                        {new Date(importer.createdAt).toLocaleDateString()}
-                        {importer.lastUsedAt &&
-                          ` · last import ${new Date(
-                            importer.lastUsedAt
-                          ).toLocaleDateString()}`}
-                      </p>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="shrink-0 border border-red-500/40"
-                      onClick={() => revokeImporter(importer.id)}
-                    >
-                      Disconnect
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
 
           <div className="mt-6 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>

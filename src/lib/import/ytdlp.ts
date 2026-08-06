@@ -35,7 +35,7 @@ const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 
 // --js-runtimes node: yt-dlp's JS challenge solver needs a runtime; the box has
 // Node (no deno). --remote-components ejs:github lets it fetch that solver,
-// needed for full YouTube format access (mirrors the desktop importer's opts).
+// needed for full YouTube format access.
 const COMMON_ARGS = [
   "--no-warnings",
   "--js-runtimes",
@@ -144,9 +144,8 @@ export async function flatExtract(
 
 /**
  * Full extraction of one video: the import metadata (track/artist/album fields
- * when YouTube has them, falling back to title/uploader - same precedence as
- * the desktop importer) plus the best audio bitrate for the kbps floor. One
- * call replaces the desktop's separate probe + in-download metadata extract.
+ * when YouTube has them, falling back to title/uploader) plus the best audio
+ * bitrate for the kbps floor.
  */
 export async function probeVideo(
   url: string,
@@ -187,12 +186,11 @@ const MIME_BY_EXT: Record<string, string> = {
 };
 
 /**
- * Download one video's audio into the caller-owned dir. Quality mirrors the
- * desktop importer: "128"/"192" transcode to MP3, "opus" repackages YouTube's
- * native Opus stream - or, when the video has none, stream-copies the best
- * audio into its native container instead (still lossless, never re-encoded) -
- * "m4a" copies the native AAC stream (lossless, fails when the video has none
- * rather than re-encoding).
+ * Download one video's audio into the caller-owned dir. "128"/"192" transcode
+ * to MP3; "opus" repackages YouTube's native Opus stream or, when the video has
+ * none, stream-copies the best audio into its native container instead (still
+ * lossless, never re-encoded); "m4a" copies the native AAC stream (lossless,
+ * and fails when the video has none rather than re-encoding).
  */
 export async function downloadAudio(opts: {
   url: string;

@@ -53,8 +53,8 @@ setup, and architecture rationale.
     (see the recognition-worker note below)
   - `offline/` - PWA download internals: `db.ts` (IndexedDB metadata),
     `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
-  - `import/` - the in-site importer (server-side port of the desktop
-    WebTunes Importer): `ytdlp.ts` (the only file that spawns the yt-dlp CLI -
+  - `import/` - the in-site importer engine: `ytdlp.ts` (the only file that
+    spawns the yt-dlp CLI -
     flat extract / probe / download per quality), `sources.ts` (URL
     classification + Spotify/Apple metadata scrapers, fixed-host fetches only),
     `match.ts` (fuzzy YouTube matching, Ratcliff/Obershelp on normalized
@@ -162,9 +162,7 @@ setup, and architecture rationale.
   the app layout, which re-attaches after a reload). Users can queue multiple
   jobs (FIFO behind the one global worker; `queued` status until picked up);
   playlists cap at 500 tracks; sub-100 kbps sources and below-strictness
-  matches are "missed" with a reason, never guessed. The desktop-importer
-  path (`/api/tracks/extension-import` + `/api/extension/*`) stays untouched
-  and working alongside.
+  matches are "missed" with a reason, never guessed.
 - Loudness normalization: on upload `lib/loudness.ts` shells out to **ffmpeg**
   (a runtime dependency - must be on `PATH` in dev and prod) to measure EBU R128
   loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:

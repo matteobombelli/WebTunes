@@ -1,5 +1,4 @@
-// URL classification + Spotify/Apple Music metadata scrapers, ported from the
-// desktop importer's core/spotify.py and core/apple_music.py. Both stores are
+// URL classification + Spotify/Apple Music metadata scrapers. Both stores are
 // DRM-locked, so they are metadata-only sources: each track is later matched
 // to YouTube (lib/import/match.ts) and the audio comes from there.
 //
