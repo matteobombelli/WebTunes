@@ -20,18 +20,23 @@ const SETTLE_MS = 120;
 
 type SwipeOptions = {
   disabled?: boolean;
+  direction?: "left" | "right";
   /** CSS selector for controls that keep ownership of their touch gesture. */
   ignoreSelector?: string;
 };
 
 /**
- * Direction-locked, touch-only swipe-right gesture. Vertical intent is handed
+ * Direction-locked, touch-only horizontal gesture. Vertical intent is handed
  * back to native scrolling; a completed swipe suppresses the synthetic click
  * browsers otherwise dispatch after touchend.
  */
 export function useMobileSwipeAction<T extends HTMLElement>(
   onAction: () => void,
-  { disabled = false, ignoreSelector = "[data-swipe-ignore]" }: SwipeOptions = {}
+  {
+    disabled = false,
+    direction = "right",
+    ignoreSelector = "[data-swipe-ignore]",
+  }: SwipeOptions = {}
 ) {
   const actionRef = useRef(onAction);
   useEffect(() => {
@@ -88,8 +93,11 @@ export function useMobileSwipeAction<T extends HTMLElement>(
         return;
       }
       const touch = event.touches[0];
-      // Preserve the iOS system back gesture at the physical screen edge.
-      if (touch.clientX < 18) {
+      // Preserve iOS's horizontal navigation gestures at the physical edges.
+      if (
+        (direction === "right" && touch.clientX < 18) ||
+        (direction === "left" && touch.clientX > window.innerWidth - 18)
+      ) {
         gestureRef.current = null;
         return;
       }
@@ -103,7 +111,7 @@ export function useMobileSwipeAction<T extends HTMLElement>(
       setCommitted(false);
       updateOffset(0);
     },
-    [clearTimers, disabled, ignoreSelector, updateOffset]
+    [clearTimers, direction, disabled, ignoreSelector, updateOffset]
   );
 
   const onTouchMove: TouchEventHandler<T> = useCallback(
@@ -113,12 +121,14 @@ export function useMobileSwipeAction<T extends HTMLElement>(
       const touch = event.touches[0];
       const dx = touch.clientX - gesture.startX;
       const dy = touch.clientY - gesture.startY;
+      const sign = direction === "right" ? 1 : -1;
+      const travel = dx * sign;
 
       if (gesture.axis === "pending") {
         if (Math.max(Math.abs(dx), Math.abs(dy)) < START_PX) return;
-        // Leftward motion belongs to horizontal carousels; vertical motion
-        // belongs to page/list scrolling. Only a clear rightward intent wins.
-        if (dx <= 0 || Math.abs(dy) >= Math.abs(dx)) {
+        // Opposite-direction motion stays available to surrounding horizontal
+        // surfaces; vertical motion belongs to native page/list scrolling.
+        if (travel <= 0 || Math.abs(dy) >= Math.abs(dx)) {
           gesture.axis = "cancelled";
           return;
         }
@@ -129,26 +139,31 @@ export function useMobileSwipeAction<T extends HTMLElement>(
       if (event.cancelable) event.preventDefault();
       suppressClickRef.current = true;
       const resisted =
-        dx <= COMMIT_PX ? dx : COMMIT_PX + (dx - COMMIT_PX) * 0.28;
-      updateOffset(Math.max(0, Math.min(MAX_PX, resisted)));
+        travel <= COMMIT_PX
+          ? travel
+          : COMMIT_PX + (travel - COMMIT_PX) * 0.28;
+      updateOffset(sign * Math.max(0, Math.min(MAX_PX, resisted)));
     },
-    [updateOffset]
+    [direction, updateOffset]
   );
 
   const onTouchEnd: TouchEventHandler<T> = useCallback(() => {
     const gesture = gestureRef.current;
-    if (gesture?.axis === "horizontal" && offsetRef.current >= COMMIT_PX) {
+    if (
+      gesture?.axis === "horizontal" &&
+      Math.abs(offsetRef.current) >= COMMIT_PX
+    ) {
       gestureRef.current = null;
       suppressClickRef.current = true;
       setSettling(true);
       setCommitted(true);
-      updateOffset(MAX_PX);
+      updateOffset(direction === "right" ? MAX_PX : -MAX_PX);
       actionRef.current();
       timersRef.current.push(window.setTimeout(reset, SETTLE_MS));
       return;
     }
     reset();
-  }, [reset, updateOffset]);
+  }, [direction, reset, updateOffset]);
 
   const onClickCapture = useCallback((event: React.MouseEvent<T>) => {
     if (!suppressClickRef.current) return;
@@ -166,8 +181,12 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   const foregroundStyle: CSSProperties = {
     transform: `translate3d(${offset}px, 0, 0)`,
     transition:
-      settling ? `transform ${SETTLE_MS}ms ease-out` : offset > 0 ? "none" : undefined,
-    willChange: offset > 0 ? "transform" : undefined,
+      settling
+        ? `transform ${SETTLE_MS}ms ease-out`
+        : offset !== 0
+          ? "none"
+          : undefined,
+    willChange: offset !== 0 ? "transform" : undefined,
   };
 
   return {
@@ -175,7 +194,7 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     committed,
     handlers,
     foregroundStyle,
-    progress: Math.min(1, offset / COMMIT_PX),
+    progress: Math.min(1, Math.abs(offset) / COMMIT_PX),
   };
 }
 
@@ -212,12 +231,15 @@ export default function MobileSwipeTrack({
       <div
         aria-hidden
         style={{ opacity: swipe.progress }}
-        className={`absolute inset-0 flex items-center gap-2 bg-accent px-4 text-sm font-semibold text-accent-fg md:hidden ${
-          swipe.committed ? "justify-center" : "justify-start"
-        }`}
+        className="absolute inset-0 flex items-center justify-start bg-emerald-600/90 px-5 text-white md:hidden"
       >
-        <PlayNextIcon size={20} />
-        Play next
+        <span
+          className={`inline-flex transition-transform duration-100 ease-out ${
+            swipe.committed ? "scale-125" : ""
+          }`}
+        >
+          <PlayNextIcon size={22} />
+        </span>
       </div>
       <div
         {...swipe.handlers}

@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   type CollisionDetection,
@@ -43,7 +44,9 @@ const MIN_FRAME_WIDTH = 320;
 const MIN_FRAME_HEIGHT = 260;
 const DEFAULT_FRAME_WIDTH = 416;
 const DEFAULT_FRAME_HEIGHT = 560;
-const COLLAPSED_FRAME_HEIGHT = 45;
+// Title bar (45px) + the existing 56px current-track art row and its padding.
+// Collapsing hides only the upcoming list, not what is currently playing.
+const COLLAPSED_FRAME_HEIGHT = 126;
 
 type DesktopFrame = {
   x: number;
@@ -551,7 +554,7 @@ export default memo(function QueuePanel({
           <div className="h-1.5 w-10 rounded-full bg-white/30" />
         </div>
       )}
-      {current && !collapsed && (
+      {current && (
         <div
           {...(mobile ? swipe : {})}
           className={`border-b border-border px-4 ${
@@ -581,7 +584,7 @@ export default memo(function QueuePanel({
                   {queue.length} track{queue.length === 1 ? "" : "s"}
                 </span>
                 <span className="text-[10px] text-fg-subtle">
-                  Swipe right to remove
+                  Swipe left to remove
                 </span>
               </>
             )}
@@ -635,15 +638,19 @@ export default memo(function QueuePanel({
               </ul>
             </SortableContext>
 
-            <DragOverlay>
-              {activeItem ? (
-                <QueueRowOverlay
-                  item={activeItem}
-                  isCurrent={activeIndex === index}
-                  isPlaying={activeIndex === index && isPlaying}
-                />
-              ) : null}
-            </DragOverlay>
+            {typeof document !== "undefined" &&
+              createPortal(
+                <DragOverlay>
+                  {activeItem ? (
+                    <QueueRowOverlay
+                      item={activeItem}
+                      isCurrent={activeIndex === index}
+                      isPlaying={activeIndex === index && isPlaying}
+                    />
+                  ) : null}
+                </DragOverlay>,
+                document.body
+              )}
           </DndContext>
         </>
       )}
@@ -756,6 +763,7 @@ const QueueRow = memo(function QueueRow({
   }, [item.uid]);
   const swipe = useMobileSwipeAction<HTMLDivElement>(onRemove, {
     disabled: isCurrent,
+    direction: "left",
   });
 
   return (
@@ -771,10 +779,15 @@ const QueueRow = memo(function QueueRow({
         <div
           aria-hidden
           style={{ opacity: swipe.progress }}
-          className="absolute inset-0 flex items-center gap-2 bg-red-500/85 px-4 text-sm font-semibold text-white md:hidden"
+          className="absolute inset-0 flex items-center justify-end bg-red-500/85 px-5 text-white md:hidden"
         >
-          <TrashIcon size={18} />
-          Remove
+          <span
+            className={`inline-flex transition-transform duration-100 ease-out ${
+              swipe.committed ? "scale-125" : ""
+            }`}
+          >
+            <TrashIcon size={20} />
+          </span>
         </div>
       )}
       <div

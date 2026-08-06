@@ -165,7 +165,7 @@ const TrackRow = memo(function TrackRow({
         animationDelay: `${Math.min(index, 8) * 0.03}s`,
         boxShadow:
           swipe.offset > 0
-            ? `${-Math.ceil(swipe.offset)}px 0 0 var(--color-accent)`
+            ? `${-Math.ceil(swipe.offset)}px 0 0 rgb(5 150 105 / 0.9)`
             : undefined,
       }}
       className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
@@ -192,7 +192,16 @@ const TrackRow = memo(function TrackRow({
           />
         </td>
       )}
-      <td className="py-2.5 sm:py-2">
+      <td className="relative py-2.5 sm:py-2">
+        <span
+          aria-hidden
+          style={{ opacity: swipe.progress }}
+          className={`pointer-events-none absolute -left-12 top-1/2 inline-flex -translate-y-1/2 text-white transition-transform duration-100 ease-out md:hidden ${
+            swipe.committed ? "scale-125" : ""
+          }`}
+        >
+          <PlayNextIcon size={22} />
+        </span>
         <button
           onClick={() => playQueue(view, index)}
           title={`Play ${track.title}`}

@@ -330,49 +330,56 @@ export default function PlaylistDetail({
               <CopyIcon size={16} />
               {copying ? "Copying…" : isOwner ? "Duplicate" : "Save a copy"}
             </Button>
-            {isOwner && (
-              <button
-                onClick={togglePrivate}
-                title={
-                  isPrivate
-                    ? "Private - only you can see this playlist"
-                    : "Shared - friends can see this playlist"
-                }
-                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
-              >
-                {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
-                {isPrivate ? "Private" : "Shared"}
-              </button>
-            )}
-            {isOwner && (
-              <button
-                onClick={() => setManagingCollab(true)}
-                className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
-                title="Manage collaborators"
-              >
-                <UsersIcon size={16} />
-                {collaborators.length
-                  ? `Collaborators · ${collaborators.length}`
-                  : "Add collaborators"}
-              </button>
-            )}
-            {isOwner && (
-              <button
-                onClick={deletePlaylist}
-                className="text-sm text-fg-muted hover:text-red-400"
-              >
-                Delete playlist
-              </button>
-            )}
-            {!isOwner && canEdit && (
-              <button
-                onClick={leavePlaylist}
-                className="text-sm text-fg-muted hover:text-red-400"
-              >
-                Leave playlist
-              </button>
-            )}
           </div>
+          {/* Ownership/collaboration controls live on their own quieter row so
+              the primary playback/content actions above stay scannable. Keep
+              destructive actions last, with sharing controls to their left. */}
+          {(isOwner || canEdit) && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {isOwner && (
+                <button
+                  onClick={togglePrivate}
+                  title={
+                    isPrivate
+                      ? "Private - only you can see this playlist"
+                      : "Shared - friends can see this playlist"
+                  }
+                  className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+                >
+                  {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
+                  {isPrivate ? "Private" : "Shared"}
+                </button>
+              )}
+              {isOwner && (
+                <button
+                  onClick={() => setManagingCollab(true)}
+                  className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+                  title="Manage collaborators"
+                >
+                  <UsersIcon size={16} />
+                  {collaborators.length
+                    ? `Collaborators · ${collaborators.length}`
+                    : "Add collaborators"}
+                </button>
+              )}
+              {isOwner && (
+                <button
+                  onClick={deletePlaylist}
+                  className="text-sm text-fg-muted hover:text-red-400"
+                >
+                  Delete playlist
+                </button>
+              )}
+              {!isOwner && canEdit && (
+                <button
+                  onClick={leavePlaylist}
+                  className="text-sm text-fg-muted hover:text-red-400"
+                >
+                  Leave playlist
+                </button>
+              )}
+            </div>
+          )}
           {/* Collaborator avatars - shown to anyone viewing so it's clear the
               playlist is shared. */}
           {collaborators.length > 0 && (

@@ -594,13 +594,7 @@ export function TrackActionsMenu({
             : "md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
         }`}
       >
-        <span
-          className={`inline-flex transition-transform duration-100 ease-out ${
-            open ? "rotate-90" : ""
-          }`}
-        >
-          <EllipsisIcon size={20} />
-        </span>
+        <EllipsisIcon size={20} />
       </button>
       {(open || menuClosing) &&
         pos &&

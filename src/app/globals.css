@@ -139,17 +139,16 @@ button:not(:disabled):active {
 }
 
 .animate-pop-in {
-  animation: pop-in 0.1s ease-out both;
-  backface-visibility: hidden;
-  will-change: opacity, transform;
+  /* `backwards` applies the entrance frame before start but releases transform
+     afterward. A persistent transform/will-change creates a containing block
+     and offsets fixed-position drag overlays inside floating windows. */
+  animation: pop-in 0.1s ease-out backwards;
 }
 .animate-fade-in {
   animation: fade-in 0.1s ease-out;
 }
 .animate-pop-out {
   animation: pop-out 0.1s ease-in forwards;
-  backface-visibility: hidden;
-  will-change: opacity, transform;
 }
 .animate-fade-out {
   animation: fade-out 0.1s ease-in forwards;
