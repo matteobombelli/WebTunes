@@ -9,6 +9,9 @@ import {
   type Playlist,
 } from "@/db/schema";
 import { areFriends, friendIdsOf } from "@/lib/friends";
+import { imageKindFromBytes } from "@/lib/image-upload";
+import { log } from "@/lib/log";
+import { deleteObject, getObjectBytes, uploadObject } from "@/lib/s3";
 import { isLibraryTrack, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
@@ -371,4 +374,77 @@ export async function getPlaylistTracks(
   return rows.map((r) =>
     toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName)
   );
+}
+
+const COPY_SUFFIX = " (copy)";
+
+/**
+ * Snapshot any playlist the viewer can access into a new playlist they own.
+ * Only currently accessible tracks are copied, in their visible order; this
+ * keeps friend-track privacy identical to the source view. Collaborators are
+ * deliberately not inherited. An explicit cover is copied to an independent
+ * S3 object so deleting or changing either playlist cannot break the other.
+ */
+export async function duplicatePlaylist(
+  playlistId: string,
+  userId: string
+): Promise<PlaylistDTO | null> {
+  const source = await getAccessiblePlaylist(playlistId, userId);
+  if (!source) return null;
+
+  const sourceTracks = await getPlaylistTracks(playlistId, userId);
+  const copyName = `${source.name
+    .slice(0, 100 - COPY_SUFFIX.length)
+    .trimEnd()}${COPY_SUFFIX}`;
+
+  let copy = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(playlists)
+      .values({
+        ownerId: userId,
+        name: copyName,
+        isPrivate: source.isPrivate,
+      })
+      .returning();
+
+    if (sourceTracks.length) {
+      await tx.insert(playlistTracks).values(
+        sourceTracks.map((track, position) => ({
+          playlistId: created.id,
+          trackId: track.id,
+          position,
+        }))
+      );
+    }
+    return created;
+  });
+
+  // DB first, object second: a failed copy leaves a valid playlist using its
+  // track-art mosaic, never a row pointing at a missing cover object.
+  if (source.coverS3Key) {
+    let copiedKey: string | null = null;
+    try {
+      const bytes = await getObjectBytes(source.coverS3Key);
+      const kind = imageKindFromBytes(bytes);
+      if (!kind) throw new Error("unsupported cover bytes");
+
+      copiedKey = `covers/${userId}/${copy.id}.${kind.ext}`;
+      await uploadObject(copiedKey, bytes, kind.contentType);
+      const [withCover] = await db
+        .update(playlists)
+        .set({ coverS3Key: copiedKey })
+        .where(eq(playlists.id, copy.id))
+        .returning();
+      if (withCover) copy = withCover;
+      else await deleteObject(copiedKey).catch(() => {});
+    } catch {
+      if (copiedKey) await deleteObject(copiedKey).catch(() => {});
+      log.warn("playlists", "Could not copy playlist cover", {
+        sourcePlaylistId: source.id,
+        copyPlaylistId: copy.id,
+      });
+    }
+  }
+
+  return toPlaylistDTO(copy, sourceTracks.length, null, "owner");
 }

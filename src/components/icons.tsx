@@ -63,6 +63,16 @@ export const PlusIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Two overlapping pages - duplicate/save a copy. */
+export const CopyIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="8" y="3" width="11" height="14" rx="2" />
+      <rect x="4" y="7" width="11" height="14" rx="2" />
+    </g>
+  </Svg>
+);
+
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M6.2 6.2a1 1 0 0 1 1.4 0L12 10.6l4.4-4.4a1 1 0 1 1 1.4 1.4L13.4 12l4.4 4.4a1 1 0 0 1-1.4 1.4L12 13.4l-4.4 4.4a1 1 0 0 1-1.4-1.4L10.6 12 6.2 7.6a1 1 0 0 1 0-1.4z" />

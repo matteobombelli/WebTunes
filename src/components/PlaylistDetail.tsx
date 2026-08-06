@@ -6,12 +6,20 @@ import { api } from "@/lib/api";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useConfirmStore } from "@/stores/confirm";
 import { usePlayerStore } from "@/stores/player";
+import { useToastStore } from "@/stores/toast";
 import AddTracksDialog from "@/components/AddTracksDialog";
 import CollaboratorsDialog from "@/components/CollaboratorsDialog";
 import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import PlaylistCover from "@/components/PlaylistCover";
 import PlaylistRecommendations from "@/components/PlaylistRecommendations";
-import { LockIcon, PencilIcon, PlayIcon, ShuffleIcon, UsersIcon } from "@/components/icons";
+import {
+  CopyIcon,
+  LockIcon,
+  PencilIcon,
+  PlayIcon,
+  ShuffleIcon,
+  UsersIcon,
+} from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
 
@@ -42,6 +50,7 @@ export default function PlaylistDetail({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [managingCollab, setManagingCollab] = useState(false);
+  const [copying, setCopying] = useState(false);
 
   // Total listen time: sum of known track durations, rounded to minutes,
   // shown as "Xh Ymin" past the hour mark.
@@ -141,6 +150,26 @@ export default function PlaylistDetail({
   const removeTrack = async (track: TrackDTO) => {
     // Failures surface via TrackList's remove/bulkRemove toasts.
     await api(`/playlists/${playlist.id}/tracks/${track.id}`, { method: "DELETE" });
+  };
+
+  const duplicate = async () => {
+    if (copying) return;
+    setCopying(true);
+    setError(null);
+    try {
+      const copy = await api<PlaylistDTO>(
+        `/playlists/${playlist.id}/duplicate`,
+        { method: "POST" }
+      );
+      useToastStore
+        .getState()
+        .show(isOwner ? "Playlist duplicated" : "Playlist saved to your library");
+      router.push(`/playlists/${copy.id}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn’t copy playlist");
+      setCopying(false);
+    }
   };
 
   const reorderTracks = async (trackIds: string[]) => {
@@ -292,6 +321,15 @@ export default function PlaylistDetail({
               playlistId={playlist.id}
               playlistName={playlist.name}
             />
+            <Button
+              variant="outline"
+              pill
+              onClick={duplicate}
+              disabled={copying}
+            >
+              <CopyIcon size={16} />
+              {copying ? "Copying…" : isOwner ? "Duplicate" : "Save a copy"}
+            </Button>
             {isOwner && (
               <button
                 onClick={togglePrivate}

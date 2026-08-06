@@ -95,6 +95,12 @@ setup, and architecture rationale.
   lists the bucket, diffs against the four key columns, deletes only unreferenced
   objects older than a grace window).
 - Mutations that change a playlist's contents bump `playlists.updatedAt`.
+- Playlist duplication (`POST /api/playlists/[id]/duplicate`) accepts any
+  playlist visible through `getAccessiblePlaylist` and creates an owned copy
+  containing only the tracks currently visible through `getPlaylistTracks`,
+  in order. It preserves the source privacy setting but never collaborators;
+  explicit covers are copied to an independent S3 object so either playlist
+  can later change/delete its cover safely.
 - **Auth gotcha**: credentials provider + database sessions requires the
   `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
   explicitly (Auth.js asserts). Session cookie holds the DB session token.
