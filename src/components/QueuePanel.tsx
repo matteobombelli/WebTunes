@@ -26,10 +26,12 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   GripIcon,
+  TrashIcon,
   XIcon,
 } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import CurrentTrackDetails from "@/components/CurrentTrackDetails";
+import { useMobileSwipeAction } from "@/components/MobileSwipeAction";
 import { CurrentTrackKebab } from "@/components/TrackMenus";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
@@ -323,6 +325,9 @@ export default memo(function QueuePanel({
             <span className="text-xs text-fg-muted">
               {queue.length} track{queue.length === 1 ? "" : "s"}
             </span>
+            <span className="text-[10px] text-fg-subtle md:hidden">
+              Swipe right to remove
+            </span>
             <div className="flex-1" />
             {upcoming > 0 && (
               <button
@@ -490,6 +495,9 @@ const QueueRow = memo(function QueueRow({
     const s = usePlayerStore.getState();
     s.removeFromQueue(s.queue.findIndex((q) => q.uid === item.uid));
   }, [item.uid]);
+  const swipe = useMobileSwipeAction<HTMLDivElement>(onRemove, {
+    disabled: isCurrent,
+  });
 
   return (
     <li
@@ -498,70 +506,89 @@ const QueueRow = memo(function QueueRow({
         measureRef?.(node);
       }}
       style={style}
-      className={`group flex items-center gap-2 px-4 py-1.5 ${
-        isCurrent ? "bg-surface-3/40" : "hover:bg-surface-3/40"
-      }`}
+      className="group relative isolate overflow-hidden"
     >
-      <TrackArt track={track} size="h-10 w-10" iconSize={18} thumb />
-      <div className="min-w-0 flex-1">
-        <button
-          onClick={onPlay}
-          disabled={isCurrent}
-          title={isCurrent ? undefined : `Play ${track.title}`}
-          className={`block max-w-full truncate text-left text-sm font-medium ${
-            isCurrent ? "text-accent-bright" : "text-fg"
-          }`}
+      {!isCurrent && (
+        <div
+          aria-hidden
+          style={{ opacity: swipe.progress }}
+          className="absolute inset-0 flex items-center gap-2 bg-red-500/85 px-4 text-sm font-semibold text-white md:hidden"
         >
-          {track.title}
-        </button>
-        <p className="truncate text-xs text-fg-muted">
-          {track.artist ? (
-            <Link
-              href={`/artist?name=${encodeURIComponent(track.artist)}`}
-              className="hover:text-accent-bright"
-            >
-              {track.artist}
-            </Link>
-          ) : (
-            "Unknown artist"
-          )}
-          {track.ownerName ? (
-            <>
-              {" · from "}
+          <TrashIcon size={18} />
+          Remove
+        </div>
+      )}
+      <div
+        {...swipe.handlers}
+        style={swipe.foregroundStyle}
+        className={`relative z-[1] flex items-center gap-2 px-4 py-1.5 ${
+          isCurrent
+            ? "bg-surface-3"
+            : "bg-surface-1 hover:bg-surface-3/80 md:bg-surface-2"
+        }`}
+      >
+        <TrackArt track={track} size="h-10 w-10" iconSize={18} thumb />
+        <div className="min-w-0 flex-1">
+          <button
+            onClick={onPlay}
+            disabled={isCurrent}
+            title={isCurrent ? undefined : `Play ${track.title}`}
+            className={`block max-w-full truncate text-left text-sm font-medium ${
+              isCurrent ? "text-accent-bright" : "text-fg"
+            }`}
+          >
+            {track.title}
+          </button>
+          <p className="truncate text-xs text-fg-muted">
+            {track.artist ? (
               <Link
-                href={`/discover/${track.ownerId}`}
+                href={`/artist?name=${encodeURIComponent(track.artist)}`}
                 className="hover:text-accent-bright"
               >
-                {track.ownerName}
+                {track.artist}
               </Link>
-            </>
-          ) : null}
-        </p>
-      </div>
-      {isCurrent ? (
-        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent-bright">
-          <NowPlayingBars playing={isPlaying} className="h-3 w-3" />
-          Playing
-        </span>
-      ) : (
+            ) : (
+              "Unknown artist"
+            )}
+            {track.ownerName ? (
+              <>
+                {" · from "}
+                <Link
+                  href={`/discover/${track.ownerId}`}
+                  className="hover:text-accent-bright"
+                >
+                  {track.ownerName}
+                </Link>
+              </>
+            ) : null}
+          </p>
+        </div>
+        {isCurrent ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent-bright">
+            <NowPlayingBars playing={isPlaying} className="h-3 w-3" />
+            Playing
+          </span>
+        ) : (
+          <button
+            onClick={onRemove}
+            aria-label={`Remove ${track.title} from queue`}
+            title="Remove from queue"
+            className="sr-only shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:not-sr-only md:flex md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
+          >
+            <XIcon size={14} />
+          </button>
+        )}
         <button
-          onClick={onRemove}
-          aria-label={`Remove ${track.title} from queue`}
-          title="Remove from queue"
-          className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-3 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
+          {...attributes}
+          {...listeners}
+          data-swipe-ignore
+          aria-label={`Reorder ${track.title}`}
+          title="Drag to reorder"
+          className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
         >
-          <XIcon size={14} />
+          <GripIcon size={16} />
         </button>
-      )}
-      <button
-        {...attributes}
-        {...listeners}
-        aria-label={`Reorder ${track.title}`}
-        title="Drag to reorder"
-        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg active:cursor-grabbing md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 md:group-focus-within:opacity-100"
-      >
-        <GripIcon size={16} />
-      </button>
+      </div>
     </li>
   );
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import TrackArt from "@/components/TrackArt";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import { ChevronLeftIcon, XIcon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { useExclusionsStore } from "@/stores/exclusions";
@@ -38,9 +39,12 @@ export default function ExcludedSongsList({
       ) : (
         <ul className="flex flex-col gap-1">
           {tracks.map((track) => (
-            <li
+            <MobileSwipeTrack
               key={track.id}
-              className="flex items-center gap-2 rounded-md px-1 py-1"
+              as="li"
+              track={track}
+              contentClassName="flex items-center gap-2 rounded-md px-1 py-1"
+              surfaceClassName="bg-surface-1"
             >
               <TrackArt track={track} size="h-9 w-9" iconSize={16} thumb />
               <div className="min-w-0 flex-1">
@@ -58,7 +62,7 @@ export default function ExcludedSongsList({
               >
                 <XIcon size={16} />
               </IconButton>
-            </li>
+            </MobileSwipeTrack>
           ))}
         </ul>
       )}

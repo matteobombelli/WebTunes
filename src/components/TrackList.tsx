@@ -40,6 +40,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import EditTrackDialog from "@/components/EditTrackDialog";
+import { useMobileSwipeAction } from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
 import { AddToPlaylistMenu, TrackActionsMenu } from "@/components/TrackMenus";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
@@ -150,9 +151,23 @@ const TrackRow = memo(function TrackRow({
   onEdit,
   onDelete,
 }: TrackRowProps) {
+  const playNext = useCallback(() => {
+    usePlayerStore.getState().playNext([track]);
+    useToastStore.getState().show(`Playing “${track.title}” next`);
+  }, [track]);
+  const swipe = useMobileSwipeAction<HTMLTableRowElement>(playNext);
+
   return (
     <tr
-      style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}
+      {...swipe.handlers}
+      style={{
+        ...swipe.foregroundStyle,
+        animationDelay: `${Math.min(index, 8) * 0.03}s`,
+        boxShadow:
+          swipe.offset > 0
+            ? `${-Math.ceil(swipe.offset)}px 0 0 var(--color-accent)`
+            : undefined,
+      }}
       className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
         isCurrent ? "text-accent-bright" : "text-fg"
       }`}

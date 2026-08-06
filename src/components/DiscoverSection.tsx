@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckIcon, PlayIcon, PlusIcon, ShuffleIcon, XIcon } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import { Button } from "@/components/ui/Button";
 import { api, fetchSimilarTracks } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
@@ -185,22 +186,29 @@ export default function DiscoverSection({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         {preview.map((track, i) => (
-          <button
+          <MobileSwipeTrack
             key={track.id}
-            onClick={() => playThenRadio(track)}
-            title={track.title}
-            className={`relative aspect-square w-full overflow-hidden rounded-lg bg-surface-2 transition duration-200 ease-out hover:z-10 hover:scale-105 ${
-              i >= 4 ? "hidden sm:block" : ""
-            } ${current?.id === track.id ? "ring-2 ring-accent" : ""}`}
+            track={track}
+            className={`aspect-square rounded-lg ${i >= 4 ? "hidden sm:block" : ""}`}
+            contentClassName="h-full"
+            surfaceClassName="bg-surface-2"
           >
-            <TrackArt track={track} size="h-full w-full" iconSize={32} thumb />
-            {/* Darken the bottom third and label it with the song name only. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/3 items-end bg-[linear-gradient(to_top,rgba(0,0,0,0.8),rgba(0,0,0,0.65)_30%,rgba(0,0,0,0.45)_55%,rgba(0,0,0,0.2)_80%,transparent)] px-2 pb-2">
-              <span className="w-full truncate text-left text-[1.2rem] font-medium text-fg sm:text-[1.05rem]">
-                {track.title}
-              </span>
-            </div>
-          </button>
+            <button
+              onClick={() => playThenRadio(track)}
+              title={track.title}
+              className={`relative h-full w-full overflow-hidden rounded-lg bg-surface-2 transition duration-200 ease-out hover:z-10 hover:scale-105 ${
+                current?.id === track.id ? "ring-2 ring-accent" : ""
+              }`}
+            >
+              <TrackArt track={track} size="h-full w-full" iconSize={32} thumb />
+              {/* Darken the bottom third and label it with the song name only. */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/3 items-end bg-[linear-gradient(to_top,rgba(0,0,0,0.8),rgba(0,0,0,0.65)_30%,rgba(0,0,0,0.45)_55%,rgba(0,0,0,0.2)_80%,transparent)] px-2 pb-2">
+                <span className="w-full truncate text-left text-[1.2rem] font-medium text-fg sm:text-[1.05rem]">
+                  {track.title}
+                </span>
+              </div>
+            </button>
+          </MobileSwipeTrack>
         ))}
       </div>
     </section>

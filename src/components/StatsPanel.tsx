@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import TrackArt from "@/components/TrackArt";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import { MusicIcon, PlayIcon } from "@/components/icons";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
@@ -185,9 +186,13 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
       </div>
       <ol>
         {stats.topTracks.map((entry, index) => (
-          <li
+          <MobileSwipeTrack
             key={entry.track.id}
-            className={`${index >= 10 ? "hidden lg:grid" : "grid"} grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 border-t border-border-subtle px-3 py-2 ${
+            as="li"
+            track={entry.track}
+            className={index >= 10 ? "hidden lg:block" : ""}
+            surfaceClassName="bg-surface-1"
+            contentClassName={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 border-t border-border-subtle px-3 py-2 ${
               current?.id === entry.track.id ? "bg-accent/10" : "hover:bg-surface-2/50"
             }`}
           >
@@ -227,7 +232,7 @@ function TrackRanking({ stats }: { stats: StatsDTO }) {
             <span className="text-right text-xs tabular-nums text-fg-muted">
               {formatListenCount(entry.listens)}
             </span>
-          </li>
+          </MobileSwipeTrack>
         ))}
       </ol>
     </section>

@@ -13,6 +13,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import PlaylistCover from "@/components/PlaylistCover";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
@@ -42,9 +43,11 @@ const TrackRows = memo(function TrackRows({
   return (
     <ul className="divide-y divide-border-subtle/60">
       {tracks.map((track, i) => (
-        <li
+        <MobileSwipeTrack
           key={track.id}
-          className={`group flex items-center gap-3 py-2 ${
+          as="li"
+          track={track}
+          contentClassName={`group flex items-center gap-3 py-2 ${
             current?.id === track.id ? "text-accent-bright" : "text-fg"
           }`}
         >
@@ -77,7 +80,7 @@ const TrackRows = memo(function TrackRows({
               <XIcon size={16} />
             </button>
           )}
-        </li>
+        </MobileSwipeTrack>
       ))}
     </ul>
   );

@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { TrackDTO, TrackPageDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 import TrackArt from "@/components/TrackArt";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -199,25 +200,30 @@ function AddTracksBody({
           </p>
         )}
         {candidates?.map((t) => (
-          <label
+          <MobileSwipeTrack
             key={t.id}
-            className="flex cursor-pointer items-center gap-3 border-b border-border-subtle/60 px-3 py-2 text-sm last:border-b-0 hover:bg-surface-2/40"
+            track={t}
+            className="border-b border-border-subtle/60 last:border-b-0"
+            contentClassName="hover:bg-surface-2/40"
+            surfaceClassName="bg-surface-1"
           >
-            <input
-              type="checkbox"
-              checked={selected.has(t.id)}
-              onChange={() => toggle(t.id)}
-              className="checkbox shrink-0"
-            />
-            <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
-            <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
-            <span className="hidden max-w-32 truncate text-fg-muted sm:block">
-              {t.artist ?? "-"}
-            </span>
-            <span className="shrink-0 text-xs text-fg-subtle">
-              {t.ownerName ?? "You"}
-            </span>
-          </label>
+            <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.has(t.id)}
+                onChange={() => toggle(t.id)}
+                className="checkbox shrink-0"
+              />
+              <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
+              <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+              <span className="hidden max-w-32 truncate text-fg-muted sm:block">
+                {t.artist ?? "-"}
+              </span>
+              <span className="shrink-0 text-xs text-fg-subtle">
+                {t.ownerName ?? "You"}
+              </span>
+            </label>
+          </MobileSwipeTrack>
         ))}
         {!query && all?.nextCursor && (
           <button

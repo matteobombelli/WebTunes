@@ -10,6 +10,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import { sectionHeadingClass } from "@/components/DiscoverSection";
 import { api } from "@/lib/api";
 import type {
@@ -188,9 +189,13 @@ export default function SuggestedImportsSection({
           {pool.items.map((item) => {
             const pending = busy.has(item.id);
             return (
-              <article
+              <MobileSwipeTrack
                 key={item.id}
+                as="article"
+                track={item.track}
                 className="w-40 shrink-0 snap-start overflow-hidden rounded-xl border border-border bg-surface-1 sm:w-48"
+                contentClassName="h-full"
+                surfaceClassName="bg-surface-1"
               >
                 <button
                   type="button"
@@ -247,7 +252,7 @@ export default function SuggestedImportsSection({
                     </button>
                   </div>
                 </div>
-              </article>
+              </MobileSwipeTrack>
             );
           })}
           {Array.from({

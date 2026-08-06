@@ -7,6 +7,7 @@ import type { TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
 import { useToastStore } from "@/stores/toast";
 import { AddToPlaylistMenu } from "@/components/TrackMenus";
+import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
 import { PlusIcon, SimilarIcon } from "@/components/icons";
 
@@ -113,9 +114,10 @@ export default function PlaylistRecommendations({
 
       <div className="divide-y divide-border-subtle/60 rounded-md border border-border-subtle">
         {recs.map((track, i) => (
-          <div
+          <MobileSwipeTrack
             key={track.id}
-            className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-surface-2/40"
+            track={track}
+            contentClassName="flex items-center gap-3 px-3 py-2 text-sm hover:bg-surface-2/40"
           >
             <button
               onClick={() => playQueue(recs, i)}
@@ -143,7 +145,7 @@ export default function PlaylistRecommendations({
             ) : (
               <AddToPlaylistMenu trackIds={[track.id]} floating />
             )}
-          </div>
+          </MobileSwipeTrack>
         ))}
       </div>
     </section>
