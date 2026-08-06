@@ -37,6 +37,86 @@ import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
 const DISMISS_PX = 90; // mobile: swipe-down past this (on release) closes the sheet
+const DESKTOP_FRAME_KEY = "wt-queue-window";
+const FRAME_GAP = 8;
+const MIN_FRAME_WIDTH = 320;
+const MIN_FRAME_HEIGHT = 260;
+const DEFAULT_FRAME_WIDTH = 416;
+const DEFAULT_FRAME_HEIGHT = 560;
+const COLLAPSED_FRAME_HEIGHT = 45;
+
+type DesktopFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function clampDesktopFrame(
+  frame: DesktopFrame,
+  minHeight = MIN_FRAME_HEIGHT
+): DesktopFrame {
+  const maxWidth = Math.max(1, window.innerWidth - FRAME_GAP * 2);
+  const maxHeight = Math.max(1, window.innerHeight - FRAME_GAP * 2);
+  const width = Math.min(
+    maxWidth,
+    Math.max(Math.min(MIN_FRAME_WIDTH, maxWidth), frame.width)
+  );
+  const height = Math.min(
+    maxHeight,
+    Math.max(Math.min(minHeight, maxHeight), frame.height)
+  );
+  return {
+    width,
+    height,
+    x: Math.min(
+      window.innerWidth - width - FRAME_GAP,
+      Math.max(FRAME_GAP, frame.x)
+    ),
+    y: Math.min(
+      window.innerHeight - height - FRAME_GAP,
+      Math.max(FRAME_GAP, frame.y)
+    ),
+  };
+}
+
+function initialDesktopFrame(): DesktopFrame {
+  try {
+    const stored = JSON.parse(
+      window.localStorage.getItem(DESKTOP_FRAME_KEY) ?? "null"
+    ) as Partial<DesktopFrame> | null;
+    if (
+      stored &&
+      [stored.x, stored.y, stored.width, stored.height].every(Number.isFinite)
+    ) {
+      return clampDesktopFrame(stored as DesktopFrame);
+    }
+  } catch {
+    // Unavailable/corrupt localStorage: use the normal player-bar anchor.
+  }
+  const width = Math.min(
+    DEFAULT_FRAME_WIDTH,
+    window.innerWidth - FRAME_GAP * 2
+  );
+  const height = Math.min(
+    DEFAULT_FRAME_HEIGHT,
+    window.innerHeight - FRAME_GAP * 2
+  );
+  return clampDesktopFrame({
+    x: 232,
+    y: window.innerHeight - height - 80,
+    width,
+    height,
+  });
+}
+
+function saveDesktopFrame(frame: DesktopFrame) {
+  try {
+    window.localStorage.setItem(DESKTOP_FRAME_KEY, JSON.stringify(frame));
+  } catch {
+    // Window geometry is a convenience; storage failures are harmless.
+  }
+}
 
 // Rows above/below the visible window kept mounted so a fast scroll or a drag
 // near the edge doesn't flash blank. ~20 rows render regardless of queue size.
@@ -83,29 +163,133 @@ export default memo(function QueuePanel({
   const { clearUpcoming } = usePlayerStore.getState();
   const mobile = variant === "mobile";
   const current = index >= 0 ? queue[index]?.track ?? null : null;
-  // Desktop-only: collapse the list down to just the current-song header.
+  // Desktop-only floating-window geometry. QueuePanel is dynamically imported
+  // with ssr:false, so this initializer can safely restore the previous frame.
+  const [desktopFrame, setDesktopFrame] = useState<DesktopFrame | null>(() =>
+    mobile ? null : initialDesktopFrame()
+  );
+  // Desktop-only: minimize the window down to its draggable title bar.
   const [collapsed, setCollapsed] = useState(false);
-  // Desktop popover animates its height as it collapses/expands or the queue
-  // resizes: measure the content and transition the wrapper's height to match.
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const [animHeight, setAnimHeight] = useState<number | undefined>(undefined);
-  const [animReady, setAnimReady] = useState(false);
+  const expandedHeightRef = useRef(DEFAULT_FRAME_HEIGHT);
+  const frameInteractionRef = useRef<{
+    pointerId: number;
+    kind: "move" | "resize";
+    startX: number;
+    startY: number;
+    startFrame: DesktopFrame;
+    lastFrame: DesktopFrame;
+  } | null>(null);
+
+  // A viewport resize must never strand the floating window off-screen.
   useEffect(() => {
     if (mobile) return;
-    const el = contentRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const h = el.offsetHeight;
-      // Ignore 0 (the panel is display:none while closed) so reopening doesn't
-      // animate up from nothing.
-      if (h > 0) {
-        setAnimHeight(h);
-        setAnimReady(true);
+    const onResize = () =>
+      setDesktopFrame((frame) =>
+        frame
+          ? clampDesktopFrame(
+              frame,
+              collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
+            )
+          : frame
+      );
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, [collapsed, mobile]);
+
+  const beginFrameInteraction = useCallback(
+    (event: React.PointerEvent<HTMLElement>, kind: "move" | "resize") => {
+      if (mobile || event.button !== 0 || !desktopFrame) return;
+      if (
+        kind === "move" &&
+        event.target instanceof Element &&
+        event.target.closest("button:not([data-drag-handle])")
+      ) {
+        return;
       }
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      frameInteractionRef.current = {
+        pointerId: event.pointerId,
+        kind,
+        startX: event.clientX,
+        startY: event.clientY,
+        startFrame: desktopFrame,
+        lastFrame: desktopFrame,
+      };
+    },
+    [desktopFrame, mobile]
+  );
+
+  const moveFrameInteraction = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const interaction = frameInteractionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      const dx = event.clientX - interaction.startX;
+      const dy = event.clientY - interaction.startY;
+      const next = clampDesktopFrame(
+        interaction.kind === "move"
+          ? {
+              ...interaction.startFrame,
+              x: interaction.startFrame.x + dx,
+              y: interaction.startFrame.y + dy,
+            }
+          : {
+              ...interaction.startFrame,
+              width: interaction.startFrame.width + dx,
+              height: interaction.startFrame.height + dy,
+            },
+        collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
+      );
+      interaction.lastFrame = next;
+      setDesktopFrame(next);
+    },
+    [collapsed]
+  );
+
+  const endFrameInteraction = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const interaction = frameInteractionRef.current;
+      if (!interaction || interaction.pointerId !== event.pointerId) return;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      frameInteractionRef.current = null;
+      saveDesktopFrame(interaction.lastFrame);
+    },
+    []
+  );
+
+  const nudgeDesktopFrame = useCallback(
+    (dx: number, dy: number, resize = false) => {
+      setDesktopFrame((frame) => {
+        if (!frame) return frame;
+        const next = clampDesktopFrame(
+          resize
+            ? { ...frame, width: frame.width + dx, height: frame.height + dy }
+            : { ...frame, x: frame.x + dx, y: frame.y + dy },
+          collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
+        );
+        saveDesktopFrame(next);
+        return next;
+      });
+    },
+    [collapsed]
+  );
+
+  const toggleCollapsed = useCallback(() => {
+    setDesktopFrame((frame) => {
+      if (!frame) return frame;
+      if (collapsed) {
+        return clampDesktopFrame({
+          ...frame,
+          height: expandedHeightRef.current,
+        });
+      }
+      expandedHeightRef.current = frame.height;
+      return { ...frame, height: COLLAPSED_FRAME_HEIGHT };
     });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [mobile]);
+    setCollapsed((value) => !value);
+  }, [collapsed]);
 
   // Windowing: only the visible slice of rows is mounted. The list lives in
   // normal flow between two spacers (no per-row transform), so @dnd-kit's drag
@@ -252,8 +436,10 @@ export default memo(function QueuePanel({
         hidden ? "hidden" : ""
       } fixed inset-0 z-[60] flex flex-col bg-surface-1 md:hidden`
     : `${
-        hidden ? "hidden" : open ? "animate-pop-in" : "animate-pop-out"
-      } absolute bottom-full left-2 z-20 mb-2 w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-border bg-surface-2 shadow-lg md:left-56`;
+        hidden
+          ? "hidden"
+          : `${open ? "animate-pop-in" : "animate-pop-out"} hidden md:flex`
+      } fixed z-[55] min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface-2 shadow-2xl`;
 
   // Off-screen until settled; follows the finger while dragging down (mobile).
   const offset = atRest ? `${dragY}px` : "100%";
@@ -292,6 +478,71 @@ export default memo(function QueuePanel({
 
   const body = (
     <>
+      {!mobile && (
+        <div
+          onPointerDown={(event) => beginFrameInteraction(event, "move")}
+          onPointerMove={moveFrameInteraction}
+          onPointerUp={endFrameInteraction}
+          onPointerCancel={endFrameInteraction}
+          onDoubleClick={toggleCollapsed}
+          className="flex h-[45px] shrink-0 cursor-move select-none items-center gap-2 border-b border-border bg-surface-1 px-2.5"
+        >
+          <button
+            type="button"
+            data-drag-handle
+            aria-label="Move queue window"
+            title="Drag to move queue"
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 32 : 8;
+              const delta =
+                event.key === "ArrowLeft"
+                  ? [-step, 0]
+                  : event.key === "ArrowRight"
+                    ? [step, 0]
+                    : event.key === "ArrowUp"
+                      ? [0, -step]
+                      : event.key === "ArrowDown"
+                        ? [0, step]
+                        : null;
+              if (!delta) return;
+              event.preventDefault();
+              nudgeDesktopFrame(delta[0], delta[1]);
+            }}
+            className="flex h-8 w-8 shrink-0 cursor-move items-center justify-center rounded text-fg-subtle hover:bg-surface-3 hover:text-fg"
+          >
+            <GripIcon size={16} />
+          </button>
+          <h2 className="text-sm font-semibold text-fg">Queue</h2>
+          <span className="text-xs text-fg-muted">
+            {queue.length} track{queue.length === 1 ? "" : "s"}
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            onDoubleClick={(event) => event.stopPropagation()}
+            aria-label={collapsed ? "Restore queue window" : "Minimize queue window"}
+            title={collapsed ? "Restore queue" : "Minimize queue"}
+            className="flex h-8 w-8 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-fg"
+          >
+            {collapsed ? (
+              <ChevronUpIcon size={16} />
+            ) : (
+              <ChevronDownIcon size={16} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            onDoubleClick={(event) => event.stopPropagation()}
+            aria-label="Close queue"
+            title="Close queue"
+            className="flex h-8 w-8 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-fg"
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
+      )}
       {mobile && (
         <div
           {...swipe}
@@ -300,18 +551,18 @@ export default memo(function QueuePanel({
           <div className="h-1.5 w-10 rounded-full bg-white/30" />
         </div>
       )}
-      {current && (
+      {current && !collapsed && (
         <div
           {...(mobile ? swipe : {})}
           className={`border-b border-border px-4 ${
-            mobile ? "pb-3 pt-1" : "pb-3 pt-4"
+            mobile ? "pb-3 pt-1" : "py-3"
           }`}
         >
           <CurrentTrackDetails
             track={current}
-            row={mobile}
-            artSize={mobile ? "h-12 w-12" : "w-full aspect-square"}
-            iconSize={mobile ? 22 : 64}
+            row
+            artSize={mobile ? "h-12 w-12" : "h-14 w-14"}
+            iconSize={mobile ? 22 : 24}
             onNavigate={onClose}
             trailing={<CurrentTrackKebab track={current} onNavigate={onClose} />}
           />
@@ -321,13 +572,19 @@ export default memo(function QueuePanel({
       {!collapsed && (
         <>
           <div className="flex items-center gap-3 border-b border-border px-4 py-2">
-            <h2 className="text-sm font-semibold text-fg">Queue</h2>
-            <span className="text-xs text-fg-muted">
-              {queue.length} track{queue.length === 1 ? "" : "s"}
-            </span>
-            <span className="text-[10px] text-fg-subtle md:hidden">
-              Swipe right to remove
-            </span>
+            <h2 className="text-sm font-semibold text-fg">
+              {mobile ? "Queue" : "Up next"}
+            </h2>
+            {mobile && (
+              <>
+                <span className="text-xs text-fg-muted">
+                  {queue.length} track{queue.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-[10px] text-fg-subtle">
+                  Swipe right to remove
+                </span>
+              </>
+            )}
             <div className="flex-1" />
             {upcoming > 0 && (
               <button
@@ -356,9 +613,7 @@ export default memo(function QueuePanel({
                 ref={scrollRef}
                 onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
                 className={
-                  mobile
-                    ? "min-h-0 flex-1 overflow-y-auto py-1"
-                    : "max-h-[max(10rem,calc(100dvh-40rem))] overflow-y-auto py-1"
+                  "min-h-0 flex-1 overflow-y-auto py-1"
                 }
               >
                 {topPad > 0 && <li aria-hidden style={{ height: topPad }} />}
@@ -393,46 +648,18 @@ export default memo(function QueuePanel({
         </>
       )}
 
-      <div
-        className={`flex shrink-0 items-center border-t border-border px-4 ${
-          mobile
-            ? "justify-center pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-3"
-            : "justify-between py-2"
-        }`}
-      >
-        {!mobile && (
+      {mobile && (
+        <div className="flex shrink-0 items-center justify-center border-t border-border px-4 pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-3">
           <button
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? "Expand queue" : "Collapse queue"}
-            title={collapsed ? "Expand queue" : "Collapse queue"}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-fg"
+            onClick={onClose}
+            aria-label="Back to now playing"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-fg"
           >
-            {collapsed ? (
-              <ChevronUpIcon size={16} />
-            ) : (
-              <ChevronDownIcon size={16} />
-            )}
-            {collapsed ? "Expand" : "Collapse"}
+            <ChevronDownIcon size={18} />
+            Back
           </button>
-        )}
-        <button
-          onClick={onClose}
-          aria-label={mobile ? "Back to now playing" : "Close queue"}
-          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-3 hover:text-fg"
-        >
-          {mobile ? (
-            <>
-              <ChevronDownIcon size={18} />
-              Back
-            </>
-          ) : (
-            <>
-              <XIcon size={16} />
-              Close
-            </>
-          )}
-        </button>
-      </div>
+        </div>
+      )}
     </>
   );
 
@@ -446,17 +673,49 @@ export default memo(function QueuePanel({
               transition: dragging ? "none" : "transform 0.22s ease",
             }
           : {
-              height: animHeight,
-              transition: animReady ? "height 200ms ease" : undefined,
+              left: desktopFrame?.x,
+              top: desktopFrame?.y,
+              width: desktopFrame?.width,
+              height: desktopFrame?.height,
             }
       }
     >
       {mobile ? (
         body
       ) : (
-        <div ref={contentRef} className="flex flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           {body}
         </div>
+      )}
+      {!mobile && !collapsed && (
+        <button
+          type="button"
+          aria-label="Resize queue window"
+          title="Drag to resize queue"
+          onPointerDown={(event) => beginFrameInteraction(event, "resize")}
+          onPointerMove={moveFrameInteraction}
+          onPointerUp={endFrameInteraction}
+          onPointerCancel={endFrameInteraction}
+          onKeyDown={(event) => {
+            const step = event.shiftKey ? 32 : 8;
+            const delta =
+              event.key === "ArrowLeft"
+                ? [-step, 0]
+                : event.key === "ArrowRight"
+                  ? [step, 0]
+                  : event.key === "ArrowUp"
+                    ? [0, -step]
+                    : event.key === "ArrowDown"
+                      ? [0, step]
+                      : null;
+            if (!delta) return;
+            event.preventDefault();
+            nudgeDesktopFrame(delta[0], delta[1], true);
+          }}
+          className="absolute bottom-0 right-0 z-10 h-5 w-5 cursor-se-resize touch-none rounded-tl text-fg-subtle hover:bg-surface-3 hover:text-fg"
+        >
+          <span className="absolute bottom-1 right-1 block h-2.5 w-2.5 border-b-2 border-r-2 border-current" />
+        </button>
       )}
     </div>
   );
