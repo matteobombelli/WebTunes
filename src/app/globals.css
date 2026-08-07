@@ -127,6 +127,17 @@ button:not(:disabled):active {
     transform: none;
   }
 }
+/* Removed queue row: close the gap after the row has slid out sideways. The
+   implicit `from` resolves to the computed height, so the element needs an
+   explicit inline height (`auto` is not interpolable). `forwards` without
+   `backwards` keeps the row full-height through the delay, so the slide plays
+   first and the collapse follows. */
+@keyframes queue-row-collapse {
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
 /* Now-playing equaliser bars. */
 @keyframes eq-bounce {
   0%,
@@ -155,6 +166,16 @@ button:not(:disabled):active {
 }
 .animate-fade-in-up {
   animation: fade-in-up 0.22s ease-out both;
+}
+.animate-queue-row-collapse {
+  animation: queue-row-collapse 0.16s ease-in 0.18s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The block below zeroes durations but not delays: without this the row would
+     hold an empty red strip for the length of the (already-collapsed) slide. */
+  .animate-queue-row-collapse {
+    animation-delay: 0.001ms;
+  }
 }
 /* Tailwind's default pulse is 2s; tighten it so spinners feel responsive. */
 .animate-pulse {

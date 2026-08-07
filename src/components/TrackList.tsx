@@ -153,7 +153,6 @@ const TrackRow = memo(function TrackRow({
 }: TrackRowProps) {
   const playNext = useCallback(() => {
     usePlayerStore.getState().playNext([track]);
-    useToastStore.getState().show(`Playing “${track.title}” next`);
   }, [track]);
   const swipe = useMobileSwipeAction<HTMLTableRowElement>(playNext);
 
@@ -163,10 +162,10 @@ const TrackRow = memo(function TrackRow({
       style={{
         ...swipe.foregroundStyle,
         animationDelay: `${Math.min(index, 8) * 0.03}s`,
-        boxShadow:
-          swipe.offset > 0
-            ? `${-Math.ceil(swipe.offset)}px 0 0 rgb(5 150 105 / 0.9)`
-            : undefined,
+        // Always emitted so it can be transitioned back with the row; at offset
+        // 0 the shadow is fully clipped to outside the border box and paints
+        // nothing.
+        boxShadow: `${-Math.ceil(swipe.offset)}px 0 0 rgb(5 150 105 / 0.9)`,
       }}
       className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
         isCurrent ? "text-accent-bright" : "text-fg"
@@ -195,12 +194,18 @@ const TrackRow = memo(function TrackRow({
       <td className="relative py-2.5 sm:py-2">
         <span
           aria-hidden
-          style={{ opacity: swipe.progress }}
-          className={`pointer-events-none absolute -left-12 top-1/2 inline-flex -translate-y-1/2 text-white transition-transform duration-100 ease-out md:hidden ${
-            swipe.committed ? "scale-125" : ""
-          }`}
+          style={swipe.backdropStyle}
+          className="pointer-events-none absolute -left-12 top-1/2 inline-flex -translate-y-1/2 text-white md:hidden"
         >
-          <PlayNextIcon size={22} />
+          {/* Own element: the wrapper's inline transition would otherwise
+              replace this one's, snapping the pop instead of easing it. */}
+          <span
+            className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+              swipe.committed ? "scale-125" : ""
+            }`}
+          >
+            <PlayNextIcon size={22} />
+          </span>
         </span>
         <button
           onClick={() => playQueue(view, index)}

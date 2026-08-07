@@ -37,6 +37,10 @@ import { CurrentTrackKebab } from "@/components/TrackMenus";
 import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
+// Swipe-to-remove: the row slides out, then its gap closes. Both halves must
+// match `.animate-queue-row-collapse` (0.16s after a 0.18s delay) in globals.css.
+const EXIT_SLIDE_MS = 180;
+const EXIT_COLLAPSE_MS = 160;
 const DISMISS_PX = 90; // mobile: swipe-down past this (on release) closes the sheet
 const DESKTOP_FRAME_KEY = "wt-queue-window";
 const FRAME_GAP = 8;
@@ -740,6 +744,7 @@ const QueueRow = memo(function QueueRow({
   measureRef?: (node: HTMLLIElement | null) => void;
 }) {
   const { track } = item;
+  const liRef = useRef<HTMLLIElement | null>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.uid });
   // While dragging, the row is the placeholder gap (the DragOverlay shows the
@@ -749,6 +754,13 @@ const QueueRow = memo(function QueueRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0 : undefined,
+  };
+  // The exit slide rides the foreground layer, never the <li>: the sortable
+  // transform owns that one, and a persistent transform there would offset the
+  // fixed-position DragOverlay.
+  const exitStyle: React.CSSProperties = {
+    transform: "translate3d(-100%, 0, 0)",
+    transition: `transform ${EXIT_SLIDE_MS}ms ease-in`,
   };
 
   // Look up the live index at click time (keyed on the stable uid) so handlers
@@ -761,29 +773,54 @@ const QueueRow = memo(function QueueRow({
     const s = usePlayerStore.getState();
     s.removeFromQueue(s.queue.findIndex((q) => q.uid === item.uid));
   }, [item.uid]);
-  const swipe = useMobileSwipeAction<HTMLDivElement>(onRemove, {
-    disabled: isCurrent,
+
+  // Swiping removes on a delay so the row can slide out and close its gap
+  // first. Deferring the store write (rather than animating a ghost of an
+  // already-removed row) keeps `queue` - and with it the windowing spacers,
+  // the sortable ids and every row's index - frozen for the animation.
+  const [exiting, setExiting] = useState(false);
+  const [exitH, setExitH] = useState<number>();
+  const beginExit = useCallback(() => {
+    setExitH(liRef.current?.offsetHeight);
+    setExiting(true);
+    // Deliberately not cleared on unmount: the windowing unmounts the row if it
+    // scrolls out mid-exit, and the track has to leave the queue anyway. A late
+    // timer is harmless - the uid resolves to -1 and the store no-ops.
+    window.setTimeout(() => {
+      onRemove();
+      // removeFromQueue refuses the current track, so if playback advanced onto
+      // this row during the exit, un-collapse it instead of stranding it at 0.
+      setExiting(false);
+    }, EXIT_SLIDE_MS + EXIT_COLLAPSE_MS);
+  }, [onRemove]);
+
+  const swipe = useMobileSwipeAction<HTMLDivElement>(beginExit, {
+    disabled: isCurrent || exiting,
     direction: "left",
   });
 
   return (
     <li
       ref={(node) => {
+        liRef.current = node;
         setNodeRef(node);
-        measureRef?.(node);
+        // A collapsing row must not be sampled as the window's row height.
+        if (!exiting) measureRef?.(node);
       }}
-      style={style}
-      className="group relative isolate overflow-hidden"
+      style={exiting ? { ...style, height: exitH } : style}
+      className={`group relative isolate overflow-hidden ${
+        exiting ? "animate-queue-row-collapse" : ""
+      }`}
     >
       {!isCurrent && (
         <div
           aria-hidden
-          style={{ opacity: swipe.progress }}
+          style={exiting ? { opacity: 1 } : swipe.backdropStyle}
           className="absolute inset-0 flex items-center justify-end bg-red-500/85 px-5 text-white md:hidden"
         >
           <span
-            className={`inline-flex transition-transform duration-100 ease-out ${
-              swipe.committed ? "scale-125" : ""
+            className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+              exiting || swipe.committed ? "scale-125" : ""
             }`}
           >
             <TrashIcon size={20} />
@@ -792,7 +829,7 @@ const QueueRow = memo(function QueueRow({
       )}
       <div
         {...swipe.handlers}
-        style={swipe.foregroundStyle}
+        style={exiting ? exitStyle : swipe.foregroundStyle}
         className={`relative z-[1] flex items-center gap-2 px-4 py-1.5 ${
           isCurrent
             ? "bg-surface-3"

@@ -11,12 +11,16 @@ import {
 import { PlayNextIcon } from "@/components/icons";
 import type { TrackDTO } from "@/lib/types";
 import { usePlayerStore } from "@/stores/player";
-import { useToastStore } from "@/stores/toast";
 
 const START_PX = 7;
 const COMMIT_PX = 72;
 const MAX_PX = 112;
 const SETTLE_MS = 120;
+// A committed swipe holds at the action colour long enough to read as a
+// confirmation before gliding back - it is the only feedback the gesture gives.
+const CONFIRM_HOLD_MS = 240;
+const CONFIRM_RETURN_MS = 280;
+const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 type SwipeOptions = {
   disabled?: boolean;
@@ -43,7 +47,9 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     actionRef.current = onAction;
   }, [onAction]);
   const [offset, setOffset] = useState(0);
-  const [settling, setSettling] = useState(false);
+  // Duration of the in-flight settle transition; null while the foreground is
+  // following the finger (or at rest).
+  const [settleMs, setSettleMs] = useState<number | null>(null);
   const [committed, setCommitted] = useState(false);
   const offsetRef = useRef(0);
   const gestureRef = useRef<{
@@ -66,18 +72,21 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     setOffset(next);
   }, []);
 
-  const reset = useCallback(() => {
-    gestureRef.current = null;
-    setSettling(true);
-    setCommitted(false);
-    updateOffset(0);
-    timersRef.current.push(
-      window.setTimeout(() => {
-        setSettling(false);
-        suppressClickRef.current = false;
-      }, SETTLE_MS)
-    );
-  }, [updateOffset]);
+  const reset = useCallback(
+    (duration: number = SETTLE_MS) => {
+      gestureRef.current = null;
+      setSettleMs(duration);
+      setCommitted(false);
+      updateOffset(0);
+      timersRef.current.push(
+        window.setTimeout(() => {
+          setSettleMs(null);
+          suppressClickRef.current = false;
+        }, duration)
+      );
+    },
+    [updateOffset]
+  );
 
   const onTouchStart: TouchEventHandler<T> = useCallback(
     (event) => {
@@ -107,7 +116,7 @@ export function useMobileSwipeAction<T extends HTMLElement>(
         axis: "pending",
       };
       suppressClickRef.current = false;
-      setSettling(false);
+      setSettleMs(null);
       setCommitted(false);
       updateOffset(0);
     },
@@ -155,11 +164,13 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     ) {
       gestureRef.current = null;
       suppressClickRef.current = true;
-      setSettling(true);
+      setSettleMs(SETTLE_MS);
       setCommitted(true);
       updateOffset(direction === "right" ? MAX_PX : -MAX_PX);
       actionRef.current();
-      timersRef.current.push(window.setTimeout(reset, SETTLE_MS));
+      timersRef.current.push(
+        window.setTimeout(() => reset(CONFIRM_RETURN_MS), CONFIRM_HOLD_MS)
+      );
       return;
     }
     reset();
@@ -175,18 +186,27 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     onTouchStart,
     onTouchMove,
     onTouchEnd,
-    onTouchCancel: reset as TouchEventHandler<T>,
+    // Not `reset` directly: it takes a duration, and the event would land there.
+    onTouchCancel: (() => reset()) as TouchEventHandler<T>,
     onClickCapture,
   };
   const foregroundStyle: CSSProperties = {
     transform: `translate3d(${offset}px, 0, 0)`,
+    // box-shadow rides along for callers that paint their action colour as a
+    // shadow on the moving element itself (a <tr> can't hold a backdrop layer).
     transition:
-      settling
-        ? `transform ${SETTLE_MS}ms ease-out`
+      settleMs !== null
+        ? `transform ${settleMs}ms ${EASE}, box-shadow ${settleMs}ms ${EASE}`
         : offset !== 0
           ? "none"
           : undefined,
     willChange: offset !== 0 ? "transform" : undefined,
+  };
+  // The backdrop's opacity is React-driven, so it would otherwise cut out in a
+  // single render while the foreground is still gliding back.
+  const backdropStyle: CSSProperties = {
+    opacity: Math.min(1, Math.abs(offset) / COMMIT_PX),
+    transition: settleMs !== null ? `opacity ${settleMs}ms ease-out` : undefined,
   };
 
   return {
@@ -194,7 +214,7 @@ export function useMobileSwipeAction<T extends HTMLElement>(
     committed,
     handlers,
     foregroundStyle,
-    progress: Math.min(1, Math.abs(offset) / COMMIT_PX),
+    backdropStyle,
   };
 }
 
@@ -219,7 +239,6 @@ export default function MobileSwipeTrack({
 }) {
   const playNext = useCallback(() => {
     usePlayerStore.getState().playNext([track]);
-    useToastStore.getState().show(`Playing “${track.title}” next`);
   }, [track]);
   const swipe = useMobileSwipeAction<HTMLDivElement>(playNext);
   const Root = as;
@@ -230,11 +249,11 @@ export default function MobileSwipeTrack({
     >
       <div
         aria-hidden
-        style={{ opacity: swipe.progress }}
+        style={swipe.backdropStyle}
         className="absolute inset-0 flex items-center justify-start bg-emerald-600/90 px-5 text-white md:hidden"
       >
         <span
-          className={`inline-flex transition-transform duration-100 ease-out ${
+          className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
             swipe.committed ? "scale-125" : ""
           }`}
         >

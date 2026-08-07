@@ -31,8 +31,12 @@ Note the basePath: the app lives under `/projects/webtunes` even in dev.
 
 `node scripts/seed-demo.mjs` seeds two pre-friended demo accounts, each with
 10 royalty-free tracks (music by Kevin MacLeod, incompetech.com, CC BY 4.0;
-album names are demo groupings). Each account has one private track so the
-sharing/privacy features can be demonstrated.
+album names are demo groupings). The seed also adds artwork and thumbnails,
+loudness data, album-clustered Play Similar embeddings, a rolling year of
+qualified listening telemetry, friend-listen counts, playable Suggested Import
+cards, active share links, sample radio exclusions, and
+public/private/collaborative playlists. Each account has one private track so
+the sharing/privacy features can be demonstrated.
 
 | Name  | Email           | Password |
 |-------|-----------------|----------|
@@ -43,11 +47,13 @@ The published showcase accounts cannot upload or import music, run importer
 searches, create invites, or delete themselves. Their Library add-music
 controls show `Demo accounts are read-only.` instead.
 
-The script is idempotent (safe to re-run), needs the database and S3 bucket
-from `docker compose up -d` plus internet access to download the tracks, and
-reads `.env.local` for credentials. The passwords are deliberately short for
-demos - seeding writes the hash directly, bypassing the 8-character
-registration minimum.
+The script is idempotent (safe to re-run): it refreshes the relative upload and
+telemetry dates so the Discover and Stats views remain useful on long-lived
+installations. It needs the database and S3 bucket from `docker compose up -d`
+plus internet access to download audio not already present, and reads
+`.env.local` for credentials. The passwords are deliberately short for demos -
+seeding writes the hash directly, bypassing the 8-character registration
+minimum.
 
 ## Commands
 
