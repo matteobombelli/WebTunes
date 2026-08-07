@@ -192,11 +192,9 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   };
   const foregroundStyle: CSSProperties = {
     transform: `translate3d(${offset}px, 0, 0)`,
-    // box-shadow rides along for callers that paint their action colour as a
-    // shadow on the moving element itself (a <tr> can't hold a backdrop layer).
     transition:
       settleMs !== null
-        ? `transform ${settleMs}ms ${EASE}, box-shadow ${settleMs}ms ${EASE}`
+        ? `transform ${settleMs}ms ${EASE}`
         : offset !== 0
           ? "none"
           : undefined,
@@ -210,7 +208,6 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   };
 
   return {
-    offset,
     committed,
     handlers,
     foregroundStyle,

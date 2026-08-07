@@ -165,7 +165,11 @@ button:not(:disabled):active {
   animation: fade-out 0.1s ease-in forwards;
 }
 .animate-fade-in-up {
-  animation: fade-in-up 0.22s ease-out both;
+  /* `backwards`, not `both`, for the same reason as .animate-pop-in above: a
+     forwards fill keeps applying the final frame's `transform: none`, and
+     animated values outrank inline styles - which silently discards the
+     swipe gesture's inline transform on rows that use this entrance. */
+  animation: fade-in-up 0.22s ease-out backwards;
 }
 .animate-queue-row-collapse {
   animation: queue-row-collapse 0.16s ease-in 0.18s forwards;

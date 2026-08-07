@@ -162,10 +162,6 @@ const TrackRow = memo(function TrackRow({
       style={{
         ...swipe.foregroundStyle,
         animationDelay: `${Math.min(index, 8) * 0.03}s`,
-        // Always emitted so it can be transitioned back with the row; at offset
-        // 0 the shadow is fully clipped to outside the border box and paints
-        // nothing.
-        boxShadow: `${-Math.ceil(swipe.offset)}px 0 0 rgb(5 150 105 / 0.9)`,
       }}
       className={`group animate-fade-in-up border-b border-border-subtle/60 transition-colors hover:bg-surface-2/40 ${
         isCurrent ? "text-accent-bright" : "text-fg"
@@ -192,10 +188,15 @@ const TrackRow = memo(function TrackRow({
         </td>
       )}
       <td className="relative py-2.5 sm:py-2">
+        {/* A <tr> can hold no backdrop layer of its own, so the swipe's action
+            colour is painted from the first cell: pinned to the cell's left
+            edge, it travels with the row and fills exactly the strip the row
+            opens up. (A box-shadow on the row does not paint - the table
+            inherits `border-collapse: collapse` from Tailwind's preflight.) */}
         <span
           aria-hidden
           style={swipe.backdropStyle}
-          className="pointer-events-none absolute -left-12 top-1/2 inline-flex -translate-y-1/2 text-white md:hidden"
+          className="pointer-events-none absolute inset-y-0 right-full flex w-screen items-center justify-end bg-emerald-600/90 pr-5 text-white md:hidden"
         >
           {/* Own element: the wrapper's inline transition would otherwise
               replace this one's, snapping the pop instead of easing it. */}
