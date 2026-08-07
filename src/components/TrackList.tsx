@@ -58,6 +58,8 @@ function formatDuration(seconds: number | null): string {
 // How many rows to render initially and to add each time the scroll sentinel
 // comes into view.
 const PAGE_SIZE = 50;
+// Where the swipe-to-queue icon sits, measured from the row's resting left edge.
+const ICON_INSET = 16;
 
 type SortKey = "title" | "artist" | "album" | "owner" | "duration" | "plays";
 type SortState = { key: SortKey; dir: 1 | -1 } | null;
@@ -189,27 +191,40 @@ const TrackRow = memo(function TrackRow({
       )}
       <td className="relative py-2.5 sm:py-2">
         {/* A <tr> can hold no backdrop layer of its own, so the swipe's action
-            colour is painted from the first cell. Its right edge is pinned to
-            the cell (so it travels with the row) and its width is the swipe
-            distance - which parks its left edge, and the icon with it, exactly
-            where the row started: the strip grows, the icon holds still. That
-            is the reveal the queue's trash backdrop gets for free from being
-            laid out under a moving row. (A box-shadow on the row would not
-            paint - the table inherits `border-collapse: collapse` from the
-            Tailwind preflight.) */}
+            colour is painted from the first cell: a fixed-width panel whose
+            right edge is pinned to the cell, so it rides the row's transform
+            and uncovers the strip the row opens up. Everything it overhangs
+            past the row's starting edge is off-screen. Nothing here is sized
+            from the offset - width is a layout property, and animating it per
+            touch frame is what made this feel heavier than the queue's exit.
+            (A box-shadow on the row would not paint at all - the table
+            inherits `border-collapse: collapse` from the Tailwind preflight.) */}
         <span
           aria-hidden
-          style={{ ...swipe.backdropStyle, width: swipe.offset }}
-          className="pointer-events-none absolute inset-y-0 right-full flex items-center overflow-hidden bg-emerald-500 pl-4 text-white md:hidden"
+          style={swipe.backdropStyle}
+          className="pointer-events-none absolute inset-y-0 right-full w-32 overflow-hidden bg-green-500 text-white md:hidden"
         >
-          {/* Own element: the wrapper's inline transition would otherwise
-              replace this one's, snapping the pop instead of easing it. */}
+          {/* Counter-translated by the row's own offset, so it holds still at
+              ICON_INSET from where the row started while the panel slides out
+              from under it - the same reveal the queue's trash icon gets from
+              sitting in a backdrop that never moves. Shares the foreground's
+              transition so the two stay in lockstep on the way back. */}
           <span
-            className={`inline-flex shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-              swipe.committed ? "scale-125" : ""
-            }`}
+            className="absolute inset-y-0 left-full flex items-center"
+            style={{
+              transform: `translate3d(${ICON_INSET - swipe.offset}px, 0, 0)`,
+              transition: swipe.foregroundStyle.transition,
+            }}
           >
-            <PlayNextIcon size={22} />
+            {/* Own element: the wrapper's transition would otherwise replace
+                this one's, snapping the pop instead of easing it. */}
+            <span
+              className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                swipe.committed ? "scale-125" : ""
+              }`}
+            >
+              <PlayNextIcon size={22} />
+            </span>
           </span>
         </span>
         <button

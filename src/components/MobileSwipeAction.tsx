@@ -16,11 +16,10 @@ const START_PX = 7;
 const COMMIT_PX = 72;
 const MAX_PX = 112;
 const SETTLE_MS = 120;
-// A committed swipe snaps out (SETTLE_MS), pauses just past the end of that
-// snap - long enough to read as a confirmation, short enough not to feel like a
-// hang - then glides back on a long decelerating curve.
-const CONFIRM_HOLD_MS = 160;
-const CONFIRM_RETURN_MS = 320;
+// A committed swipe closes straight from wherever the finger left it - no snap
+// outwards, no pause - so the gesture is one continuous motion like the queue's
+// exit. The confirmation is carried by `committed` riding that glide.
+const CONFIRM_RETURN_MS = 240;
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 type SwipeOptions = {
@@ -74,14 +73,15 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   }, []);
 
   const reset = useCallback(
-    (duration: number = SETTLE_MS) => {
+    (duration: number = SETTLE_MS, commit = false) => {
       gestureRef.current = null;
       setSettleMs(duration);
-      setCommitted(false);
+      setCommitted(commit);
       updateOffset(0);
       timersRef.current.push(
         window.setTimeout(() => {
           setSettleMs(null);
+          setCommitted(false);
           suppressClickRef.current = false;
         }, duration)
       );
@@ -163,19 +163,13 @@ export function useMobileSwipeAction<T extends HTMLElement>(
       gesture?.axis === "horizontal" &&
       Math.abs(offsetRef.current) >= COMMIT_PX
     ) {
-      gestureRef.current = null;
       suppressClickRef.current = true;
-      setSettleMs(SETTLE_MS);
-      setCommitted(true);
-      updateOffset(direction === "right" ? MAX_PX : -MAX_PX);
       actionRef.current();
-      timersRef.current.push(
-        window.setTimeout(() => reset(CONFIRM_RETURN_MS), CONFIRM_HOLD_MS)
-      );
+      reset(CONFIRM_RETURN_MS, true);
       return;
     }
     reset();
-  }, [direction, reset, updateOffset]);
+  }, [reset]);
 
   const onClickCapture = useCallback((event: React.MouseEvent<T>) => {
     if (!suppressClickRef.current) return;
@@ -203,14 +197,9 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   };
   // The backdrop's opacity is React-driven, so it would otherwise cut out in a
   // single render while the foreground is still gliding back.
-  // `width` rides along for backdrops sized from the offset rather than laid
-  // out to fill their row.
   const backdropStyle: CSSProperties = {
     opacity: Math.min(1, Math.abs(offset) / COMMIT_PX),
-    transition:
-      settleMs !== null
-        ? `opacity ${settleMs}ms ease-out, width ${settleMs}ms ${EASE}`
-        : undefined,
+    transition: settleMs !== null ? `opacity ${settleMs}ms ease-out` : undefined,
   };
 
   return {
@@ -254,7 +243,7 @@ export default function MobileSwipeTrack({
       <div
         aria-hidden
         style={swipe.backdropStyle}
-        className="absolute inset-0 flex items-center justify-start bg-emerald-500 px-5 text-white md:hidden"
+        className="absolute inset-0 flex items-center justify-start bg-green-500 px-5 text-white md:hidden"
       >
         <span
           className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
