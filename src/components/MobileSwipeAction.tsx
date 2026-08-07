@@ -16,10 +16,11 @@ const START_PX = 7;
 const COMMIT_PX = 72;
 const MAX_PX = 112;
 const SETTLE_MS = 120;
-// A committed swipe holds at the action colour long enough to read as a
-// confirmation before gliding back - it is the only feedback the gesture gives.
-const CONFIRM_HOLD_MS = 240;
-const CONFIRM_RETURN_MS = 280;
+// A committed swipe snaps out (SETTLE_MS), pauses just past the end of that
+// snap - long enough to read as a confirmation, short enough not to feel like a
+// hang - then glides back on a long decelerating curve.
+const CONFIRM_HOLD_MS = 160;
+const CONFIRM_RETURN_MS = 320;
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 type SwipeOptions = {
@@ -202,12 +203,18 @@ export function useMobileSwipeAction<T extends HTMLElement>(
   };
   // The backdrop's opacity is React-driven, so it would otherwise cut out in a
   // single render while the foreground is still gliding back.
+  // `width` rides along for backdrops sized from the offset rather than laid
+  // out to fill their row.
   const backdropStyle: CSSProperties = {
     opacity: Math.min(1, Math.abs(offset) / COMMIT_PX),
-    transition: settleMs !== null ? `opacity ${settleMs}ms ease-out` : undefined,
+    transition:
+      settleMs !== null
+        ? `opacity ${settleMs}ms ease-out, width ${settleMs}ms ${EASE}`
+        : undefined,
   };
 
   return {
+    offset,
     committed,
     handlers,
     foregroundStyle,
@@ -247,7 +254,7 @@ export default function MobileSwipeTrack({
       <div
         aria-hidden
         style={swipe.backdropStyle}
-        className="absolute inset-0 flex items-center justify-start bg-emerald-600/90 px-5 text-white md:hidden"
+        className="absolute inset-0 flex items-center justify-start bg-emerald-500 px-5 text-white md:hidden"
       >
         <span
           className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${

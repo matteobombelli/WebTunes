@@ -189,19 +189,23 @@ const TrackRow = memo(function TrackRow({
       )}
       <td className="relative py-2.5 sm:py-2">
         {/* A <tr> can hold no backdrop layer of its own, so the swipe's action
-            colour is painted from the first cell: pinned to the cell's left
-            edge, it travels with the row and fills exactly the strip the row
-            opens up. (A box-shadow on the row does not paint - the table
-            inherits `border-collapse: collapse` from Tailwind's preflight.) */}
+            colour is painted from the first cell. Its right edge is pinned to
+            the cell (so it travels with the row) and its width is the swipe
+            distance - which parks its left edge, and the icon with it, exactly
+            where the row started: the strip grows, the icon holds still. That
+            is the reveal the queue's trash backdrop gets for free from being
+            laid out under a moving row. (A box-shadow on the row would not
+            paint - the table inherits `border-collapse: collapse` from the
+            Tailwind preflight.) */}
         <span
           aria-hidden
-          style={swipe.backdropStyle}
-          className="pointer-events-none absolute inset-y-0 right-full flex w-screen items-center justify-end bg-emerald-600/90 pr-5 text-white md:hidden"
+          style={{ ...swipe.backdropStyle, width: swipe.offset }}
+          className="pointer-events-none absolute inset-y-0 right-full flex items-center overflow-hidden bg-emerald-500 pl-4 text-white md:hidden"
         >
           {/* Own element: the wrapper's inline transition would otherwise
               replace this one's, snapping the pop instead of easing it. */}
           <span
-            className={`inline-flex transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+            className={`inline-flex shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
               swipe.committed ? "scale-125" : ""
             }`}
           >
