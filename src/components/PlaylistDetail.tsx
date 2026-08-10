@@ -13,15 +13,25 @@ import { PlaylistDownloadButton } from "@/components/DownloadButton";
 import PlaylistCover from "@/components/PlaylistCover";
 import PlaylistRecommendations from "@/components/PlaylistRecommendations";
 import {
+  CheckIcon,
   CopyIcon,
   LockIcon,
+  LoaderIcon,
+  LogoutIcon,
   PencilIcon,
   PlayIcon,
+  PlusIcon,
   ShuffleIcon,
+  TrashIcon,
   UsersIcon,
+  XIcon,
 } from "@/components/icons";
 import TrackList from "@/components/TrackList";
 import { Button } from "@/components/ui/Button";
+
+const actionIconClass = "h-6 w-6 sm:h-4 sm:w-4";
+const quietMobileActionClass =
+  "flex h-10 w-10 items-center justify-center gap-1.5 rounded-full text-sm sm:h-auto sm:w-auto sm:rounded-none";
 
 export default function PlaylistDetail({
   playlist,
@@ -247,16 +257,28 @@ export default function PlaylistDetail({
               <button
                 type="submit"
                 disabled={renameBusy}
-                className="text-sm text-accent-bright hover:text-fg disabled:opacity-50"
+                aria-label={renameBusy ? "Saving" : "Save playlist name"}
+                title={renameBusy ? "Saving" : "Save"}
+                className="flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-full text-sm text-accent-bright hover:bg-surface-2 hover:text-fg disabled:opacity-50 sm:h-auto sm:w-auto sm:rounded-none sm:hover:bg-transparent"
               >
-                {renameBusy ? "Saving…" : "Save"}
+                {renameBusy ? (
+                  <LoaderIcon size={18} className="animate-spin" />
+                ) : (
+                  <CheckIcon size={18} />
+                )}
+                <span className="hidden sm:inline">
+                  {renameBusy ? "Saving…" : "Save"}
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setRenaming(false)}
-                className="text-sm text-fg-muted hover:text-fg"
+                aria-label="Cancel renaming"
+                title="Cancel"
+                className="flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-full text-sm text-fg-muted hover:bg-surface-2 hover:text-fg sm:h-auto sm:w-auto sm:rounded-none sm:hover:bg-transparent"
               >
-                Cancel
+                <XIcon size={18} />
+                <span className="hidden sm:inline">Cancel</span>
               </button>
             </form>
           ) : canEdit ? (
@@ -289,17 +311,23 @@ export default function PlaylistDetail({
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button
               pill
+              iconOnlyOnMobile
+              aria-label="Play all"
+              title="Play all"
               onClick={() =>
                 tracks.length && playQueue(tracks, 0, { collection: true })
               }
               disabled={tracks.length === 0}
             >
-              <PlayIcon size={16} />
-              Play all
+              <PlayIcon className={actionIconClass} />
+              <span className="hidden sm:inline">Play all</span>
             </Button>
             <Button
               variant="secondary"
               pill
+              iconOnlyOnMobile
+              aria-label="Shuffle all"
+              title="Shuffle all"
               onClick={() => {
                 if (!tracks.length) return;
                 usePlayerStore.setState({ shuffled: true });
@@ -309,12 +337,20 @@ export default function PlaylistDetail({
               }}
               disabled={tracks.length === 0}
             >
-              <ShuffleIcon size={16} />
-              Shuffle all
+              <ShuffleIcon className={actionIconClass} />
+              <span className="hidden sm:inline">Shuffle all</span>
             </Button>
             {canEdit && (
-              <Button variant="outline" pill onClick={() => setAdding(true)}>
-                Add songs
+              <Button
+                variant="outline"
+                pill
+                iconOnlyOnMobile
+                aria-label="Add songs"
+                title="Add songs"
+                onClick={() => setAdding(true)}
+              >
+                <PlusIcon className={actionIconClass} />
+                <span className="hidden sm:inline">Add songs</span>
               </Button>
             )}
             <PlaylistDownloadButton
@@ -324,11 +360,26 @@ export default function PlaylistDetail({
             <Button
               variant="outline"
               pill
+              iconOnlyOnMobile
               onClick={duplicate}
               disabled={copying}
+              aria-label={
+                copying
+                  ? "Copying playlist"
+                  : isOwner
+                    ? "Duplicate playlist"
+                    : "Save a copy"
+              }
+              title={isOwner ? "Duplicate playlist" : "Save a copy"}
             >
-              <CopyIcon size={16} />
-              {copying ? "Copying…" : isOwner ? "Duplicate" : "Save a copy"}
+              {copying ? (
+                <LoaderIcon className={`${actionIconClass} animate-spin`} />
+              ) : (
+                <CopyIcon className={actionIconClass} />
+              )}
+              <span className="hidden sm:inline">
+                {copying ? "Copying…" : isOwner ? "Duplicate" : "Save a copy"}
+              </span>
             </Button>
           </div>
           {/* Ownership/collaboration controls live on their own quieter row so
@@ -344,38 +395,56 @@ export default function PlaylistDetail({
                       ? "Private - only you can see this playlist"
                       : "Shared - friends can see this playlist"
                   }
-                  className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+                  aria-label={
+                    isPrivate ? "Private playlist" : "Shared playlist"
+                  }
+                  className={`${quietMobileActionClass} text-fg-muted hover:bg-surface-2 hover:text-fg sm:hover:bg-transparent`}
                 >
-                  {isPrivate ? <LockIcon size={16} /> : <UsersIcon size={16} />}
-                  {isPrivate ? "Private" : "Shared"}
+                  {isPrivate ? (
+                    <LockIcon className={actionIconClass} />
+                  ) : (
+                    <UsersIcon className={actionIconClass} />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isPrivate ? "Private" : "Shared"}
+                  </span>
                 </button>
               )}
               {isOwner && (
                 <button
                   onClick={() => setManagingCollab(true)}
-                  className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
+                  aria-label="Manage collaborators"
+                  className={`${quietMobileActionClass} text-fg-muted hover:bg-surface-2 hover:text-fg sm:hover:bg-transparent`}
                   title="Manage collaborators"
                 >
-                  <UsersIcon size={16} />
-                  {collaborators.length
-                    ? `Collaborators · ${collaborators.length}`
-                    : "Add collaborators"}
+                  <UsersIcon className={actionIconClass} />
+                  <span className="hidden sm:inline">
+                    {collaborators.length
+                      ? `Collaborators · ${collaborators.length}`
+                      : "Add collaborators"}
+                  </span>
                 </button>
               )}
               {isOwner && (
                 <button
                   onClick={deletePlaylist}
-                  className="text-sm text-fg-muted hover:text-red-400"
+                  aria-label="Delete playlist"
+                  title="Delete playlist"
+                  className={`${quietMobileActionClass} text-fg-muted hover:bg-red-500/10 hover:text-red-400 sm:hover:bg-transparent`}
                 >
-                  Delete playlist
+                  <TrashIcon className={actionIconClass} />
+                  <span className="hidden sm:inline">Delete playlist</span>
                 </button>
               )}
               {!isOwner && canEdit && (
                 <button
                   onClick={leavePlaylist}
-                  className="text-sm text-fg-muted hover:text-red-400"
+                  aria-label="Leave playlist"
+                  title="Leave playlist"
+                  className={`${quietMobileActionClass} text-fg-muted hover:bg-red-500/10 hover:text-red-400 sm:hover:bg-transparent`}
                 >
-                  Leave playlist
+                  <LogoutIcon className={actionIconClass} />
+                  <span className="hidden sm:inline">Leave playlist</span>
                 </button>
               )}
             </div>

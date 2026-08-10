@@ -7,6 +7,10 @@ import { useToastStore } from "@/stores/toast";
 import { DownloadIcon } from "@/components/icons";
 import { MENU_ROW, MENU_ROW_STATIC } from "@/components/ui/menu";
 
+const playlistActionIconClass = "h-6 w-6 sm:h-[15px] sm:w-[15px]";
+const playlistActionClass =
+  "flex h-10 w-10 items-center justify-center gap-1.5 rounded-full p-0 text-sm font-semibold sm:h-auto sm:w-auto sm:px-4 sm:py-2";
+
 /** Per-track download toggle for track-list rows. */
 export default function DownloadButton({
   track,
@@ -112,12 +116,18 @@ export function PlaylistDownloadButton({
   const total = record?.trackIds.length ?? 0;
   const complete = record && downloadedCount === total;
 
-  // px-4 py-2 matches the sibling <Button pill> actions in the same header row.
   if (record && active) {
     return (
-      <span className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-semibold text-fg-muted">
-        <DownloadIcon size={15} className="animate-pulse" />
-        {downloadedCount}/{total}
+      <span
+        role="status"
+        aria-label={`${downloadedCount} of ${total} tracks downloaded`}
+        title={`${downloadedCount}/${total} tracks downloaded`}
+        className={`${playlistActionClass} border border-border text-fg-muted`}
+      >
+        <DownloadIcon className={`${playlistActionIconClass} animate-pulse`} />
+        <span className="hidden sm:inline">
+          {downloadedCount}/{total}
+        </span>
       </span>
     );
   }
@@ -132,11 +142,12 @@ export function PlaylistDownloadButton({
             });
           if (ok) removePlaylist(playlistId);
         }}
+        aria-label="Remove playlist download"
         title="Downloaded - click to remove"
-        className="flex items-center gap-1.5 rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent-bright hover:border-red-500 hover:text-red-400"
+        className={`${playlistActionClass} border border-accent text-accent-bright hover:border-red-500 hover:text-red-400`}
       >
-        <DownloadIcon size={15} />
-        Downloaded
+        <DownloadIcon className={playlistActionIconClass} />
+        <span className="hidden sm:inline">Downloaded</span>
       </button>
     );
   }
@@ -147,10 +158,14 @@ export function PlaylistDownloadButton({
           useToastStore.getState().show("Couldn’t start the download")
         )
       }
-      className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-semibold text-fg hover:border-fg-muted"
+      aria-label={record ? "Resume playlist download" : "Download playlist"}
+      title={record ? "Resume playlist download" : "Download playlist"}
+      className={`${playlistActionClass} border border-border text-fg hover:border-fg-muted`}
     >
-      <DownloadIcon size={15} />
-      {record ? "Resume download" : "Download"}
+      <DownloadIcon className={playlistActionIconClass} />
+      <span className="hidden sm:inline">
+        {record ? "Resume download" : "Download"}
+      </span>
     </button>
   );
 }

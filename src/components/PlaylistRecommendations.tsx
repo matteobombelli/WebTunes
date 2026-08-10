@@ -9,7 +9,7 @@ import { useToastStore } from "@/stores/toast";
 import { AddToPlaylistMenu } from "@/components/TrackMenus";
 import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
-import { PlusIcon, SimilarIcon } from "@/components/icons";
+import { PlusIcon, RefreshIcon } from "@/components/icons";
 
 const LIMIT = 20;
 
@@ -104,11 +104,18 @@ export default function PlaylistRecommendations({
         <button
           onClick={refresh}
           disabled={busy}
+          aria-label={
+            busy ? "Loading recommendations" : "Refresh recommendations"
+          }
           title="Refresh recommendations"
-          className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg disabled:opacity-50"
+          className="flex h-10 w-10 items-center justify-center gap-1.5 rounded-full text-sm text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50 sm:h-auto sm:w-auto sm:rounded-none sm:hover:bg-transparent"
         >
-          <SimilarIcon size={16} />
-          {busy ? "Loading…" : "Refresh"}
+          <RefreshIcon
+            className={`h-6 w-6 sm:h-4 sm:w-4 ${busy ? "animate-spin" : ""}`}
+          />
+          <span className="hidden sm:inline">
+            {busy ? "Loading…" : "Refresh"}
+          </span>
         </button>
       </div>
 

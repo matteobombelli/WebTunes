@@ -20,6 +20,7 @@
     "@huggingface/transformers": "^4.2.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.27.0",
     "music-metadata": "^11.13.0",
     "next": "16.2.11",
     "next-auth": "5.0.0-beta.32",

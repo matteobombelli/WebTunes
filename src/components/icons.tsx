@@ -1,288 +1,46 @@
-// Inline SVG icons sharing one viewBox so glyphs render at identical sizes
-// (fixes play/pause width jump). Sized by the parent via the size prop.
-
-type IconProps = { size?: number; className?: string };
-
-function Svg({
-  size = 20,
-  className,
-  children,
-}: IconProps & { children: React.ReactNode }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden
-    >
-      {children}
-    </svg>
-  );
-}
-
-export const PlayIcon = (p: IconProps) => (
-  <Svg {...p}>
-    {/* Glyph spans x 6.5–18.5: centered with a 0.5 optical right bias. */}
-    <path d="M6.5 5.14v13.72c0 .9.98 1.45 1.74.98l10.3-6.86a1.15 1.15 0 0 0 0-1.96L8.24 4.16a1.15 1.15 0 0 0-1.74.98z" />
-  </Svg>
-);
-
-export const PauseIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="6" y="5" width="4" height="14" rx="1" />
-    <rect x="14" y="5" width="4" height="14" rx="1" />
-  </Svg>
-);
-
-export const PrevIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="5" y="5" width="3" height="14" rx="1" />
-    <path d="M19 5.86v12.28c0 .86-.93 1.4-1.68.97l-9.07-6.14a1.13 1.13 0 0 1 0-1.94l9.07-6.14c.75-.43 1.68.11 1.68.97z" />
-  </Svg>
-);
-
-export const NextIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="16" y="5" width="3" height="14" rx="1" />
-    <path d="M5 5.86v12.28c0 .86.93 1.4 1.68.97l9.07-6.14a1.13 1.13 0 0 0 0-1.94L6.68 4.89C5.93 4.46 5 5 5 5.86z" />
-  </Svg>
-);
-
-export const VolumeIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M4 9.5v5c0 .55.45 1 1 1h2.6l3.7 3.1c.65.55 1.7.1 1.7-.76V6.16c0-.86-1.05-1.3-1.7-.76L7.6 8.5H5c-.55 0-1 .45-1 1z" />
-    <path d="M16 8.7a5 5 0 0 1 0 6.6 1 1 0 1 0 1.5 1.3 7 7 0 0 0 0-9.2A1 1 0 0 0 16 8.7z" />
-  </Svg>
-);
-
-export const PlusIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M11 5a1 1 0 1 1 2 0v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5z" />
-  </Svg>
-);
-
-/** Two overlapping pages - duplicate/save a copy. */
-export const CopyIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <g fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="8" y="3" width="11" height="14" rx="2" />
-      <rect x="4" y="7" width="11" height="14" rx="2" />
-    </g>
-  </Svg>
-);
-
-export const XIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M6.2 6.2a1 1 0 0 1 1.4 0L12 10.6l4.4-4.4a1 1 0 1 1 1.4 1.4L13.4 12l4.4 4.4a1 1 0 0 1-1.4 1.4L12 13.4l-4.4 4.4a1 1 0 0 1-1.4-1.4L10.6 12 6.2 7.6a1 1 0 0 1 0-1.4z" />
-  </Svg>
-);
-
-export const PencilIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M16.9 4.3a2 2 0 0 1 2.8 2.8l-9.9 9.9-3.5.7a.5.5 0 0 1-.6-.6l.7-3.5 9.9-9.9.6.6z" />
-  </Svg>
-);
-
-export const LockIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M7 10V8a5 5 0 0 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18.5v-7A1.5 1.5 0 0 1 6.5 10H7zm2 0h6V8a3 3 0 0 0-6 0v2z" />
-  </Svg>
-);
-
-export const MusicIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M9 5.5a1 1 0 0 1 .76-.97l8-2A1 1 0 0 1 19 3.5V15a3 3 0 1 1-2-2.83V6.78l-6 1.5V17a3 3 0 1 1-2-2.83V5.5z" />
-  </Svg>
-);
-
-export const SearchIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.46l4.25 4.25a1 1 0 0 0 1.4-1.42l-4.24-4.24A7.5 7.5 0 0 0 10.5 3zm-5.5 7.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z" />
-  </Svg>
-);
-
-export const UsersIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M9 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM3 19a6 6 0 0 1 12 0v1H3v-1zm13.5-7a3.5 3.5 0 1 0-2.04-6.34 6 6 0 0 1 0 5.68A3.48 3.48 0 0 0 16.5 12zm.5 2c-.45 0-.89.06-1.3.18A7.97 7.97 0 0 1 17 19v1h4v-1a5 5 0 0 0-4-5z" />
-  </Svg>
-);
-
-/** Compass - the Discover nav item. */
-export const CompassIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm3.5 4.5-5 2-2 5 5-2 2-5zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
-  </Svg>
-);
-
-/** Bar chart - the personal listening Stats tab. */
-export const StatsIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M5 13a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7H5v-7zm5-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h-4V8zm5-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v16h-4V4z" />
-    <path d="M4 20h16a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2z" />
-  </Svg>
-);
-
-/** Globe (circle + meridian + equator) - the "Everything" scope. */
-export const GlobeIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <g fill="none" stroke="currentColor" strokeWidth={1.8}>
-      <circle cx="12" cy="12" r="9" />
-      <ellipse cx="12" cy="12" rx="4" ry="9" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-    </g>
-  </Svg>
-);
-
-export const DownloadIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1z" />
-    <rect x="4" y="18" width="16" height="2" rx="1" />
-  </Svg>
-);
-
-/** Chain link - "share" (copy a public link to a track). */
-export const ShareIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M3.9 12A3.1 3.1 0 0 1 7 8.9h3a1 1 0 1 1 0 2H7a1.1 1.1 0 0 0 0 2.2h3a1 1 0 1 1 0 2H7A3.1 3.1 0 0 1 3.9 12zm10.1-3.1h3a3.1 3.1 0 0 1 0 6.2h-3a1 1 0 1 1 0-2h3a1.1 1.1 0 0 0 0-2.2h-3a1 1 0 1 1 0-2zM8 12a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1z" />
-  </Svg>
-);
-
-export const LogoutIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M10 4a1 1 0 0 1 0 2H7v12h3a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4zm5.3 3.3a1 1 0 0 1 1.4 0l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4-1.4L17.58 13H11a1 1 0 1 1 0-2h6.59l-2.3-2.3a1 1 0 0 1 0-1.4z" />
-  </Svg>
-);
-
-/** Filled chevrons for sort indicators (UpIcon/DownIcon are move arrows). */
-export const ChevronUpIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 7l7 9H5l7-9z" />
-  </Svg>
-);
-
-export const ChevronDownIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 17L5 8h14l-7 9z" />
-  </Svg>
-);
-
-export const ChevronLeftIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M7 12l9-7v14l-9-7z" />
-  </Svg>
-);
-
-export const ChevronRightIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M17 12l-9 7V5l9 7z" />
-  </Svg>
-);
-
-export const ShuffleIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
-  </Svg>
-);
-
-/** Graph network (hub + nodes) - "play similar" (related tracks from a seed). */
-export const SimilarIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <g stroke="currentColor" strokeWidth={1.7} strokeLinecap="round">
-      <line x1="12" y1="12" x2="12" y2="4.5" />
-      <line x1="12" y1="12" x2="5.5" y2="18" />
-      <line x1="12" y1="12" x2="18.5" y2="18" />
-    </g>
-    <circle cx="12" cy="12" r="2.7" />
-    <circle cx="12" cy="4.5" r="2.2" />
-    <circle cx="5.5" cy="18" r="2.2" />
-    <circle cx="18.5" cy="18" r="2.2" />
-  </Svg>
-);
-
-export const QueueIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zm14-10v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z" />
-  </Svg>
-);
-
-// List lines with a play triangle: "play this right after the current track".
-export const PlayNextIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="3" y="6" width="11" height="2" rx="1" />
-    <rect x="3" y="11" width="11" height="2" rx="1" />
-    <rect x="3" y="16" width="7" height="2" rx="1" />
-    <path d="M14.5 14.4v6.2c0 .45.5.72.87.47l4.65-3.1a.56.56 0 0 0 0-.94l-4.65-3.1a.56.56 0 0 0-.87.47z" />
-  </Svg>
-);
-
-// Six-dot drag handle.
-export const GripIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <circle cx="9" cy="6" r="1.6" />
-    <circle cx="15" cy="6" r="1.6" />
-    <circle cx="9" cy="12" r="1.6" />
-    <circle cx="15" cy="12" r="1.6" />
-    <circle cx="9" cy="18" r="1.6" />
-    <circle cx="15" cy="18" r="1.6" />
-  </Svg>
-);
-
-export const UpIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 5l6 7h-4v7h-4v-7H6l6-7z" />
-  </Svg>
-);
-
-export const DownIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 19l-6-7h4V5h4v7h4l-6 7z" />
-  </Svg>
-);
-
-export const CheckIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M9.55 17.05 4.5 12l1.4-1.4 3.65 3.6 8.15-8.15 1.4 1.4-9.55 9.6z" />
-  </Svg>
-);
-
-export const FolderIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M4 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-8l-2-2H4z" />
-  </Svg>
-);
-
-export const ClockIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm-1 3v5l4 2.4.8-1.3-3.3-2V8h-1.5z" />
-  </Svg>
-);
-
-/** Headphones - used for the friend play-count column. */
-export const HeadphonesIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 4a8 8 0 0 0-8 8v5a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H6v-0a6 6 0 0 1 12 0v0h-1a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2v-5a8 8 0 0 0-8-8z" />
-  </Svg>
-);
-
-/** Settings gear. */
-export const SettingsIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94 0 .32.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.39.3.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" />
-  </Svg>
-);
-
-/** Trash can - destructive delete. */
-export const TrashIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M9 3a1 1 0 0 0-1 1v1H4a1 1 0 1 0 0 2h16a1 1 0 1 0 0-2h-4V4a1 1 0 0 0-1-1H9zm1 2h4v0h-4V5zM6 9a1 1 0 0 1 1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-8a1 1 0 1 1 2 0v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-8a1 1 0 0 1 1-1zm4 1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1z" />
-  </Svg>
-);
-
-/** Vertical kebab menu (more actions). */
-export const EllipsisIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M12 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-  </Svg>
-);
+/**
+ * App icon aliases backed by Lucide's standard, maintained web icon set.
+ * Keeping the local names gives the app one stable import surface while
+ * avoiding bespoke SVG paths.
+ */
+export {
+  ArrowDown as DownIcon,
+  ArrowUp as UpIcon,
+  ChartNoAxesColumnIncreasing as StatsIcon,
+  Check as CheckIcon,
+  ChevronDown as ChevronDownIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  ChevronUp as ChevronUpIcon,
+  Clock3 as ClockIcon,
+  Compass as CompassIcon,
+  Copy as CopyIcon,
+  Download as DownloadIcon,
+  EllipsisVertical as EllipsisIcon,
+  Folder as FolderIcon,
+  Globe as GlobeIcon,
+  GripVertical as GripIcon,
+  Headphones as HeadphonesIcon,
+  Link as ShareIcon,
+  ListMusic as QueueIcon,
+  ListStart as PlayNextIcon,
+  LoaderCircle as LoaderIcon,
+  Lock as LockIcon,
+  LogOut as LogoutIcon,
+  Music2 as MusicIcon,
+  Pause as PauseIcon,
+  Pencil as PencilIcon,
+  Play as PlayIcon,
+  Plus as PlusIcon,
+  RefreshCw as RefreshIcon,
+  Search as SearchIcon,
+  Settings as SettingsIcon,
+  Shuffle as ShuffleIcon,
+  SkipBack as PrevIcon,
+  SkipForward as NextIcon,
+  Trash2 as TrashIcon,
+  Users as UsersIcon,
+  Volume2 as VolumeIcon,
+  Waypoints as SimilarIcon,
+  X as XIcon,
+} from "lucide-react";

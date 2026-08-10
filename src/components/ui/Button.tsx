@@ -22,16 +22,24 @@ const sizes: Record<Size, string> = {
   md: "px-4 py-2 text-sm",
 };
 
+const mobileIconSizes: Record<Size, string> = {
+  sm: "h-8 w-8 p-0 text-xs sm:h-auto sm:w-auto sm:px-3 sm:py-1.5",
+  md: "h-10 w-10 p-0 text-sm sm:h-auto sm:w-auto sm:px-4 sm:py-2",
+};
+
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
   size?: Size;
   pill?: boolean;
+  /** Square icon button below sm; restores the normal labelled size at sm. */
+  iconOnlyOnMobile?: boolean;
 };
 
 export function Button({
   variant = "primary",
   size = "md",
   pill = false,
+  iconOnlyOnMobile = false,
   className,
   ...props
 }: Props) {
@@ -40,7 +48,7 @@ export function Button({
       className={cn(
         base,
         variants[variant],
-        sizes[size],
+        iconOnlyOnMobile ? mobileIconSizes[size] : sizes[size],
         pill ? "rounded-full" : "rounded-md",
         className,
       )}
