@@ -119,9 +119,14 @@ async function decodeToPcm(buffer: Buffer, ext: string): Promise<Float32Array> {
   // which a pipe can't provide (mirrors lib/loudness.ts).
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-clap-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-clap-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : "bin";
-    const file = join(dir, `${randomUUID()}.${safeExt}`);
+    const file = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
     await writeFile(file, buffer);
 
     // Gate the decode (not just the ONNX inference below) so parallel uploads

@@ -42,9 +42,17 @@ export async function makeThumbnail(
 ): Promise<Buffer | null> {
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-thumb-"));
+    // These paths are created at runtime and never belong in Next's output
+    // file trace. Without the annotations, Turbopack treats the dynamic temp
+    // path as potentially pointing anywhere in the project.
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-thumb-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : "img";
-    const file = join(dir, `${randomUUID()}.${safeExt}`);
+    const file = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
     await writeFile(file, buffer);
     const out = await withFfmpeg(() => runFfmpeg(file));
     return out.length > 0 ? out : null;

@@ -203,7 +203,7 @@ export async function downloadAudio(opts: {
   const args = [
     "--no-playlist",
     "-o",
-    join(opts.dir, "track.%(ext)s"),
+    join(/* turbopackIgnore: true */ opts.dir, "track.%(ext)s"),
     // --print implies simulation; --no-simulate restores the download and makes
     // after_move:filepath print the final (post-processed) file path.
     "--no-simulate",

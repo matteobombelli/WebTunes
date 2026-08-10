@@ -651,7 +651,9 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
         `source ${Math.round(info.bestAudioKbps)} kbps < ${MIN_SOURCE_KBPS} kbps floor`
       );
     }
-    dir = await mkdtemp(join(tmpdir(), "webtunes-suggested-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "webtunes-suggested-")
+    );
     const file = await withSuggestedRetry(candidate.id, () =>
       downloadAudio({
         url: match.url,
@@ -671,9 +673,9 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
         },
       })
     );
-    const { size } = await stat(file.path);
+    const { size } = await stat(/* turbopackIgnore: true */ file.path);
     if (size > MAX_FILE_BYTES) throw new Error("file exceeds the 90 MB limit");
-    const buffer = await readFile(file.path);
+    const buffer = await readFile(/* turbopackIgnore: true */ file.path);
     const result = await ingestTrack({
       userId: candidate.userId,
       buffer,

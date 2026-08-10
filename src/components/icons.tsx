@@ -1,7 +1,15 @@
+import { forwardRef } from "react";
+import {
+  Pause as LucidePauseIcon,
+  Play as LucidePlayIcon,
+  type LucideProps,
+} from "lucide-react";
+
 /**
  * App icon aliases backed by Lucide's standard, maintained web icon set.
  * Keeping the local names gives the app one stable import surface while
- * avoiding bespoke SVG paths.
+ * avoiding bespoke SVG paths. Transport controls use the same Lucide shapes
+ * with a solid fill so they read clearly at player-control sizes.
  */
 export {
   ArrowDown as DownIcon,
@@ -28,9 +36,7 @@ export {
   Lock as LockIcon,
   LogOut as LogoutIcon,
   Music2 as MusicIcon,
-  Pause as PauseIcon,
   Pencil as PencilIcon,
-  Play as PlayIcon,
   Plus as PlusIcon,
   RefreshCw as RefreshIcon,
   Search as SearchIcon,
@@ -44,3 +50,29 @@ export {
   Waypoints as SimilarIcon,
   X as XIcon,
 } from "lucide-react";
+
+export const PlayIcon = forwardRef<SVGSVGElement, LucideProps>(
+  function PlayIcon(props, ref) {
+    return (
+      <LucidePlayIcon
+        ref={ref}
+        {...props}
+        fill={props.color ?? "currentColor"}
+        stroke="none"
+      />
+    );
+  }
+);
+
+export const PauseIcon = forwardRef<SVGSVGElement, LucideProps>(
+  function PauseIcon(props, ref) {
+    return (
+      <LucidePauseIcon
+        ref={ref}
+        {...props}
+        fill={props.color ?? "currentColor"}
+        stroke="none"
+      />
+    );
+  }
+);

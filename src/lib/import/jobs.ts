@@ -388,7 +388,9 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
 
   jobLog(job, `${tag} Importing${matchNote}: ${item.label}`);
   item.status = "downloading";
-  const dir = await mkdtemp(join(tmpdir(), "webtunes-import-"));
+  const dir = await mkdtemp(
+    join(/* turbopackIgnore: true */ tmpdir(), "webtunes-import-")
+  );
   try {
     const file = await withRetry(
       () =>
@@ -404,7 +406,7 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
       job
     );
     // Re-check the app's upload cap on the real file before buffering it.
-    const { size } = await stat(file.path);
+    const { size } = await stat(/* turbopackIgnore: true */ file.path);
     if (size > MAX_FILE_BYTES) {
       miss("file exceeds the 90 MB limit");
       return;
@@ -412,7 +414,7 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
 
     item.status = "uploading";
     item.progress = 100;
-    const buffer = await readFile(file.path);
+    const buffer = await readFile(/* turbopackIgnore: true */ file.path);
     // Source metadata wins (matched path); the YouTube path tags from the
     // video and square-crops its 16:9 thumbnail.
     const overrides = item.track

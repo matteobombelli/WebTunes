@@ -31,9 +31,14 @@ export async function analyzeLoudnessLufs(
   // atom and require a seekable input, which a pipe is not.
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-loudness-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-loudness-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : "bin";
-    const file = join(dir, `${randomUUID()}.${safeExt}`);
+    const file = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
     await writeFile(file, buffer);
 
     const stderr = await withFfmpeg(() => runFfmpeg(file));

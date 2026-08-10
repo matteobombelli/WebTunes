@@ -70,9 +70,14 @@ export async function fingerprint(
 ): Promise<Fingerprint | null> {
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-fpcalc-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-fpcalc-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : "bin";
-    const file = join(dir, `${randomUUID()}.${safeExt}`);
+    const file = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
     await writeFile(file, buffer);
     const stdout = await withFfmpeg(() => runFpcalc(file));
     const parsed = JSON.parse(stdout) as {

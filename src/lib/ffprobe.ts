@@ -32,9 +32,14 @@ export async function probeDurationSec(
   // and require a seekable input, which a pipe is not.
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-ffprobe-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-ffprobe-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext : "bin";
-    const file = join(dir, `${randomUUID()}.${safeExt}`);
+    const file = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
     await writeFile(file, buffer);
 
     const stdout = await withFfmpeg(() => runFfprobe(file));

@@ -42,10 +42,18 @@ export async function remuxOpusToMp4(
 
   let dir: string | null = null;
   try {
-    dir = await mkdtemp(join(tmpdir(), "wt-remux-"));
+    dir = await mkdtemp(
+      join(/* turbopackIgnore: true */ tmpdir(), "wt-remux-")
+    );
     const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext.toLowerCase() : "ogg";
-    const inPath = join(dir, `${randomUUID()}.${safeExt}`);
-    const outPath = join(dir, `${randomUUID()}.mp4`);
+    const inPath = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.${safeExt}`
+    );
+    const outPath = join(
+      /* turbopackIgnore: true */ dir,
+      `${randomUUID()}.mp4`
+    );
     await writeFile(inPath, buffer);
 
     // Only Opus can be copied into MP4 here; Vorbis-in-Ogg (or anything else)
@@ -65,7 +73,11 @@ export async function remuxOpusToMp4(
     ]);
     if (!srcHash || srcHash !== outHash) return null;
 
-    return { body: await readFile(outPath), ext: "mp4", contentType: "audio/mp4" };
+    return {
+      body: await readFile(/* turbopackIgnore: true */ outPath),
+      ext: "mp4",
+      contentType: "audio/mp4",
+    };
   } catch (err) {
     log.warn(
       "remux",
