@@ -157,6 +157,61 @@ export function toTrackDTO(
   };
 }
 
+export type BulkTrackMetadataUpdates = {
+  artist?: string | null;
+  album?: string | null;
+};
+
+export type BulkTrackMetadataResult =
+  | { status: "updated"; count: number }
+  | { status: "not_found" }
+  | { status: "forbidden" }
+  | { status: "suggested_import" };
+
+/**
+ * Change artist and/or album on a set of the user's library tracks. The rows
+ * are locked before the ownership checks so the set is updated atomically: a
+ * stale, foreign, or Suggested Import id leaves every requested track alone.
+ */
+export function bulkUpdateTrackMetadata(
+  userId: string,
+  trackIds: string[],
+  updates: BulkTrackMetadataUpdates
+): Promise<BulkTrackMetadataResult> {
+  return db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        id: tracks.id,
+        ownerId: tracks.ownerId,
+        suggestedImportId: tracks.suggestedImportId,
+      })
+      .from(tracks)
+      .where(inArray(tracks.id, trackIds))
+      .for("update");
+
+    if (candidates.length !== trackIds.length) return { status: "not_found" };
+    if (candidates.some((track) => track.ownerId !== userId)) {
+      return { status: "forbidden" };
+    }
+    if (candidates.some((track) => track.suggestedImportId !== null)) {
+      return { status: "suggested_import" };
+    }
+
+    const updated = await tx
+      .update(tracks)
+      .set(updates)
+      .where(inArray(tracks.id, trackIds))
+      .returning({ id: tracks.id });
+
+    if (updated.length !== trackIds.length) {
+      // The SELECT ... FOR UPDATE locks make this unreachable unless a future
+      // schema trigger changes update behavior. Throwing preserves atomicity.
+      throw new Error("Bulk track update did not update every locked row");
+    }
+    return { status: "updated", count: updated.length };
+  });
+}
+
 /**
  * SQL filter: the (outer) tracks row is not a duplicate of one of the
  * viewer's own tracks. "Duplicate" = same title + artist, case- and

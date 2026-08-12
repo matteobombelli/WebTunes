@@ -34,12 +34,14 @@ import {
   GripIcon,
   HeadphonesIcon,
   LockIcon,
+  PencilIcon,
   PlayNextIcon,
   QueueIcon,
   TrashIcon,
   XIcon,
 } from "@/components/icons";
 import EditTrackDialog from "@/components/EditTrackDialog";
+import BulkEditTracksDialog from "@/components/BulkEditTracksDialog";
 import { useMobileSwipeAction } from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
 import { AddToPlaylistMenu, TrackActionsMenu } from "@/components/TrackMenus";
@@ -431,6 +433,7 @@ export default function TrackList({
   showOwner = false,
   canDelete = false,
   canEdit = false,
+  canBulkEdit = false,
   selectable = false,
   sortable = false,
   onRemove,
@@ -450,6 +453,8 @@ export default function TrackList({
   canDelete?: boolean;
   /** Shows the edit (pencil) action on the viewer's own tracks. */
   canEdit?: boolean;
+  /** Shows bulk artist/album editing for selected owned tracks. */
+  canBulkEdit?: boolean;
   /** Enables checkbox multi-select with a bulk add-to-playlist bar. */
   selectable?: boolean;
   /** Enables click-to-sort column headers. */
@@ -482,6 +487,7 @@ export default function TrackList({
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = useCurrentTrack();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
+  const [bulkEditing, setBulkEditing] = useState<TrackDTO[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Selection is opt-in: checkboxes and the bulk bar stay hidden behind a
   // "Select…" button until the user turns this on (Clear turns it back off).
@@ -735,6 +741,11 @@ export default function TrackList({
         .map((t) => t.id),
     [view, validSelected]
   );
+  const editableSelectedTracks = useMemo(
+    () =>
+      view.filter((track) => validSelected.has(track.id) && !track.ownerName),
+    [view, validSelected]
+  );
 
   const bulkDelete = async () => {
     const ids = deletableSelectedIds;
@@ -838,6 +849,18 @@ export default function TrackList({
           <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
             {validSelected.size} selected
           </span>
+          {canBulkEdit && (
+            <button
+              onClick={() => setBulkEditing(editableSelectedTracks)}
+              disabled={bulkBusy || editableSelectedTracks.length === 0}
+              aria-label="Edit artist and album"
+              title="Edit artist and album"
+              className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
+            >
+              <PencilIcon size={18} />
+              <span>Edit</span>
+            </button>
+          )}
           <div className="shrink-0">
             <AddToPlaylistMenu
               bulk
@@ -1056,6 +1079,14 @@ export default function TrackList({
       track={editing}
       onClose={() => setEditing(null)}
       onSaved={onMutated}
+    />
+    <BulkEditTracksDialog
+      tracks={bulkEditing}
+      onClose={() => setBulkEditing(null)}
+      onSaved={() => {
+        setSelected(new Set());
+        onMutated?.();
+      }}
     />
     </>
   );

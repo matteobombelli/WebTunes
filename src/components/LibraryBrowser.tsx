@@ -337,6 +337,7 @@ export default function LibraryBrowser({
             tracks={tracks}
             showOwner={!browsingOwn}
             canEdit
+            canBulkEdit
             canDelete
             selectable
             sortable
