@@ -167,9 +167,14 @@ export async function ingestTrack({
     if (duplicate.suggestedImportId && !suggestedImportId) {
       const suggestionId = duplicate.suggestedImportId;
       const promoted = await db.transaction(async (tx) => {
+        const acceptedAt = new Date();
         const [row] = await tx
           .update(tracks)
-          .set({ suggestedImportId: null, isPrivate: false })
+          .set({
+            suggestedImportId: null,
+            isPrivate: false,
+            createdAt: acceptedAt,
+          })
           .where(
             and(
               eq(tracks.id, duplicate.id),
@@ -180,7 +185,7 @@ export async function ingestTrack({
         if (row) {
           await tx
             .update(suggestedImports)
-            .set({ status: "accepted", progress: 100, updatedAt: new Date() })
+            .set({ status: "accepted", progress: 100, updatedAt: acceptedAt })
             .where(eq(suggestedImports.id, suggestionId));
         }
         return row;

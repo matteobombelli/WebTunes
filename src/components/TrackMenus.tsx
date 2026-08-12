@@ -376,7 +376,7 @@ function TrackActions({
   const excluded = useIsExcluded(track.id);
   return (
     <div className="flex flex-col gap-2 text-sm">
-      {track.artist && (
+      {track.artist && !track.isSuggested && (
         <Link
           href={`/artist?name=${encodeURIComponent(track.artist)}`}
           onClick={() => {
@@ -389,7 +389,7 @@ function TrackActions({
           <span className="truncate text-fg-muted">{track.artist}</span>
         </Link>
       )}
-      {track.album && (
+      {track.album && !track.isSuggested && (
         <Link
           href={`/album?name=${encodeURIComponent(track.album)}`}
           onClick={() => {
@@ -632,6 +632,10 @@ export function CurrentTrackKebab({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<TrackDTO | null>(null);
+
+  // Suggested previews do not exist in the normal library-backed artist/album
+  // routes yet, and every other track action is intentionally unavailable.
+  if (track.isSuggested) return null;
 
   const remove = async (t: TrackDTO) => {
     const ok = await useConfirmStore

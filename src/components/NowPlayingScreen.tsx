@@ -188,7 +188,11 @@ export default function NowPlayingScreen({
           />
         </div>
 
-        <PlayerProgress className="flex" serverDuration={track.durationSec ?? 0} />
+        <PlayerProgress
+          className="flex"
+          serverDuration={track.durationSec ?? 0}
+          smooth
+        />
 
         <div className="flex items-center justify-center gap-8">
           {iconBtn(

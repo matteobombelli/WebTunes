@@ -228,8 +228,9 @@ setup, and architecture rationale.
   removes nothing from the queue; when it took over a collection queue,
   `startSimilar` stashed the collection + takeover point in `similarContext`
   and `stopSimilar` appends the collection's in-order remainder to the end
-  (enabling shuffle or starting a new queue drops the stash without the
-  requeue). The drift + variation +
+  (enabling shuffle instead discards unplayed radio results and shuffles that
+  stashed collection as though it had started with shuffle on; starting a new
+  queue drops the stash). The drift + variation +
   volume-normalization controls live in the global `SettingsModal` (gear in the
   Sidebar / mobile top bar). `scripts/analyze-clap-embeddings.mjs` backfills.
   Both the lib and the script must share the same model id + dtype (fp32) or
@@ -292,7 +293,10 @@ setup, and architecture rationale.
   downloads remain globally serial, but claims are a persistent priority queue:
   the user with the fewest `ready` + `importing` suggestions goes next, with
   candidate age as the tie-breaker. This gives round-robin behavior across
-  users and survives restarts without an in-memory cursor.
+  users and survives restarts without an in-memory cursor. Accepting a staged
+  suggestion resets `tracks.created_at` to the acceptance time so it enters the
+  top of the newest-first library; the explicit upload/import dedupe-promotion
+  path must do the same.
 - Duplicate handling: uploads are rejected (409) when the file's sha256 already
   exists in the owner's library (`tracks.content_hash`, unique per owner;
   pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`

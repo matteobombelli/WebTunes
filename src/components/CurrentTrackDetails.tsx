@@ -43,26 +43,34 @@ export default function CurrentTrackDetails({
       </p>
       <p className="truncate text-sm text-fg-muted">
         {track.artist ? (
-          <Link
-            href={`/artist?name=${encodeURIComponent(track.artist)}`}
-            onClick={onNavigate}
-            className="hover:text-accent-bright"
-          >
-            {track.artist}
-          </Link>
+          track.isSuggested ? (
+            track.artist
+          ) : (
+            <Link
+              href={`/artist?name=${encodeURIComponent(track.artist)}`}
+              onClick={onNavigate}
+              className="hover:text-accent-bright"
+            >
+              {track.artist}
+            </Link>
+          )
         ) : (
           "Unknown artist"
         )}
         {track.album ? (
           <>
             {" · "}
-            <Link
-              href={`/album?name=${encodeURIComponent(track.album)}`}
-              onClick={onNavigate}
-              className="hover:text-accent-bright"
-            >
-              {track.album}
-            </Link>
+            {track.isSuggested ? (
+              track.album
+            ) : (
+              <Link
+                href={`/album?name=${encodeURIComponent(track.album)}`}
+                onClick={onNavigate}
+                className="hover:text-accent-bright"
+              >
+                {track.album}
+              </Link>
+            )}
           </>
         ) : null}
       </p>

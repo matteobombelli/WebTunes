@@ -69,9 +69,10 @@ type PlayerState = {
    * The collection `context` that was live when startSimilar replaced the
    * queue, plus the uid of the then-current item (one of `items` - `queue` and
    * `context` share QueueItem objects). Consumed by stopSimilar to append the
-   * collection's in-order remainder after `afterUid`; dropped (without the
-   * requeue) by playQueue/toggleShuffle force-stopping the radio. `null` when
-   * the radio started from an ad-hoc queue.
+   * collection's in-order remainder after `afterUid`. Enabling shuffle restores
+   * these items as the shuffle context instead of shuffling the radio results;
+   * starting a new queue drops them. `null` when the radio started from an
+   * ad-hoc queue.
    */
   similarContext: { items: QueueItem[]; afterUid: string } | null;
   /** Remembered "play similar" preference (persisted to localStorage by
@@ -545,9 +546,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleShuffle: () => {
     const s = get();
     log.info("player", `shuffle ${!s.shuffled ? "on" : "off"}`);
-    // Shuffle and "play similar" are mutually exclusive ways to order the
-    // queue; turning shuffle on ends the radio (and silently drops any stashed
-    // collection remainder - the reshuffled queue supersedes it).
+    // Shuffle and "play similar" are mutually exclusive ways to order tracks;
+    // turning shuffle on ends the radio. A stashed collection is handled below
+    // before stopSim clears the stash.
     const stopSim = {
       playSimilar: false,
       similarSeedId: null,
@@ -564,7 +565,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       const history = s.queue.slice(0, s.index); // tracks ACTUALLY played
       const current = s.queue[s.index];
-      if (s.context) {
+      if (s.playSimilar && s.similarContext) {
+        // Switching straight from radio to shuffle means "shuffle the collection
+        // I came from", not "shuffle these generated radio results". Preserve
+        // actual history/current playback, discard unplayed radio results, and
+        // restore every still-unplayed item from the stashed collection as the
+        // shuffle pool. If radio has already advanced to a generated track, put
+        // that current slot at the front of context so turning shuffle off later
+        // can continue into the original collection in order.
+        const collection = s.similarContext.items;
+        const context = collection.some((it) => it.uid === current.uid)
+          ? collection
+          : [current, ...collection];
+        const playedUids = new Set(history.map((it) => it.uid));
+        const pool = context.filter(
+          (it) => !playedUids.has(it.uid) && it.uid !== current.uid
+        );
+        set({
+          shuffled: true,
+          queue: [...history, current, ...shuffle(pool)],
+          index: s.index,
+          context,
+          collectionSession: null,
+          unshuffledQueue: null,
+          ...stopSim,
+          ...clearPref,
+        });
+      } else if (s.context) {
         // Context queue: reshuffle EVERY unplayed track from the collection -
         // the ones still upcoming AND the ones that sat before the clicked track
         // (which only ever live in `context`). Keep history + current in place,

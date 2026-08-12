@@ -25,7 +25,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { usePlayerStore, type QueueItem } from "@/stores/player";
 import {
   ChevronDownIcon,
-  ChevronUpIcon,
   GripIcon,
   TrashIcon,
   XIcon,
@@ -48,9 +47,11 @@ const MIN_FRAME_WIDTH = 320;
 const MIN_FRAME_HEIGHT = 260;
 const DEFAULT_FRAME_WIDTH = 416;
 const DEFAULT_FRAME_HEIGHT = 560;
-// Title bar (45px) + the existing 56px current-track art row and its padding.
-// Collapsing hides only the upcoming list, not what is currently playing.
-const COLLAPSED_FRAME_HEIGHT = 126;
+const COLLAPSE_TRANSITION_MS = 280;
+const COLLAPSE_CONTENT_MS = 100;
+// First-render estimate for the collapsed card. A ResizeObserver replaces this
+// with the full-width art + metadata's measured height immediately afterward.
+const COLLAPSED_FRAME_EXTRA_HEIGHT = 116;
 
 type DesktopFrame = {
   x: number;
@@ -58,6 +59,94 @@ type DesktopFrame = {
   width: number;
   height: number;
 };
+
+type ResizeDirection =
+  | "n"
+  | "ne"
+  | "e"
+  | "se"
+  | "s"
+  | "sw"
+  | "w"
+  | "nw";
+
+const RESIZE_HANDLES: {
+  direction: ResizeDirection;
+  label: string;
+  className: string;
+}[] = [
+  {
+    direction: "n",
+    label: "top edge",
+    className: "left-4 right-4 top-0 h-2 cursor-ns-resize",
+  },
+  {
+    direction: "e",
+    label: "right edge",
+    className: "bottom-4 right-0 top-4 w-2 cursor-ew-resize",
+  },
+  {
+    direction: "s",
+    label: "bottom edge",
+    className: "bottom-0 left-4 right-4 h-2 cursor-ns-resize",
+  },
+  {
+    direction: "w",
+    label: "left edge",
+    className: "bottom-4 left-0 top-4 w-2 cursor-ew-resize",
+  },
+  {
+    direction: "nw",
+    label: "top-left corner",
+    className: "left-0 top-0 h-4 w-4 cursor-nwse-resize",
+  },
+  {
+    direction: "ne",
+    label: "top-right corner",
+    className: "right-0 top-0 h-4 w-4 cursor-nesw-resize",
+  },
+  {
+    direction: "se",
+    label: "bottom-right corner",
+    className: "bottom-0 right-0 h-4 w-4 cursor-nwse-resize",
+  },
+  {
+    direction: "sw",
+    label: "bottom-left corner",
+    className: "bottom-0 left-0 h-4 w-4 cursor-nesw-resize",
+  },
+];
+
+function resizeDesktopFrame(
+  frame: DesktopFrame,
+  direction: ResizeDirection,
+  dx: number,
+  dy: number
+): DesktopFrame {
+  const viewportLeft = FRAME_GAP;
+  const viewportTop = FRAME_GAP;
+  const viewportRight = window.innerWidth - FRAME_GAP;
+  const viewportBottom = window.innerHeight - FRAME_GAP;
+  const minWidth = Math.min(MIN_FRAME_WIDTH, viewportRight - viewportLeft);
+  const minHeight = Math.min(MIN_FRAME_HEIGHT, viewportBottom - viewportTop);
+  let left = frame.x;
+  let right = frame.x + frame.width;
+  let top = frame.y;
+  let bottom = frame.y + frame.height;
+
+  if (direction.includes("w")) {
+    left = Math.min(right - minWidth, Math.max(viewportLeft, left + dx));
+  } else if (direction.includes("e")) {
+    right = Math.max(left + minWidth, Math.min(viewportRight, right + dx));
+  }
+  if (direction.includes("n")) {
+    top = Math.min(bottom - minHeight, Math.max(viewportTop, top + dy));
+  } else if (direction.includes("s")) {
+    bottom = Math.max(top + minHeight, Math.min(viewportBottom, bottom + dy));
+  }
+
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
 
 function clampDesktopFrame(
   frame: DesktopFrame,
@@ -175,12 +264,24 @@ export default memo(function QueuePanel({
   const [desktopFrame, setDesktopFrame] = useState<DesktopFrame | null>(() =>
     mobile ? null : initialDesktopFrame()
   );
-  // Desktop-only: minimize the window down to its draggable title bar.
+  // Desktop-only: collapse the queue list into the large now-playing card.
   const [collapsed, setCollapsed] = useState(false);
+  const [collapseMotion, setCollapseMotion] = useState<
+    "idle" | "collapsing" | "expanding"
+  >("idle");
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const collapseLayoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  // The compact and artwork-first current-track layouts are deliberately
+  // separate from the target state so the queue can fade before they swap.
+  const [cardCollapsed, setCardCollapsed] = useState(false);
   const expandedHeightRef = useRef(DEFAULT_FRAME_HEIGHT);
+  const desktopBodyRef = useRef<HTMLDivElement | null>(null);
   const frameInteractionRef = useRef<{
     pointerId: number;
     kind: "move" | "resize";
+    resizeDirection?: ResizeDirection;
     startX: number;
     startY: number;
     startFrame: DesktopFrame;
@@ -195,7 +296,7 @@ export default memo(function QueuePanel({
         frame
           ? clampDesktopFrame(
               frame,
-              collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
+              collapsed ? 1 : MIN_FRAME_HEIGHT
             )
           : frame
       );
@@ -204,10 +305,13 @@ export default memo(function QueuePanel({
   }, [collapsed, mobile]);
 
   const beginFrameInteraction = useCallback(
-    (event: React.PointerEvent<HTMLElement>, kind: "move" | "resize") => {
+    (
+      event: React.PointerEvent<HTMLElement>,
+      interaction: "move" | ResizeDirection
+    ) => {
       if (mobile || event.button !== 0 || !desktopFrame) return;
       if (
-        kind === "move" &&
+        interaction === "move" &&
         event.target instanceof Element &&
         event.target.closest("button:not([data-drag-handle])")
       ) {
@@ -217,7 +321,9 @@ export default memo(function QueuePanel({
       event.currentTarget.setPointerCapture(event.pointerId);
       frameInteractionRef.current = {
         pointerId: event.pointerId,
-        kind,
+        kind: interaction === "move" ? "move" : "resize",
+        resizeDirection:
+          interaction === "move" ? undefined : interaction,
         startX: event.clientX,
         startY: event.clientY,
         startFrame: desktopFrame,
@@ -233,20 +339,22 @@ export default memo(function QueuePanel({
       if (!interaction || interaction.pointerId !== event.pointerId) return;
       const dx = event.clientX - interaction.startX;
       const dy = event.clientY - interaction.startY;
-      const next = clampDesktopFrame(
+      const next =
         interaction.kind === "move"
-          ? {
-              ...interaction.startFrame,
-              x: interaction.startFrame.x + dx,
-              y: interaction.startFrame.y + dy,
-            }
-          : {
-              ...interaction.startFrame,
-              width: interaction.startFrame.width + dx,
-              height: interaction.startFrame.height + dy,
-            },
-        collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
-      );
+          ? clampDesktopFrame(
+              {
+                ...interaction.startFrame,
+                x: interaction.startFrame.x + dx,
+                y: interaction.startFrame.y + dy,
+              },
+              collapsed ? 1 : MIN_FRAME_HEIGHT
+            )
+          : resizeDesktopFrame(
+              interaction.startFrame,
+              interaction.resizeDirection ?? "se",
+              dx,
+              dy
+            );
       interaction.lastFrame = next;
       setDesktopFrame(next);
     },
@@ -261,42 +369,123 @@ export default memo(function QueuePanel({
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       frameInteractionRef.current = null;
-      saveDesktopFrame(interaction.lastFrame);
+      saveDesktopFrame(
+        collapsed
+          ? { ...interaction.lastFrame, height: expandedHeightRef.current }
+          : interaction.lastFrame
+      );
     },
-    []
+    [collapsed]
   );
 
   const nudgeDesktopFrame = useCallback(
-    (dx: number, dy: number, resize = false) => {
+    (dx: number, dy: number) => {
       setDesktopFrame((frame) => {
         if (!frame) return frame;
         const next = clampDesktopFrame(
-          resize
-            ? { ...frame, width: frame.width + dx, height: frame.height + dy }
-            : { ...frame, x: frame.x + dx, y: frame.y + dy },
-          collapsed ? COLLAPSED_FRAME_HEIGHT : MIN_FRAME_HEIGHT
+          { ...frame, x: frame.x + dx, y: frame.y + dy },
+          collapsed ? 1 : MIN_FRAME_HEIGHT
         );
-        saveDesktopFrame(next);
+        saveDesktopFrame(
+          collapsed ? { ...next, height: expandedHeightRef.current } : next
+        );
         return next;
       });
     },
     [collapsed]
   );
 
+  const nudgeDesktopResize = useCallback(
+    (direction: ResizeDirection, dx: number, dy: number) => {
+      setDesktopFrame((frame) => {
+        if (!frame) return frame;
+        const next = resizeDesktopFrame(frame, direction, dx, dy);
+        saveDesktopFrame(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const toggleCollapsed = useCallback(() => {
+    const nextCollapsed = !collapsed;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
     setDesktopFrame((frame) => {
       if (!frame) return frame;
-      if (collapsed) {
+      if (!nextCollapsed) {
         return clampDesktopFrame({
           ...frame,
           height: expandedHeightRef.current,
         });
       }
       expandedHeightRef.current = frame.height;
-      return { ...frame, height: COLLAPSED_FRAME_HEIGHT };
+      const estimatedHeight = frame.width + COLLAPSED_FRAME_EXTRA_HEIGHT;
+      return clampDesktopFrame({ ...frame, height: estimatedHeight }, 1);
     });
-    setCollapsed((value) => !value);
+    setCollapsed(nextCollapsed);
+    if (collapseLayoutTimerRef.current) {
+      clearTimeout(collapseLayoutTimerRef.current);
+    }
+    if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+    if (reduceMotion) {
+      setCardCollapsed(nextCollapsed);
+      setCollapseMotion("idle");
+      collapseLayoutTimerRef.current = null;
+      collapseTimerRef.current = null;
+      return;
+    }
+    setCollapseMotion(nextCollapsed ? "collapsing" : "expanding");
+    if (nextCollapsed) {
+      collapseLayoutTimerRef.current = setTimeout(() => {
+        setCardCollapsed(true);
+        collapseLayoutTimerRef.current = null;
+      }, COLLAPSE_CONTENT_MS);
+    } else {
+      setCardCollapsed(false);
+      collapseLayoutTimerRef.current = null;
+    }
+    collapseTimerRef.current = setTimeout(() => {
+      setCollapseMotion("idle");
+      collapseTimerRef.current = null;
+    }, COLLAPSE_TRANSITION_MS);
   }, [collapsed]);
+
+  useEffect(
+    () => () => {
+      if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+      if (collapseLayoutTimerRef.current) {
+        clearTimeout(collapseLayoutTimerRef.current);
+      }
+    },
+    []
+  );
+
+  // The restored square art makes the collapsed card's height width-dependent,
+  // while owner metadata can add another line. Measure the real card so it is
+  // never clipped and clamp the corrected frame back into the viewport.
+  useEffect(() => {
+    if (mobile || !collapsed || !cardCollapsed) return;
+    const node = desktopBodyRef.current;
+    if (!node) return;
+    const syncHeight = () => {
+      const height = Math.ceil(node.getBoundingClientRect().height);
+      if (height <= 0) return;
+      setDesktopFrame((frame) => {
+        if (!frame || Math.abs(frame.height - height) < 1) return frame;
+        const next = clampDesktopFrame({ ...frame, height }, height);
+        return next.height === frame.height && next.y === frame.y ? frame : next;
+      });
+    };
+    const frame = requestAnimationFrame(syncHeight);
+    const observer = new ResizeObserver(syncHeight);
+    observer.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [cardCollapsed, collapsed, current?.id, mobile]);
 
   // Windowing: only the visible slice of rows is mounted. The list lives in
   // normal flow between two spacers (no per-row transform), so @dnd-kit's drag
@@ -433,6 +622,10 @@ export default memo(function QueuePanel({
   const activeIndex =
     activeId != null ? queue.findIndex((q) => q.uid === activeId) : -1;
   const activeItem = activeIndex >= 0 ? queue[activeIndex] : null;
+  // Keep the list mounted just long enough to animate it away. On expansion it
+  // mounts immediately and its entrance animation runs alongside the frame.
+  const showQueueContent =
+    mobile || !collapsed || collapseMotion === "collapsing";
 
   // Stay mounted while fully closed (display:none) so the @dnd-kit tree mounts
   // as the queue is built, not in one cold synchronous frame on first open.
@@ -446,7 +639,9 @@ export default memo(function QueuePanel({
         hidden
           ? "hidden"
           : `${open ? "animate-pop-in" : "animate-pop-out"} hidden md:flex`
-      } fixed z-[55] min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface-2 shadow-2xl`;
+      } fixed z-[55] min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface-2 shadow-2xl ${
+        collapseMotion === "idle" ? "" : "queue-frame-transition"
+      }`;
 
   // Off-screen until settled; follows the finger while dragging down (mobile).
   const offset = atRest ? `${dragY}px` : "100%";
@@ -532,11 +727,12 @@ export default memo(function QueuePanel({
             title={collapsed ? "Restore queue" : "Minimize queue"}
             className="flex h-8 w-8 items-center justify-center rounded text-fg-muted hover:bg-surface-3 hover:text-fg"
           >
-            {collapsed ? (
-              <ChevronUpIcon size={16} />
-            ) : (
-              <ChevronDownIcon size={16} />
-            )}
+            <ChevronDownIcon
+              size={16}
+              className={`transition-transform duration-300 ease-out ${
+                collapsed ? "rotate-180" : ""
+              }`}
+            />
           </button>
           <button
             type="button"
@@ -560,24 +756,47 @@ export default memo(function QueuePanel({
       )}
       {current && (
         <div
+          key={mobile ? "mobile" : cardCollapsed ? "collapsed" : "expanded"}
           {...(mobile ? swipe : {})}
           className={`border-b border-border px-4 ${
-            mobile ? "pb-3 pt-1" : "py-3"
+            mobile ? "pb-3 pt-1" : cardCollapsed ? "pb-3 pt-4" : "py-3"
+          } ${
+            cardCollapsed && collapseMotion === "collapsing"
+              ? "animate-queue-current-collapse"
+              : !cardCollapsed && collapseMotion === "expanding"
+                ? "animate-queue-current-expand"
+                : ""
           }`}
         >
           <CurrentTrackDetails
             track={current}
-            row
-            artSize={mobile ? "h-12 w-12" : "h-14 w-14"}
-            iconSize={mobile ? 22 : 24}
+            row={mobile || !cardCollapsed}
+            artSize={
+              mobile
+                ? "h-12 w-12"
+                : cardCollapsed
+                  ? "aspect-square w-full"
+                  : "h-14 w-14"
+            }
+            iconSize={mobile ? 22 : cardCollapsed ? 64 : 24}
             onNavigate={onClose}
             trailing={<CurrentTrackKebab track={current} onNavigate={onClose} />}
           />
         </div>
       )}
 
-      {!collapsed && (
-        <>
+      {showQueueContent && (
+        <div
+          aria-hidden={!mobile && collapsed}
+          inert={!mobile && collapsed ? true : undefined}
+          className={`flex min-h-0 flex-1 flex-col ${
+            collapseMotion === "collapsing"
+              ? "animate-queue-content-collapse"
+              : collapseMotion === "expanding"
+                ? "animate-queue-content-expand"
+                : ""
+          }`}
+        >
           <div className="flex items-center gap-3 border-b border-border px-4 py-2">
             <h2 className="text-sm font-semibold text-fg">
               {mobile ? "Queue" : "Up next"}
@@ -656,7 +875,7 @@ export default memo(function QueuePanel({
                 document.body
               )}
           </DndContext>
-        </>
+        </div>
       )}
 
       {mobile && (
@@ -694,40 +913,50 @@ export default memo(function QueuePanel({
       {mobile ? (
         body
       ) : (
-        <div className="flex h-full min-h-0 flex-col">
+        <div
+          ref={desktopBodyRef}
+          className={`flex min-h-0 flex-col ${
+            cardCollapsed ? "shrink-0" : "h-full"
+          }`}
+        >
           {body}
         </div>
       )}
-      {!mobile && !collapsed && (
-        <button
-          type="button"
-          aria-label="Resize queue window"
-          title="Drag to resize queue"
-          onPointerDown={(event) => beginFrameInteraction(event, "resize")}
-          onPointerMove={moveFrameInteraction}
-          onPointerUp={endFrameInteraction}
-          onPointerCancel={endFrameInteraction}
-          onKeyDown={(event) => {
-            const step = event.shiftKey ? 32 : 8;
-            const delta =
-              event.key === "ArrowLeft"
-                ? [-step, 0]
-                : event.key === "ArrowRight"
-                  ? [step, 0]
-                  : event.key === "ArrowUp"
-                    ? [0, -step]
-                    : event.key === "ArrowDown"
-                      ? [0, step]
-                      : null;
-            if (!delta) return;
-            event.preventDefault();
-            nudgeDesktopFrame(delta[0], delta[1], true);
-          }}
-          className="absolute bottom-0 right-0 z-10 h-5 w-5 cursor-se-resize touch-none rounded-tl text-fg-subtle hover:bg-surface-3 hover:text-fg"
-        >
-          <span className="absolute bottom-1 right-1 block h-2.5 w-2.5 border-b-2 border-r-2 border-current" />
-        </button>
-      )}
+      {!mobile &&
+        !collapsed &&
+        RESIZE_HANDLES.map(({ direction, label, className }) => (
+          <button
+            key={direction}
+            type="button"
+            aria-label={`Resize queue from ${label}`}
+            title={`Drag to resize from ${label}`}
+            onPointerDown={(event) => beginFrameInteraction(event, direction)}
+            onPointerMove={moveFrameInteraction}
+            onPointerUp={endFrameInteraction}
+            onPointerCancel={endFrameInteraction}
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 32 : 8;
+              const delta =
+                event.key === "ArrowLeft"
+                  ? [-step, 0]
+                  : event.key === "ArrowRight"
+                    ? [step, 0]
+                    : event.key === "ArrowUp"
+                      ? [0, -step]
+                      : event.key === "ArrowDown"
+                        ? [0, step]
+                        : null;
+              if (!delta) return;
+              event.preventDefault();
+              nudgeDesktopResize(direction, delta[0], delta[1]);
+            }}
+            className={`absolute z-20 touch-none rounded-sm hover:bg-accent/20 focus-visible:bg-accent/25 ${className}`}
+          >
+            {direction === "se" && (
+              <span className="pointer-events-none absolute bottom-1 right-1 block h-2 w-2 border-b-2 border-r-2 border-fg-subtle" />
+            )}
+          </button>
+        ))}
     </div>
   );
 });
@@ -850,12 +1079,16 @@ const QueueRow = memo(function QueueRow({
           </button>
           <p className="truncate text-xs text-fg-muted">
             {track.artist ? (
-              <Link
-                href={`/artist?name=${encodeURIComponent(track.artist)}`}
-                className="hover:text-accent-bright"
-              >
-                {track.artist}
-              </Link>
+              track.isSuggested ? (
+                track.artist
+              ) : (
+                <Link
+                  href={`/artist?name=${encodeURIComponent(track.artist)}`}
+                  className="hover:text-accent-bright"
+                >
+                  {track.artist}
+                </Link>
+              )
             ) : (
               "Unknown artist"
             )}

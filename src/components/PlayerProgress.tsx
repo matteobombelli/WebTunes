@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePlayerStore } from "@/stores/player";
 
 function formatTime(totalSeconds: number): string {
@@ -30,16 +30,60 @@ export default function PlayerProgress({
   className,
   serverDuration,
   barOnly = false,
+  smooth = false,
 }: {
   className: string;
   serverDuration: number;
   barOnly?: boolean;
+  /** Animate the visible range thumb between coarse media `timeupdate` ticks. */
+  smooth?: boolean;
 }) {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const rangeRef = useRef<HTMLInputElement | null>(null);
+  const elapsedRef = useRef<HTMLSpanElement | null>(null);
+  const scrubbingRef = useRef(false);
+  const smoothOriginRef = useRef({ seconds: currentTime, at: 0 });
 
   const totalDuration = serverDuration > 0 ? serverDuration : duration || 0;
   const playedSeconds = currentTime;
+
+  // `timeupdate` is intentionally stored at only ~4Hz. In the immersive track
+  // view, advance the range thumb from the latest real media position on each
+  // animation frame so it glides between those authoritative samples. The
+  // input stays uncontrolled so a pointer/keyboard scrub is never snapped back
+  // by a stale React value while the seek is landing on the media element.
+  useEffect(() => {
+    const range = rangeRef.current;
+    if (!range) return;
+    const clamped = Math.min(Math.max(0, playedSeconds), totalDuration || Infinity);
+    const startedAt = performance.now();
+    smoothOriginRef.current = { seconds: clamped, at: startedAt };
+    if (!scrubbingRef.current) range.value = String(clamped);
+    if (!smooth || !isPlaying || totalDuration <= 0) return;
+
+    let animationFrame = 0;
+    let lastLabel = formatTime(clamped);
+    const tick = (now: number) => {
+      if (!scrubbingRef.current) {
+        const origin = smoothOriginRef.current;
+        const seconds = Math.min(
+          totalDuration,
+          origin.seconds + (now - origin.at) / 1000
+        );
+        range.value = String(seconds);
+        const label = formatTime(seconds);
+        if (label !== lastLabel && elapsedRef.current) {
+          elapsedRef.current.textContent = label;
+          lastLabel = label;
+        }
+      }
+      animationFrame = requestAnimationFrame(tick);
+    };
+    animationFrame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isPlaying, playedSeconds, smooth, totalDuration]);
 
   // Report the reliable duration + live position to the OS Now Playing UI.
   // Without this, iOS reads the <audio> element's own (sometimes wildly
@@ -82,18 +126,42 @@ export default function PlayerProgress({
 
   return (
     <div className={`${className} items-center gap-2 text-xs text-fg-muted`}>
-      <span className="w-10 shrink-0 text-right tabular-nums">
+      <span ref={elapsedRef} className="w-10 shrink-0 text-right tabular-nums">
         {formatTime(playedSeconds)}
       </span>
       <input
+        ref={rangeRef}
         type="range"
         min={0}
         max={totalDuration}
-        step={0.5}
-        value={Math.min(playedSeconds, totalDuration || Infinity)}
-        onChange={(e) =>
-          usePlayerStore.getState().seekTo(Number(e.target.value))
-        }
+        step="any"
+        defaultValue={Math.min(playedSeconds, totalDuration || Infinity)}
+        onPointerDown={() => {
+          scrubbingRef.current = true;
+        }}
+        onPointerUp={() => {
+          scrubbingRef.current = false;
+        }}
+        onPointerCancel={() => {
+          scrubbingRef.current = false;
+        }}
+        onKeyDown={() => {
+          scrubbingRef.current = true;
+        }}
+        onKeyUp={() => {
+          scrubbingRef.current = false;
+        }}
+        onBlur={() => {
+          scrubbingRef.current = false;
+        }}
+        onChange={(e) => {
+          const seconds = Number(e.target.value);
+          smoothOriginRef.current = { seconds, at: performance.now() };
+          if (elapsedRef.current) {
+            elapsedRef.current.textContent = formatTime(seconds);
+          }
+          usePlayerStore.getState().seekTo(seconds);
+        }}
         className="h-5 min-w-0 flex-1 cursor-pointer accent-accent"
         aria-label="Seek"
       />

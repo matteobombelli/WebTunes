@@ -1053,12 +1053,16 @@ export default function PlayerBar({
       <p className="truncate text-sm font-medium text-fg">{track.title}</p>
       <p className="truncate text-xs text-fg-muted">
         {track.artist ? (
-          <Link
-            href={`/artist?name=${encodeURIComponent(track.artist)}`}
-            className="hover:text-accent-bright"
-          >
-            {track.artist}
-          </Link>
+          track.isSuggested ? (
+            track.artist
+          ) : (
+            <Link
+              href={`/artist?name=${encodeURIComponent(track.artist)}`}
+              className="hover:text-accent-bright"
+            >
+              {track.artist}
+            </Link>
+          )
         ) : (
           "Unknown artist"
         )}

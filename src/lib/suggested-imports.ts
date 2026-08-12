@@ -147,9 +147,16 @@ export async function acceptSuggestedImport(
       .limit(1);
     if (!row) return { status: "not_found" } as const;
     if (row.suggestion.status !== "ready") return { status: "conflict" } as const;
+    const acceptedAt = new Date();
     const [promoted] = await tx
       .update(tracks)
-      .set({ suggestedImportId: null, isPrivate: false })
+      .set({
+        suggestedImportId: null,
+        isPrivate: false,
+        // Staging time is an implementation detail. Once accepted, the track
+        // should enter the newest-first library at the moment the user kept it.
+        createdAt: acceptedAt,
+      })
       .where(
         and(
           eq(tracks.id, row.track.id),
@@ -160,7 +167,7 @@ export async function acceptSuggestedImport(
     if (!promoted) return { status: "conflict" } as const;
     await tx
       .update(suggestedImports)
-      .set({ status: "accepted", updatedAt: new Date(), progress: 100 })
+      .set({ status: "accepted", updatedAt: acceptedAt, progress: 100 })
       .where(eq(suggestedImports.id, suggestionId));
     return { status: "ok", track: toTrackDTO(promoted) } as const;
   });
