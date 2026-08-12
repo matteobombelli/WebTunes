@@ -2,10 +2,8 @@
 
 import { create } from "zustand";
 
-// Imperative themed replacement for window.confirm(): callers await
-// `confirmAction("Delete this track?", { confirmLabel: "Delete" })` and the
-// globally-mounted <ConfirmDialog> resolves it. One pending question at a time
-// (a second ask cancels the first), matching native confirm semantics.
+// Imperative themed replacement for window.confirm(). One pending question at
+// a time; a second ask cancels the first, matching native confirm semantics.
 type ConfirmState = {
   message: string | null;
   confirmLabel: string;
@@ -33,11 +31,3 @@ export const useConfirmStore = create<ConfirmState>((set, get) => ({
     set({ message: null, resolver: null });
   },
 }));
-
-/** Shorthand for non-component call sites. */
-export function confirmAction(
-  message: string,
-  opts?: { confirmLabel?: string }
-): Promise<boolean> {
-  return useConfirmStore.getState().ask(message, opts);
-}

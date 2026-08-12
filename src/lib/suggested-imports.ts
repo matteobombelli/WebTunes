@@ -37,7 +37,7 @@ import type {
   TrackDTO,
 } from "@/lib/types";
 
-export const SUGGESTED_IMPORT_TARGET = 20;
+const SUGGESTED_IMPORT_TARGET = 20;
 const REJECT_MS = 90 * 24 * 60 * 60 * 1000;
 const RETRY_FAILED_MS = 24 * 60 * 60 * 1000;
 const LEASE_MS = 30 * 60 * 1000;
@@ -50,7 +50,7 @@ const MAX_PER_ARTIST = 2;
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
 const MAX_RATE_LIMIT_RETRIES = 3;
 
-export function normalizeSuggestedText(value: string): string {
+function normalizeSuggestedText(value: string): string {
   return value
     .toLowerCase()
     .normalize("NFKD")
@@ -124,7 +124,7 @@ export async function getSuggestedImportPool(
   };
 }
 
-export type SuggestionMutationResult =
+type SuggestionMutationResult =
   | { status: "ok"; track?: TrackDTO }
   | { status: "not_found" }
   | { status: "conflict" };

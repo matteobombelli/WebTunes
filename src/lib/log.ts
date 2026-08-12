@@ -1,18 +1,7 @@
-// Isomorphic, namespaced logger for browser-console (F12) + journal visibility.
-//
-// No "use client" and no env-specific imports, so it is safe to import from both
-// "use client" components and server route handlers/libs (same neutrality as
-// base-path.ts / api.ts).
-//
-// Gating: warn/error ALWAYS emit. info/debug emit only when verbose is on -
-// client: localStorage["wt-log"] === "1"; server: process.env.WT_VERBOSE === "1".
-// (Mirrors the existing logAudio `wt-audio-debug` flag; that logger stays separate
-// under the `[wt-audio]` namespace.)
-//
-// REDACTION: callers must pass only non-sensitive data. Never pass request bodies,
-// full response JSON, headers, passwords, or tokens - see api.ts.
+// Isomorphic logger: warn/error always emit; info/debug require `wt-log=1` in
+// localStorage or `WT_VERBOSE=1` on the server. Callers must redact secrets.
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 const BUFFER_CAP = 500;
 
@@ -26,9 +15,7 @@ function verbose(): boolean {
   }
 }
 
-// debug → console.log (NOT console.debug, which Chrome hides behind the "Verbose"
-// level filter); the rest map to the matching console method so DevTools colours
-// and level-filters work.
+// Chrome hides console.debug by default, so debug intentionally uses console.log.
 const CONSOLE: Record<LogLevel, (...args: unknown[]) => void> = {
   debug: console.log,
   info: console.info,

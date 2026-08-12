@@ -21,7 +21,7 @@ import {
 export type FlatEntry = ImportSearchResultDTO;
 
 /** Full probe of one video: import metadata + the bitrate-floor input. */
-export type VideoInfo = {
+type VideoInfo = {
   title: string;
   artist: string;
   album: string;
@@ -44,7 +44,7 @@ const COMMON_ARGS = [
   "ejs:github",
 ];
 
-export function ytdlpPath(): string {
+function ytdlpPath(): string {
   if (process.env.YT_DLP_PATH) return process.env.YT_DLP_PATH;
   const local = join(process.cwd(), "bin", "yt-dlp");
   return existsSync(local) ? local : "yt-dlp";

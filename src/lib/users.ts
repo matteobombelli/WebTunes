@@ -68,7 +68,7 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 // Account creation lives in lib/invites.ts (registerInvitedUser): registration
 // is invite-only, so there's no open createUser path anymore.
 
-export type UpdateNameResult = { name: string } | { error: string };
+type UpdateNameResult = { name: string } | { error: string };
 
 /**
  * Rename the signed-in user. Usernames are unique case-insensitively: returns
@@ -106,7 +106,7 @@ export async function getDisplayName(userId: string): Promise<string | null> {
   return row ? row.name : null;
 }
 
-export type UserSettings = {
+type UserSettings = {
   hideFriendDuplicates: boolean;
   normalizeVolume: boolean;
   similarVariation: number;

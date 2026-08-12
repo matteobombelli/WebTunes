@@ -6,12 +6,21 @@ import {
   isDemoAccount,
 } from "@/lib/demo-accounts";
 import { listJobs, startImport } from "@/lib/import/jobs";
+import { DEFAULT_IMPORT_OPTIONS } from "@/lib/types";
 
 const schema = z.object({
   url: z.string().trim().min(1).max(2000),
-  quality: z.enum(["128", "192", "opus", "m4a"]).default("opus"),
-  strictness: z.number().min(0).max(1).default(0.7),
-  versionPref: z.enum(["none", "studio", "live"]).default("none"),
+  quality: z
+    .enum(["128", "192", "opus", "m4a"])
+    .default(DEFAULT_IMPORT_OPTIONS.quality),
+  strictness: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(DEFAULT_IMPORT_OPTIONS.strictness),
+  versionPref: z
+    .enum(["none", "studio", "live"])
+    .default(DEFAULT_IMPORT_OPTIONS.versionPref),
 });
 
 /**

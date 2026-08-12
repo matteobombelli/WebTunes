@@ -45,7 +45,7 @@ async function politeWait(): Promise<void> {
   lastRequestAt = Date.now();
 }
 
-export type Fingerprint = { duration: number; fingerprint: string };
+type Fingerprint = { duration: number; fingerprint: string };
 
 export type Recognition = {
   acoustidId: string;

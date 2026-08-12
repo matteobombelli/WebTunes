@@ -8,7 +8,7 @@ import { isUuid } from "@/lib/validate";
 /** Unfriend: removes an accepted friendship in either direction. */
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
+  { params }: RouteContext<"/api/friends/[userId]">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

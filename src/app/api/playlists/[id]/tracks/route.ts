@@ -7,7 +7,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
 import { getEditablePlaylist } from "@/lib/playlists";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/playlists/[id]/tracks">;
 
 const addSchema = z.union([
   z.object({ trackId: z.string().uuid() }),
@@ -102,9 +102,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 }
 
 const reorderSchema = z.object({
-  // Cap the array so one request can't block the event loop on the JSON+zod
-  // pass (the proxy buffers up to 100mb). Far above any real playlist; adds
-  // are capped at 500.
+  // Bound JSON validation work; this remains far above a practical playlist.
   trackIds: z.array(z.string().uuid()).min(1).max(10_000),
 });
 

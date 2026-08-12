@@ -9,7 +9,7 @@ import { trackShares, tracks } from "@/db/schema";
 // token IS the authorization (it deliberately ignores is_private / friendship,
 // unlike canAccessTrack). One active row per track; links auto-expire after 7
 // days and are purged by scripts/purge-expired-shares.mjs. See AGENTS.md.
-export const SHARE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SHARE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type ShareLink = { token: string; expiresAt: Date };
 
@@ -18,7 +18,7 @@ export type ShareLink = { token: string; expiresAt: Date };
 // Note: the owner's id still appears in the presigned S3 URL the recipient is
 // 302'd to (keys are `audio/<ownerId>/…`) - opaque, unusable without a session,
 // and identical to the authed stream route (audit I22, accepted).
-export type ResolvedShare = {
+type ResolvedShare = {
   id: string;
   s3Key: string;
   artS3Key: string | null;

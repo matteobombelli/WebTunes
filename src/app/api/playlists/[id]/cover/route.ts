@@ -16,7 +16,7 @@ import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
 // cover can't go stale mid-session the way an embedded presigned URL would.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/playlists/[id]/cover">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -38,7 +38,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/playlists/[id]/cover">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

@@ -1,13 +1,16 @@
 import { flatExtract, type FlatEntry } from "@/lib/import/ytdlp";
 import type { SourceTrack } from "@/lib/import/sources";
-import type { ImportVersionPref } from "@/lib/types";
+import {
+  DEFAULT_IMPORT_OPTIONS,
+  type ImportVersionPref,
+} from "@/lib/types";
 import type { ImportLanePriority } from "@/lib/import/lane";
 
 // Resolve a Spotify/Apple track's metadata to the best-matching YouTube video
 // using Ratcliff/Obershelp similarity on normalized word sets. Below the
 // strictness threshold a track is skipped with a reason, never guessed.
 
-export const DEFAULT_STRICTNESS = 0.7; // match-score floor, user-adjustable 0..1
+export const DEFAULT_STRICTNESS = DEFAULT_IMPORT_OPTIONS.strictness;
 const DURATION_TOLERANCE = 15; // seconds
 const DURATION_REJECT = 90; // seconds; beyond this a candidate is discarded
 const SEARCH_RESULTS = 10; // candidates to scan per track when matching
@@ -17,7 +20,7 @@ const BRACKETS = /\(.*?\)|\[.*?\]/g;
 const NOISE_WORDS =
   /\b(official|video|audio|lyrics?|music|hd|4k|remaster(ed)?|topic|vevo)\b/g;
 
-export function normalize(s: string): string {
+function normalize(s: string): string {
   return s
     .toLowerCase()
     .replace(BRACKETS, " ")
@@ -38,7 +41,7 @@ const JUNK_PATTERNS =
  * legitimate titles ("Live and Let Die"); accepted, since every drop is
  * reported.
  */
-export function versionAllowed(title: string, pref: ImportVersionPref): boolean {
+function versionAllowed(title: string, pref: ImportVersionPref): boolean {
   const t = title.toLowerCase();
   if (pref === "studio") return !LIVE_PATTERNS.test(t) && !JUNK_PATTERNS.test(t);
   if (pref === "live") return LIVE_PATTERNS.test(t);
@@ -89,7 +92,7 @@ function ratio(a: string, b: string): number {
 /** Score a candidate against the track's metadata; null when the candidate is
  * so far off the expected duration (an extended mix, a full-album video) that
  * no title similarity should save it. */
-export function matchScore(
+function matchScore(
   track: SourceTrack,
   entry: FlatEntry,
   pref: ImportVersionPref

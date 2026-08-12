@@ -30,9 +30,9 @@ const BY_EXT: Record<string, ImageKind> = {
 };
 
 /** Extensions accepted from an uploaded filename. */
-export const IMAGE_EXTENSIONS = new Set(Object.keys(BY_EXT));
+const IMAGE_EXTENSIONS = new Set(Object.keys(BY_EXT));
 
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Validate an explicitly uploaded image file (shape + claimed type + size),

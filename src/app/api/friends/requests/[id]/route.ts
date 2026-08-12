@@ -5,7 +5,7 @@ import { friendships } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { isUuid } from "@/lib/validate";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/friends/requests/[id]">;
 
 /** Accept an incoming pending request (addressee only). */
 export async function PATCH(_req: NextRequest, { params }: Params) {

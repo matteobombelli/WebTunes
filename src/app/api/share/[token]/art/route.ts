@@ -8,7 +8,7 @@ import { resolveShareToken } from "@/lib/shares";
 // reasoning.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: RouteContext<"/api/share/[token]/art">
 ) {
   const { token } = await params;
   const track = await resolveShareToken(token);

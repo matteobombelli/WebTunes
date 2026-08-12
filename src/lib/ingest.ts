@@ -40,8 +40,6 @@ const AUDIO_KIND_BY_EXTENSION: Record<string, AudioKind> = {
   webm: { ext: "webm", contentType: "audio/webm" },
 };
 
-export const AUDIO_EXTENSIONS = new Set(Object.keys(AUDIO_KIND_BY_EXTENSION));
-
 // Browsers disagree on several audio Content-Types (notably Safari's m4a and
 // WAV values). Accept the common aliases, but always persist the canonical
 // allowlisted value above. Unknown extensions can still be accepted when the
@@ -76,7 +74,7 @@ function audioKind(filename: string, mimeType: string): AudioKind | null {
   return AUDIO_KIND_BY_MIME.get(normalizedMime) ?? null;
 }
 
-export type IngestResult =
+type IngestResult =
   | { status: "created"; track: Track }
   | { status: "duplicate"; message: string };
 
@@ -106,7 +104,7 @@ export function validateAudioUpload(
  * YouTube video, or the Spotify/Apple track it matched), and `artUrl` is that
  * source's cover - a YouTube thumbnail (cropSquare) or Spotify/Apple artwork.
  */
-export type IngestOverrides = {
+type IngestOverrides = {
   title?: string | null;
   artist?: string | null;
   album?: string | null;
@@ -114,7 +112,7 @@ export type IngestOverrides = {
   artCropSquare?: boolean;
 };
 
-export type KnownTrackIdentity = {
+type KnownTrackIdentity = {
   acoustidId?: string | null;
   recordingMbid: string;
   artistMbids?: string[];
@@ -198,12 +196,8 @@ export async function ingestTrack({
     };
   }
 
-  // These three are independent - run them concurrently so the I/O-bound lrclib
-  // lookup inside metadata extraction overlaps the CPU-bound ffmpeg work instead
-  // of running in series. Loudness is best-effort (null on any failure, like
-  // art/lyrics); the re-mux returns null for anything that isn't Opus or fails.
-  // The CLAP embedding used to run here too, but it's the slowest step, so it's
-  // deferred to a background queue (enqueueEmbedding, after the row exists).
+  // Run independent metadata/ffmpeg work concurrently. CLAP remains deferred
+  // until after the row exists because it is substantially slower.
   const [meta, loudnessLufs, remuxed] = await Promise.all([
     extractTrackMetadata(buffer, canonicalMimeType, filename),
     analyzeLoudnessLufs(buffer, ext),

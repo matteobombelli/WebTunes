@@ -67,7 +67,7 @@ const notFound = () =>
 // directly via POST); kept as read surface for a future mobile client.
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/shares">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -80,7 +80,7 @@ export async function GET(
 // Create the link (idempotent: returns the existing active one if present).
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/shares">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();
@@ -93,7 +93,7 @@ export async function POST(
 // Revoke the link.
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/shares">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

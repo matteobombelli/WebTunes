@@ -3,20 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon } from "@/components/icons";
-import type { ImportJobDTO } from "@/lib/types";
-import { useImportsStore } from "@/stores/imports";
+import { isImportJobActive, useImportsStore } from "@/stores/imports";
 
 // Sibling of UploadProgressBar for server-side import jobs. Lives in the app
 // layout so it survives navigation; hydrate() re-attaches to a running job
 // after a reload (the job itself lives server-side).
-
-function isActive(job: ImportJobDTO): boolean {
-  return (
-    job.status === "queued" ||
-    job.status === "resolving" ||
-    job.status === "running"
-  );
-}
 
 export default function ImportProgressBar() {
   const router = useRouter();
@@ -29,7 +20,7 @@ export default function ImportProgressBar() {
   useEffect(() => hydrate(), [hydrate]);
 
   // Refresh the server-rendered library once all jobs finish, like UploadButton.
-  const busy = jobs.some(isActive);
+  const busy = jobs.some(isImportJobActive);
   const prevBusy = useRef(busy);
   useEffect(() => {
     if (prevBusy.current && !busy) router.refresh();
@@ -103,7 +94,7 @@ export default function ImportProgressBar() {
               <button
                 onClick={() => {
                   for (const job of jobs) {
-                    if (isActive(job)) void cancel(job.id);
+                    if (isImportJobActive(job)) void cancel(job.id);
                   }
                 }}
                 className="text-xs font-medium text-fg-muted hover:text-red-400"

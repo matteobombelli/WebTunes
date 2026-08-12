@@ -9,7 +9,7 @@ import { resolveShareToken } from "@/lib/shares";
 // token is base64url, never a uuid, so we do NOT run isUuid on it.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: RouteContext<"/api/share/[token]/stream">
 ) {
   const { token } = await params;
   const track = await resolveShareToken(token);

@@ -19,7 +19,7 @@ const bodySchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/similar">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

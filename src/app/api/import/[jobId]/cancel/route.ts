@@ -6,7 +6,7 @@ import { cancelJob } from "@/lib/import/jobs";
  * remaining items cancelled. Ownership-checked inside cancelJob. */
 export async function POST(
   _req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  { params }: RouteContext<"/api/import/[jobId]/cancel">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

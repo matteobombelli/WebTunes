@@ -4,13 +4,13 @@ import { listens, tracks } from "@/db/schema";
 import { canAccessTrack } from "@/lib/friends";
 import { listenQualificationSeconds } from "@/lib/listen-telemetry";
 
-export type ListenTelemetry = {
+type ListenTelemetry = {
   sessionId: string;
   listenedSeconds: number;
   durationSeconds: number;
 };
 
-export type RecordListenResult =
+type RecordListenResult =
   | "ok"
   | "not_found"
   | "forbidden"

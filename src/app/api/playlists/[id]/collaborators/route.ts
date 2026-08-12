@@ -12,7 +12,7 @@ import {
 } from "@/lib/playlists";
 import { isUuid } from "@/lib/validate";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/playlists/[id]/collaborators">;
 
 // List collaborators - visible to anyone who can edit the playlist.
 export async function GET(_req: NextRequest, { params }: Params) {

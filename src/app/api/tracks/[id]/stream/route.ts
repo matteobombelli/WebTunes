@@ -1,47 +1,18 @@
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { tracks } from "@/db/schema";
-import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { canAccessTrack } from "@/lib/friends";
 import { getPresignedGetUrl } from "@/lib/s3";
-import { isUuid } from "@/lib/validate";
+import { resolveTrackMedia, trackMediaError } from "@/lib/track-media";
 
 // Stable per-track stream URL: the player (and the service worker's offline
 // cache) key on this URL, while the redirect target rotates per request.
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/stream">
 ) {
   const { id } = await params;
-  if (!isUuid(id)) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  // The track row doesn't depend on the session, so fetch both concurrently -
-  // one less serial DB hop between the click and the presigned redirect.
-  const [user, [track]] = await Promise.all([
-    requireUser(),
-    db
-      .select({
-        id: tracks.id,
-        ownerId: tracks.ownerId,
-        isPrivate: tracks.isPrivate,
-        suggestedImportId: tracks.suggestedImportId,
-        s3Key: tracks.s3Key,
-      })
-      .from(tracks)
-      .where(eq(tracks.id, id)),
-  ]);
-  if (!user) return unauthorized();
-  if (!track) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  const canPreview = track.suggestedImportId && track.ownerId === user.id;
-  if (!canPreview && !(await canAccessTrack(user.id, track))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const media = await resolveTrackMedia(id, "audio");
+  if (!media.ok) return trackMediaError(media.error);
 
-  const { url } = await getPresignedGetUrl(track.s3Key);
+  const { url } = await getPresignedGetUrl(media.key);
   // This stable URL is shared by every account in a browser profile. Never let
   // its authenticated redirect survive a logout/account switch.
   const res = NextResponse.redirect(url, 302);

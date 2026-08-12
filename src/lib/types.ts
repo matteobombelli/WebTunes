@@ -32,7 +32,7 @@ export type TrackPageDTO = {
   nextCursor: string | null;
 };
 
-export type SuggestedImportDTO = {
+type SuggestedImportDTO = {
   id: string;
   track: TrackDTO;
   reason: string | null;
@@ -105,14 +105,14 @@ export type StatsDailyActivityDTO = {
   listeningSeconds: number;
 };
 
-export type StatsHourlyActivityDTO = {
+type StatsHourlyActivityDTO = {
   /** Local hour, from 0 through 23. */
   hour: number;
   listens: number;
   averagePerActiveDay: number;
 };
 
-export type StatsRankedTrackDTO = {
+type StatsRankedTrackDTO = {
   track: TrackDTO;
   listens: number;
   listeningSeconds: number;
@@ -175,7 +175,19 @@ export type InviteDTO = {
 export type ImportQuality = "128" | "192" | "opus" | "m4a";
 export type ImportVersionPref = "none" | "studio" | "live";
 
-export type ImportItemStatus =
+export type ImportOptions = {
+  quality: ImportQuality;
+  strictness: number;
+  versionPref: ImportVersionPref;
+};
+
+export const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
+  quality: "opus",
+  strictness: 0.7,
+  versionPref: "none",
+};
+
+type ImportItemStatus =
   | "waiting"
   | "matching"
   | "downloading"

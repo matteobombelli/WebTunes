@@ -22,7 +22,7 @@ const REMUX_TIMEOUT_MS = 60_000;
 const OPUS_EXTS = new Set(["ogg", "opus", "oga", "webm"]);
 const OPUS_MIMES = new Set(["audio/ogg", "audio/webm"]);
 
-export type RemuxResult = { body: Buffer; ext: "mp4"; contentType: "audio/mp4" };
+type RemuxResult = { body: Buffer; ext: "mp4"; contentType: "audio/mp4" };
 
 /**
  * Losslessly re-mux an Opus upload (Ogg or WebM container) to MP4. Returns

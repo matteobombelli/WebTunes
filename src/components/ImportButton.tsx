@@ -2,18 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type {
-  ImportJobDTO,
-  ImportQuality,
-  ImportSearchResultDTO,
-  ImportVersionPref,
+import {
+  DEFAULT_IMPORT_OPTIONS,
+  type ImportJobDTO,
+  type ImportOptions,
+  type ImportQuality,
+  type ImportSearchResultDTO,
+  type ImportVersionPref,
 } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DEMO_READ_ONLY_MESSAGE } from "@/lib/demo-accounts";
-import { useImportsStore, type ImportOptions } from "@/stores/imports";
+import { isImportJobActive, useImportsStore } from "@/stores/imports";
 import { useToastStore } from "@/stores/toast";
 
 // In-site importer: Settings / Link / Search tabs, with the Link tab carrying
@@ -26,36 +28,22 @@ const QUALITY_CHOICES: { value: ImportQuality; label: string }[] = [
   { value: "m4a", label: "Best (.m4a, lossless)" },
 ];
 
-const DEFAULT_OPTIONS: ImportOptions = {
-  quality: "opus",
-  strictness: 0.7,
-  versionPref: "none",
-};
-
 const OPTIONS_KEY = "wt-import-options";
 
 function loadOptions(): ImportOptions {
   try {
     const raw = localStorage.getItem(OPTIONS_KEY);
-    if (raw) return { ...DEFAULT_OPTIONS, ...JSON.parse(raw) };
+    if (raw) return { ...DEFAULT_IMPORT_OPTIONS, ...JSON.parse(raw) };
   } catch {
     // corrupt/unavailable localStorage - fall through to defaults
   }
-  return DEFAULT_OPTIONS;
+  return DEFAULT_IMPORT_OPTIONS;
 }
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "";
   const s = Math.round(seconds);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-function isActive(job: ImportJobDTO): boolean {
-  return (
-    job.status === "queued" ||
-    job.status === "resolving" ||
-    job.status === "running"
-  );
 }
 
 export default function ImportButton({
@@ -210,7 +198,7 @@ function LinkTab({ options }: { options: ImportOptions }) {
     jobs.find((j) => j.status === "resolving" || j.status === "running") ??
     jobs.find((j) => j.status !== "queued");
   const queuedJobs = jobs.filter((j) => j.status === "queued").reverse();
-  const busy = !!job && isActive(job);
+  const busy = !!job && isImportJobActive(job);
   const start = async () => {
     setError(null);
     try {

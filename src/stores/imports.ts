@@ -3,23 +3,10 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import { log } from "@/lib/log";
-import type {
-  ImportJobDTO,
-  ImportQuality,
-  ImportVersionPref,
-} from "@/lib/types";
+import type { ImportJobDTO, ImportOptions } from "@/lib/types";
 
-// Import-job state, mirroring the uploads store: module-level so an in-flight
-// import (and its results) stays visible across client-side navigation. Unlike
-// uploads, the job itself runs SERVER-side - this store just polls
-// GET /api/import while anything is active, so a reload mid-import re-attaches
-// to the running job on the next hydrate().
-
-export type ImportOptions = {
-  quality: ImportQuality;
-  strictness: number;
-  versionPref: ImportVersionPref;
-};
+// Client view of server-side jobs; module state survives navigation and polling
+// reattaches to active jobs after a reload.
 
 type ImportsState = {
   jobs: ImportJobDTO[];
@@ -35,7 +22,7 @@ type ImportsState = {
   clear: () => void;
 };
 
-function isActive(job: ImportJobDTO): boolean {
+export function isImportJobActive(job: ImportJobDTO): boolean {
   return (
     job.status === "queued" ||
     job.status === "resolving" ||
@@ -43,9 +30,8 @@ function isActive(job: ImportJobDTO): boolean {
   );
 }
 
-// Module-level like uploads' activeXhrs: one poll loop no matter how many
-// components subscribe, surviving navigation. Dismissed job ids are hidden
-// from `jobs` until the server prunes them (1 h retention).
+// One poll loop serves all subscribers; dismissed ids stay hidden until the
+// server's one-hour retention expires.
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 const dismissed = new Set<string>();
 const POLL_MS = 2000;
@@ -59,7 +45,7 @@ export const useImportsStore = create<ImportsState>((set, get) => {
       return; // transient poll failure - keep the last snapshot
     }
     set({ jobs: jobs.filter((j) => !dismissed.has(j.id)) });
-    if (!jobs.some(isActive)) stopPolling();
+    if (!jobs.some(isImportJobActive)) stopPolling();
   }
 
   function startPolling(): void {
@@ -89,10 +75,10 @@ export const useImportsStore = create<ImportsState>((set, get) => {
           return;
         }
         for (const job of jobs) {
-          if (!isActive(job)) dismissed.add(job.id);
+          if (!isImportJobActive(job)) dismissed.add(job.id);
         }
         set({ jobs: jobs.filter((j) => !dismissed.has(j.id)) });
-        if (jobs.some(isActive)) startPolling();
+        if (jobs.some(isImportJobActive)) startPolling();
       })();
     },
 
@@ -127,9 +113,9 @@ export const useImportsStore = create<ImportsState>((set, get) => {
 
     clear: () => {
       for (const job of get().jobs) {
-        if (!isActive(job)) dismissed.add(job.id);
+        if (!isImportJobActive(job)) dismissed.add(job.id);
       }
-      set({ jobs: get().jobs.filter(isActive) });
+      set({ jobs: get().jobs.filter(isImportJobActive) });
     },
   };
 });

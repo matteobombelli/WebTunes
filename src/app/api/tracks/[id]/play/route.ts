@@ -14,7 +14,7 @@ const telemetrySchema = z.object({
 // accepts idempotent cumulative-duration checkpoints for that playback session.
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/play">
 ) {
   const { id } = await params;
   if (!isUuid(id)) {

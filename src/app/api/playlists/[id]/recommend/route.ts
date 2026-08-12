@@ -4,7 +4,7 @@ import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { getAccessiblePlaylist } from "@/lib/playlists";
 import { findPlaylistRecommendations } from "@/lib/similar";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/playlists/[id]/recommend">;
 
 const bodySchema = z.object({
   limit: z.number().int().min(1).max(50).optional(),

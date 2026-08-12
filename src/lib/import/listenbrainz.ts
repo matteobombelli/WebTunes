@@ -40,7 +40,7 @@ type RadioRecording = {
   total_listen_count?: number;
 };
 
-export type TaggedRecording = {
+type TaggedRecording = {
   trackId: string;
   title: string;
   artist: string;

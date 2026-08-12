@@ -4,8 +4,7 @@ import Dialog from "@/components/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useConfirmStore } from "@/stores/confirm";
 
-// The single themed confirm dialog behind confirmAction() (stores/confirm.ts).
-// Mounted once in the (app) layout, like Toast.
+// Mounted once in the app layout and driven imperatively through the store.
 export default function ConfirmDialog() {
   const message = useConfirmStore((s) => s.message);
   const confirmLabel = useConfirmStore((s) => s.confirmLabel);

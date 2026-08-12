@@ -2,11 +2,7 @@ import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { ingestTrack, MAX_FILE_BYTES } from "@/lib/ingest";
-import {
-  DEFAULT_STRICTNESS,
-  findMatch,
-  MIN_SOURCE_KBPS,
-} from "@/lib/import/match";
+import { findMatch, MIN_SOURCE_KBPS } from "@/lib/import/match";
 import {
   appleMusicTracks,
   classifyUrl,
@@ -20,32 +16,12 @@ import type {
   ImportItemDTO,
   ImportJobDTO,
   ImportJobStatus,
-  ImportQuality,
-  ImportVersionPref,
+  ImportOptions,
 } from "@/lib/types";
 
-// Server-side import jobs: resolve a pasted URL (YouTube video/playlist, or a
-// Spotify/Apple list matched to YouTube) into tracks via yt-dlp and feed each
-// one through ingestTrack - the same pipeline as a web upload. In-process
-// registry like the CLAP/recognition queues: a mid-deploy restart loses only
-// the in-flight job, and re-pasting the link is cheap because ingest's sha256
-// dedupe turns everything already imported into instant duplicates.
-//
-// ONE global worker (not per-user): every download leaves this box's single
-// IP, and YouTube rate-limits aggressively - same politeness rationale as
-// recognize-queue. Jobs queue FIFO behind it; a user can queue several.
-
-export type ImportOptions = {
-  quality: ImportQuality;
-  strictness: number;
-  versionPref: ImportVersionPref;
-};
-
-export const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
-  quality: "opus",
-  strictness: DEFAULT_STRICTNESS,
-  versionPref: "none",
-};
+// In-memory jobs feed yt-dlp output through the normal ingest pipeline. One
+// global worker is intentional: all downloads share one rate-limited IP, while
+// content-hash dedupe makes resubmission after a restart cheap.
 
 type Item = ImportItemDTO & {
   /** YouTube path: the video to download directly. */

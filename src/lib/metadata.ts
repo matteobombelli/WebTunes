@@ -12,8 +12,8 @@ const MAX_EMBEDDED_ART_BYTES = 10 * 1024 * 1024;
 // search_vector generated column (drizzle/0001) and 500 the upload after the
 // S3 objects are already up (orphaning them) - and a merely-huge value ships
 // in every list/search payload. 200 matches the web PATCH route's cap.
-export const MAX_TAG_CHARS = 200;
-export const MAX_LYRICS_CHARS = 100_000;
+const MAX_TAG_CHARS = 200;
+const MAX_LYRICS_CHARS = 100_000;
 
 /** Trim, NFC-normalize (macOS taggers emit NFD, which breaks the
  *  title+artist duplicate detection against NFC copies), and cap a tag
@@ -24,7 +24,7 @@ export function cleanTag(value: string | null | undefined): string | null {
   return trimmed.length > MAX_TAG_CHARS ? trimmed.slice(0, MAX_TAG_CHARS) : trimmed;
 }
 
-export type TrackMetadata = {
+type TrackMetadata = {
   title: string;
   artist: string | null;
   album: string | null;

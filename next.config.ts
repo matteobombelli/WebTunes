@@ -3,14 +3,8 @@ import { BASE_PATH } from "./src/lib/base-path";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-// Content-Security-Policy. Next's app router injects inline bootstrap/hydration
-// scripts and Tailwind injects inline styles, so script/style need
-// 'unsafe-inline' (a nonce-based policy would require threading a nonce through
-// the proxy - a future hardening step). Dev additionally needs 'unsafe-eval'
-// for the webpack/HMR runtime. img/media/connect allow https: so presigned S3
-// redirects (cover art, audio streaming) load without hardcoding the storage
-// host. The high-value directives - object-src, base-uri, frame-ancestors,
-// form-action - stay locked down.
+// Next/Tailwind require inline bootstrap/styles; dev HMR also needs unsafe-eval.
+// HTTPS media/connect sources permit rotating presigned storage hosts.
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -43,15 +37,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   basePath: BASE_PATH,
-  // @huggingface/transformers loads onnxruntime-node's native .node binary at
-  // runtime (CLAP audio embeddings, lib/clap-embedding.ts); bundling it breaks
-  // the build, so keep it external and required from node_modules at runtime.
+  // onnxruntime-node's native binary must load from node_modules at runtime.
   serverExternalPackages: ["@huggingface/transformers"],
   experimental: {
-    // Proxy only gates page routes; API routes (including the 90 MB upload
-    // endpoint) are excluded by src/proxy.ts. Keep page/Server Action body
-    // buffering small so unauthenticated requests cannot reserve large chunks
-    // of memory before authentication runs.
+    // API routes bypass Proxy; bound unauthenticated page/Server Action bodies.
     proxyClientMaxBodySize: "1mb",
   },
   // Search lives in the Library page now; keep old links working.
@@ -60,8 +49,7 @@ const nextConfig: NextConfig = {
       { source: "/search", destination: "/library", permanent: false },
     ];
   },
-  // The service worker must never be served stale, or updates to its
-  // caching logic would take a browser-dependent eternity to roll out.
+  // A stale service worker can indefinitely preserve obsolete cache behavior.
   async headers() {
     return [
       {

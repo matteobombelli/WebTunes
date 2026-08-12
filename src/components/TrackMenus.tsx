@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { api, playlistCoverSrc } from "@/lib/api";
 import type { PlaylistDTO, TrackDTO } from "@/lib/types";
@@ -25,6 +25,10 @@ import {
 import CoverImage from "@/components/CoverImage";
 import DownloadButton from "@/components/DownloadButton";
 import EditTrackDialog from "@/components/EditTrackDialog";
+import {
+  AnchoredMenu,
+  useAnchoredMenu,
+} from "@/components/ui/AnchoredMenu";
 import { MENU_CHROME, MENU_ROW } from "@/components/ui/menu";
 import { useConfirmStore } from "@/stores/confirm";
 import { useExclusionsStore, useIsExcluded } from "@/stores/exclusions";
@@ -35,7 +39,7 @@ import { useToastStore } from "@/stores/toast";
 // only allow a clipboard write tied to a user gesture, so when ClipboardItem is
 // available we hand it a *promise* of the link - the async POST resolves without
 // losing the gesture's permission - and only fall back to writeText otherwise.
-export function copyShareLink(trackId: string) {
+function copyShareLink(trackId: string) {
   const { show } = useToastStore.getState();
   const fetchUrl = () =>
     api<{ url: string }>(`/tracks/${trackId}/shares`, { method: "POST" }).then(
@@ -55,46 +59,6 @@ export function copyShareLink(trackId: string) {
     () => show("Copied link to clipboard!"),
     () => show("Couldn’t copy link")
   );
-}
-
-// Decide the viewport-safe anchor for a portalled (position: fixed) menu.
-// Vertically, open downward from the trigger but flip above it when it fits
-// there better. Horizontally, honor the preferred edge and clamp the measured
-// panel inside the viewport. The latter matters for mobile toolbar/row triggers
-// near the right edge, where a left-anchored playlist picker used to spill off
-// screen.
-const MENU_GAP = 4;
-const MENU_MARGIN = 8; // keep the menu at least this far from the viewport edges
-function menuViewportAnchor(
-  rect: DOMRect,
-  menuW: number,
-  menuH: number,
-  align: "left" | "right"
-): ({ top: number } | { bottom: number }) & { left: number } {
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const spaceAbove = rect.top;
-  const desiredLeft = align === "left" ? rect.left : rect.right - menuW;
-  const maxLeft = Math.max(MENU_MARGIN, window.innerWidth - menuW - MENU_MARGIN);
-  const left = Math.min(maxLeft, Math.max(MENU_MARGIN, desiredLeft));
-  // Flip above the trigger only when the menu actually fits there - otherwise a
-  // tall menu would run off the top of the screen. Default to opening downward.
-  if (menuH + MENU_GAP > spaceBelow && menuH + MENU_GAP <= spaceAbove) {
-    return { bottom: window.innerHeight - rect.top + MENU_GAP, left };
-  }
-  // Anchored below: clamp the top so a menu taller than the space below stays
-  // on-screen instead of overflowing the bottom edge (never above MENU_MARGIN).
-  const top = Math.min(
-    rect.bottom + MENU_GAP,
-    Math.max(MENU_MARGIN, window.innerHeight - menuH - MENU_MARGIN)
-  );
-  return { top, left };
-}
-
-function menuTransformOrigin(
-  pos: { top?: number; bottom?: number },
-  align: "left" | "right"
-) {
-  return `${align} ${pos.bottom !== undefined ? "bottom" : "top"}`;
 }
 
 export function AddToPlaylistMenu({
@@ -125,84 +89,30 @@ export function AddToPlaylistMenu({
   // Labelled pickers live inside the already-portalled track kebab. Portal them
   // too so the parent menu's overflow scrolling cannot clip the playlist list.
   const portalled = bulk || floating || label !== undefined;
-  const [open, setOpen] = useState(false);
-  // Keeps the menu mounted briefly after close so it can animate out.
-  const [menuClosing, setMenuClosing] = useState(false);
   const [playlists, setPlaylists] = useState<PlaylistDTO[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  // The bulk menu is portalled to <body> so the selection bar's overflow-x
-  // can't clip it; triggerRef anchors its fixed position, menuRef scopes
-  // outside-click dismissal.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 100);
-  }, []);
-
-  // A portalled menu is detached from the trigger, so dismiss it on outside
-  // clicks and on scroll/resize instead of letting it drift.
-  useEffect(() => {
-    if (!open || !portalled) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("resize", close, { passive: true });
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open, portalled, close]);
-
-  // Once mounted (and again when the playlist list loads and changes its
-  // height), flip the menu above the trigger if it would overflow the bottom.
-  // useLayoutEffect so the flip is applied before the browser paints - otherwise
-  // the provisional downward anchor flashes for a frame before snapping up.
-  useLayoutEffect(() => {
-    if (!open || !portalled || !menuRef.current || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos(
-      menuViewportAnchor(
-        rect,
-        menuRef.current.offsetWidth,
-        menuRef.current.offsetHeight,
-        align
-      )
-    );
-  }, [align, open, portalled, playlists]);
+  const {
+    open,
+    mounted,
+    position,
+    triggerRef,
+    menuRef,
+    close,
+    show,
+  } = useAnchoredMenu({
+    align,
+    anchored: portalled,
+    estimatedWidth: 224,
+    measureKey: playlists,
+  });
 
   const load = async () => {
     if (open) {
       close();
       return;
     }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    // Provisional downward anchor; the effect below flips it up once the menu
-    // has mounted and its real height is known.
-    if (rect) {
-      setPos(
-        menuViewportAnchor(
-          rect,
-          bulk || floating || label ? 224 : 0,
-          0,
-          align
-        )
-      );
-    }
-    setOpen(true);
+    show();
     setMessage(null);
     if (!playlists) {
       try {
@@ -309,35 +219,28 @@ export function AddToPlaylistMenu({
           </span>
         </button>
       )}
-      {portalled
-        ? (open || menuClosing) &&
-          pos &&
-          createPortal(
-            <div
-              ref={menuRef}
-              data-track-actions-submenu
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{
-                position: "fixed",
-                top: pos.top,
-                bottom: pos.bottom,
-                left: pos.left,
-                transformOrigin: menuTransformOrigin(pos, align),
-              }}
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[72] max-h-[80vh] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto py-1`}
-            >
-              {items}
-            </div>,
-            document.body,
-          )
-        : (open || menuClosing) && (
-            <div
-              style={{ transformOrigin: `${align} top` }}
-              className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-56 py-1`}
-            >
-              {items}
-            </div>
-          )}
+      {portalled ? (
+        <AnchoredMenu
+          align={align}
+          open={open}
+          mounted={mounted}
+          position={position}
+          menuRef={menuRef}
+          submenu
+          className={`${MENU_CHROME} z-[72] max-h-[80vh] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto py-1`}
+        >
+          {items}
+        </AnchoredMenu>
+      ) : (
+        mounted && (
+          <div
+            style={{ transformOrigin: `${align} top` }}
+            className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} absolute ${align === "left" ? "left-0" : "right-0"} z-10 mt-1 w-56 py-1`}
+          >
+            {items}
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -489,94 +392,24 @@ function TrackActions({
   );
 }
 
-// Desktop: a single three-dot button revealing the actions in an anchored
-// dropdown (replaces the old hover-revealed row of buttons). Reused outside the
-// table (queue header, now-playing sheet) with `alwaysVisible` so the trigger
-// isn't hidden behind a row-hover that doesn't exist there.
+// Reused in table rows and current-track surfaces; `alwaysVisible` keeps the
+// trigger visible where there is no row-hover state.
 export function TrackActionsMenu({
   alwaysVisible = false,
   ...props
 }: Omit<TrackActionsProps, "onClose"> & { alwaysVisible?: boolean }) {
-  const [open, setOpen] = useState(false);
-  // Keeps the menu mounted briefly after close so it can animate out.
-  const [menuClosing, setMenuClosing] = useState(false);
-  // Portalled to <body>: inside the table the dropdown rendered behind later
-  // rows (looked transparent and let clicks fall through to them). triggerRef
-  // anchors the fixed position; menuRef scopes outside-click dismissal.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setMenuClosing(true);
-    setTimeout(() => setMenuClosing(false), 100);
-  }, []);
-
-  const toggle = () => {
-    if (open) {
-      close();
-      return;
-    }
-    const rect = triggerRef.current?.getBoundingClientRect();
-    // Right-align the menu under the button; the effect below flips it above
-    // the button once its real height is known if it would overflow.
-    if (rect) {
-      setPos(menuViewportAnchor(rect, 240, 0, "right"));
-    }
-    setOpen(true);
-  };
-
-  // After the menu mounts, flip it above the trigger if it would overflow the
-  // bottom of the viewport (OS-style). Scrolling/resizing dismisses it instead.
-  // useLayoutEffect so the flip lands before paint - otherwise the provisional
-  // downward anchor flashes for a frame before snapping up (most visible on
-  // mobile, where the kebab usually sits low enough to need the flip).
-  useLayoutEffect(() => {
-    if (!open || !menuRef.current || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPos(
-      menuViewportAnchor(
-        rect,
-        menuRef.current.offsetWidth,
-        menuRef.current.offsetHeight,
-        "right"
-      )
-    );
-  }, [open]);
-
-  // Detached from the trigger, so dismiss on outside click and on
-  // scroll/resize instead of letting it drift. Selecting an option closes
-  // via onClose.
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      const nestedPlaylistMenu =
-        e.target instanceof Element &&
-        e.target.closest("[data-track-actions-submenu]");
-      if (
-        nestedPlaylistMenu ||
-        menuRef.current?.contains(t) ||
-        triggerRef.current?.contains(t)
-      ) {
-        return;
-      }
-      close();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("resize", close, { passive: true });
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open, close]);
+  const {
+    open,
+    mounted,
+    position,
+    triggerRef,
+    menuRef,
+    close,
+    toggle,
+  } = useAnchoredMenu({
+    estimatedWidth: 240,
+    ignoreOutsideSelector: "[data-track-actions-submenu]",
+  });
 
   return (
     <div className="relative">
@@ -596,24 +429,16 @@ export function TrackActionsMenu({
       >
         <EllipsisIcon size={20} />
       </button>
-      {(open || menuClosing) &&
-        pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            style={{
-              position: "fixed",
-              top: pos.top,
-              bottom: pos.bottom,
-              left: pos.left,
-              transformOrigin: menuTransformOrigin(pos, "right"),
-            }}
-            className={`${open ? "animate-pop-in" : "animate-pop-out"} ${MENU_CHROME} z-[70] max-h-[80vh] w-60 max-w-[calc(100vw-1rem)] overflow-y-auto p-2`}
-          >
-            <TrackActions {...props} onClose={close} />
-          </div>,
-          document.body,
-        )}
+      <AnchoredMenu
+        align="right"
+        open={open}
+        mounted={mounted}
+        position={position}
+        menuRef={menuRef}
+        className={`${MENU_CHROME} z-[70] max-h-[80vh] w-60 max-w-[calc(100vw-1rem)] overflow-y-auto p-2`}
+      >
+        <TrackActions {...props} onClose={close} />
+      </AnchoredMenu>
     </div>
   );
 }

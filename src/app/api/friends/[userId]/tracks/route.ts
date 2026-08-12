@@ -7,7 +7,7 @@ import { isUuid } from "@/lib/validate";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
+  { params }: RouteContext<"/api/friends/[userId]/tracks">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

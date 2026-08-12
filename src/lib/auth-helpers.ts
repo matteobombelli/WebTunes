@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { cache } from "react";
 import { auth } from "@/lib/auth";
 
-export type SessionUser = { id: string; email: string; name: string | null };
+type SessionUser = { id: string; email: string; name: string | null };
 
 // Auth.js doesn't React-cache auth(), and with database sessions each call is
 // a session+user DB round-trip - the (app) layout and every page both call

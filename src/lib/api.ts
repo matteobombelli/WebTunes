@@ -2,14 +2,8 @@ import { BASE_PATH } from "./base-path";
 import { log } from "./log";
 import type { TrackDTO } from "./types";
 
-// Client-side fetch wrapper. next/link and the router add the basePath
-// automatically, but plain fetch() does not - this is the one place that
-// knows the prefix.
-//
-// REDACTION: this is the chokepoint for nearly all client API traffic, including
-// login/register/password-reset POSTs whose bodies carry passwords and tokens.
-// We log ONLY method, path (UUIDs - safe), status, duration, and the
-// already-user-facing `error` string - NEVER init.body, headers, or response JSON.
+// Plain fetch does not add Next's base path. Logs deliberately exclude request
+// bodies, headers, and response payloads because auth calls pass secrets here.
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit

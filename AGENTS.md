@@ -1,464 +1,114 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# WebTunes agent guide
 
-This version has breaking changes - APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+## Next.js 16
 
-Already-applied v16 conventions in this repo: `src/proxy.ts` (not `middleware.ts`), async `params` in routes/pages, async `cookies()`/`headers()`.
+This is not the Next.js represented by older training data. Before changing framework code, read the relevant guide in `node_modules/next/dist/docs/` and follow current deprecations.
 
-# WebTunes
+Already adopted conventions:
 
-Self-hosted music library app: per-user libraries in S3, playlists, friend
-sharing, full-text search (incl. lyrics). See `README.md` for stack, local
-setup, and architecture rationale.
+- `src/proxy.ts`, not `middleware.ts`.
+- Async page/route `params` and async `cookies()` / `headers()`.
+- Generated `RouteContext<"/api/...">` types for dynamic route handlers.
+- The app always runs under base path `/projects/webtunes`, including development.
 
-## Commands
+## Purpose and commands
 
-- `npm run dev` / `npm run build && npm start` - app lives under basePath `/projects/webtunes`, even in dev
-- `npx tsc --noEmit` and `npx eslint src/` - both must stay clean
-- `npx drizzle-kit generate` / `migrate` - migrations in `drizzle/`
-- `docker compose up -d` - dev Postgres (:5432) + MinIO (:9000)
+WebTunes is a self-hosted, multi-user music library backed by PostgreSQL and S3-compatible storage. It includes playlists, friend sharing, search/lyrics, imports, recommendations, and offline playback. See `README.md` for setup and architecture.
 
-## Layout
+```bash
+npm run dev
+npm run build && npm start
+npx tsc --noEmit
+npx eslint src/
+npx drizzle-kit generate
+npx drizzle-kit migrate
+docker compose up -d
+```
 
-- `src/db/schema.ts` - Drizzle schema (single file). `search_vector` tsvector
-  column exists only in raw SQL migration `drizzle/0001`, not in the schema.
-- `src/lib/` - all shared server logic. **Database queries shared between API
-  routes and server pages live here, never duplicated in both places:**
-  - `tracks.ts` - `toTrackDTO` + track list queries (own / accessible / friend's)
-  - `playlists.ts` - playlist DTO + ownership check + list/detail queries
-  - `friends.ts` - friendship checks (`areFriends`; `canAccessTrack` is THE
-    track-access rule), friend lists, pending requests
-  - `auth.ts` - Auth.js config (see gotcha below); `auth-helpers.ts` -
-    `requireUser()` (API, returns null → 401) and `requirePageUser()` (pages,
-    redirects to /login)
-  - `users.ts` - registration; `verification.ts` - email-verification tokens
-    (hashed; `sendVerificationEmail`); `base-path.ts` - basePath constant
-    (single source of truth, imported by `next.config.ts` and `api.ts`);
-    `app-url.ts` - absolute base URL (origin + basePath) for email links
-  - `api.ts` - client fetch wrapper that prepends basePath; `s3.ts`, `email.ts`,
-    `metadata.ts`, `types.ts` (DTO shapes shared with client);
-    `client-ip.ts` - best-effort client IP for rate limiting (fails closed)
-  - `loudness.ts` - measures integrated loudness (EBU R128 LUFS) via ffmpeg on
-    upload; `image-upload.ts` - allowlist mapping MIME/ext for cover/playlist
-    images (see security note below); `use-persisted-scope.ts` - client hook
-    for the own/all/friends scope selector (localStorage-backed, SSR-safe)
-  - `clap-embedding.ts` - computes a CLAP audio embedding (512-d, via
-    `@huggingface/transformers` + ffmpeg) on upload for "play similar";
-    `similar.ts` - access-respecting cosine nearest-neighbour query over the
-    `track_embeddings` side table
-  - `recognize.ts` - acoustic-fingerprint recognition (fpcalc/Chromaprint →
-    AcoustID → Cover Art Archive, iTunes art fallback) to fill MISSING
-    artist/album/cover; `recognize-queue.ts` - the background worker that runs it
-    (see the recognition-worker note below)
-  - `offline/` - PWA download internals: `db.ts` (IndexedDB metadata),
-    `audio-cache.ts` / `art-cache.ts` (Cache Storage), `downloads.ts` (logic)
-  - `import/` - the in-site importer engine: `ytdlp.ts` (the only file that
-    spawns the yt-dlp CLI -
-    flat extract / probe / download per quality), `sources.ts` (URL
-    classification + Spotify/Apple metadata scrapers, fixed-host fetches only),
-    `match.ts` (fuzzy YouTube matching, Ratcliff/Obershelp on normalized
-    word sets), `jobs.ts` (in-memory job registry + ONE global serial worker
-    feeding `ingestTrack`). See the importer convention note below.
-- `src/app/api/` - REST-ish JSON routes. Some GET endpoints are unused by the
-  web client but are **intentional public surface for a future mobile client -
-  do not delete them**. Routes stay thin: auth check + zod validation + lib call.
-- `src/app/(app)/` - authenticated pages (server components fetching via lib,
-  passing DTOs to client components): library, album, artist, playlists,
-  friends, downloads. `(auth)/` - login/register/forgot-password/reset-password/
-  verify-email pages (+ `actions.ts` for the rate-limited form posts).
-- `src/components/` - client components; `src/stores/` - zustand stores:
-  `player.ts` (PlayerBar owns the single `<audio>` element), `downloads.ts`
-  (offline queue/UI state), `uploads.ts` (top upload bar; survives navigation).
-- `src/proxy.ts` - cookie-presence gate only; real auth enforcement is
-  server-side in `requireUser`/`requirePageUser`.
+TypeScript and ESLint must remain clean. Production builds must not require internet access.
 
-## Conventions
+## Code boundaries
 
-- Dates cross the API boundary as ISO strings; always map rows through
-  `toTrackDTO`/`toPlaylistDTO` rather than returning raw Drizzle rows.
-- Guard `[id]`-style path params with `isUuid` (`lib/validate.ts`) before
-  querying uuid columns - Postgres throws on bad casts, turning a 404 into a
-  500. Unauthenticated auth endpoints (login, register, forgot-password,
-  verify resend) go through `lib/rate-limit.ts` (in-memory; fine while the app
-  is one Node process), keyed by client IP from `lib/client-ip.ts`.
-- Security headers (CSP, HSTS, `X-Frame-Options`, etc.) are set globally in
-  `next.config.ts`'s `headers()`; the CSP allows Next's inline bootstrap.
-- Check-then-insert flows catch unique violations via `isUniqueViolation`
-  (`src/db/index.ts`) and return their normal 409/conflict message.
-- Local secrets (e.g. `POSTGRES_PASSWORD` for docker-compose interpolation)
-  live in gitignored `.env*` files - never hardcode them in committed files.
-- When deleting a row that owns an S3 object, delete the DB row first, then
-  the object (a leaked S3 object is harmless; a row pointing at deleted audio
-  is not). Swallow S3 delete errors. `scripts/reconcile-r2.mjs` is the backstop
-  that sweeps any objects leaked by a swallowed delete (dry-run by default;
-  lists the bucket, diffs against the four key columns, deletes only unreferenced
-  objects older than a grace window).
-- Mutations that change a playlist's contents bump `playlists.updatedAt`.
-- Playlist duplication (`POST /api/playlists/[id]/duplicate`) accepts any
-  playlist visible through `getAccessiblePlaylist` and creates an owned copy
-  containing only the tracks currently visible through `getPlaylistTracks`,
-  in order. It preserves the source privacy setting but never collaborators;
-  explicit covers are copied to an independent S3 object so either playlist
-  can later change/delete its cover safely.
-- **Auth gotcha**: credentials provider + database sessions requires the
-  `jwt.encode` override in `lib/auth.ts`; do NOT set `session.strategy`
-  explicitly (Auth.js asserts). Session cookie holds the DB session token.
-- Invite-only registration: there is NO open sign-up path. Account creation
-  lives ONLY in `registerInvitedUser` (`lib/invites.ts`) - a single transaction
-  that takes a `pg_advisory_xact_lock`, enforces the `MAX_USERS = 100` total cap
-  (counts demo accounts), atomically consumes a single-use invite (`UPDATE …
-  WHERE used_at IS NULL AND expires_at > now()`), creates the user, and inserts
-  an `accepted` `friendships` row so the invitee is **auto-friended** with the
-  inviter. BOTH entry points go through it: the web `registerAction`
-  (`(auth)/actions.ts`) and the mobile `POST /api/register` (which now requires
-  an `invite` field in its JSON body - keep it gated). The `register` page is a
-  server component that gates on `getInviteByToken` before rendering the form.
-  Invite tokens are plaintext capability links like `track_shares` (re-displayable
-  on the Discover → Friends → **Invite** tab), multiple concurrent per user, each
-  single-use, 7-day expiry (`invites` table; `used_at` is the consumed flag - set
-  before `used_by_user_id` so it survives a redeemer deletion). `INVITE_BLOCKED_
-  EMAILS` (the two demo accounts) can't create invites (`POST /api/invites` 403 +
-  the tab hides the button). The same shared demo-account set also blocks track
-  uploads, import creation/search, and account deletion server-side; the Library
-  Upload/Import buttons remain visible for the showcase but show the
-  `Demo accounts are read-only.` toast without opening. Expired-unused rows are
-  dead clutter (a purge script/timer mirroring `purge-expired-shares` is a TODO;
-  negligible at ≤100).
-- Friend-request notifications: incoming pending requests light a red
-  `NotificationDot` breadcrumb (Discover nav in `Sidebar`/`MobileNav` ← layout
-  fetch, the Friends `SegmentedControl` segment, the Requests tab, the Incoming
-  heading). All server-rendered from `pendingRequestsFor` (`cache()`-deduped
-  across the layout + discover page) - refreshes on navigation/`router.refresh`,
-  no polling.
-- Streaming is via presigned S3 GET URLs (1 h); the server never proxies audio.
-- Public track sharing: anyone who can ACCESS a track (its owner, or a friend
-  for a non-private track - the `POST /api/tracks/[id]/shares` route gates on
-  `canAccessTrack`) mints a capability link anyone can open at `/share/[token]`
-  to listen with no account. The kebab "Share" action (in `TrackActions`, shown
-  on every track) copies the link straight to the clipboard via a transient
-  `useToastStore` toast - no dialog. `lib/shares.ts` owns the `track_shares`
-  table (one row per track via `UNIQUE(track_id)`, so two sharers of the same
-  track get the same link; **plaintext** token on purpose, re-displayable - low
-  sensitivity, unlike the hashed auth tokens). The token IS the authorization:
-  the public `/api/share/[token]/stream` and `/art` routes skip
-  `requireUser`/`canAccessTrack` and **override `is_private`** (`resolveShareToken`
-  only checks expiry), so a link stays an ABSOLUTE capability even if the track
-  later goes private or the friendship ends (until the 7-day expiry).
-  `createOrGetShare` is an atomic upsert (returns an active link unchanged -
-  re-sharing does NOT extend the 7d TTL; replaces an expired one). Links
-  auto-expire after 7 days and are deleted by `scripts/purge-expired-shares.mjs`
-  (daily `deploy/webtunes-purge-shares` timer) so they don't accumulate. The
-  `/share/[token]` page is outside the `(app)`/`(auth)` groups (bare root layout,
-  no auth bounce) and exempted in `src/proxy.ts`; its `<audio>`/`<img>` use
-  `shareStreamSrc`/`shareArtSrc` (basePath-aware). The presigned target is
-  downloadable (can't enforce stream-only).
-- In-site importer: `POST /api/import` (session auth) takes a YouTube video/
-  playlist URL - or a Spotify/Apple Music URL whose tracks are scraped for
-  metadata and fuzzy-matched to YouTube - and runs the whole job server-side
-  via the **yt-dlp standalone binary** at `bin/yt-dlp` (gitignored;
-  `YT_DLP_PATH` overrides; daily self-update via the
-  `deploy/webtunes-ytdlp-update` timer since YouTube breakage is yt-dlp's #1
-  failure mode). yt-dlp needs **node on PATH** for its YouTube JS challenge
-  solver (`--js-runtimes node --remote-components ejs:github`). Each track
-  downloads to a temp dir and feeds `ingestTrack` directly - same dedupe/
-  metadata/remux/S3/CLAP/recognition pipeline as a web upload; yt-dlp's own
-  ffmpeg post-processing runs OUTSIDE `ffmpeg-gate`, acceptable only because
-  the import worker is strictly serial (keep it that way: one global worker,
-  one IP, YouTube 429s aggressively - 429s get a 60s cooldown + ≤3 retries).
-  Job state is in-memory like the queues (restart loses the in-flight job;
-  re-pasting the link is cheap - ingest's sha256 dedupe skips what landed),
-  polled by the client every 2s (`stores/imports.ts` → `ImportProgressBar` in
-  the app layout, which re-attaches after a reload). Users can queue multiple
-  jobs (FIFO behind the one global worker; `queued` status until picked up);
-  playlists cap at 500 tracks; sub-100 kbps sources and below-strictness
-  matches are "missed" with a reason, never guessed.
-- Loudness normalization: on upload `lib/loudness.ts` shells out to **ffmpeg**
-  (a runtime dependency - must be on `PATH` in dev and prod) to measure EBU R128
-  loudness into `tracks.loudness_lufs`. Best-effort like cover-art/lyrics:
-  failure stores NULL and skips normalization for that track, never fails the
-  upload. `scripts/analyze-loudness.mjs` backfills pre-feature rows.
-- Opus re-mux: iOS Safari can't play Opus-in-Ogg (it truncates playback partway
-  and auto-skips), so on upload `lib/remux.ts` losslessly re-muxes Opus to MP4
-  (`ffmpeg -c:a copy` - no re-encode; verified bit-identical via a decode-free
-  hash of the copied audio stream, which tolerates the benign trailing-frame
-  padding MP4 carries vs Ogg) and stores `audio/mp4`. Best-effort like loudness:
-  any non-Opus input or failure falls back to storing the original.
-  `scripts/remux-ogg-to-mp4.mjs` backfilled the existing library - the script
-  itself KEEPS each original (revert map in `remux-revert.jsonl`); the originals
-  were then deleted out-of-band, so none remain in the bucket (verified via
-  `scripts/reconcile-r2.mjs`, which finds zero of the 1468 mapped originals).
-  The upload route runs metadata/loudness/CLAP/remux concurrently, and
-  every ffmpeg subprocess (loudness, CLAP decode, remux) goes through the shared
-  `lib/ffmpeg-gate.ts` semaphore (~cores-1) so parallel steps within an upload -
-  and across concurrent uploads - can't oversubscribe CPU/RAM.
-- "Play similar" radio: CLAP embeddings are computed in the background, not on
-  the upload request - the route enqueues to `lib/clap-queue.ts` (~2 workers) and
-  returns, since the embedding is the slowest upload step. Each worker re-fetches
-  the stored bytes from S3 (so an upload burst can't pile audio buffers in RAM)
-  and runs `lib/clap-embedding.ts`, which decodes with ffmpeg and runs the CLAP
-  audio encoder (`@huggingface/transformers`, ONNX, marked
-  `serverExternalPackages`; weights cached in gitignored `.transformers-cache/`)
-  into a 512-d L2-normalized vector stored in the `track_embeddings` 1:1 side
-  table (kept off the `tracks` row so it never loads in hot list/search paths).
-  Best-effort like loudness - failure stores no row (the backfill script
-  recovers it). `POST /api/tracks/[id]/similar` (body `{ limit, excludeIds }`)
-  ranks accessible tracks by cosine in-DB via pgvector - the `embedding` column
-  is `vector(512)` with an HNSW `vector_cosine_ops` index, and `lib/similar.ts`
-  pulls a 200-row candidate pool (`embedding <=> seed`, no vectors crossing the
-  wire), then Gumbel-top-k samples that pool in JS.
-  **pgvector filtered-search gotcha**: that ranking runs the HNSW index UNDER
-  restrictive `WHERE` filters (access rule + `similar_exclusions` + friend-dup
-  dedup). Plain HNSW only explores `hnsw.ef_search` (~40) nodes and applies the
-  filters *afterward*, so a seed whose acoustic neighbours are mostly inaccessible
-  returns far fewer than `limit` (seen as low as 4 of 10) - seed-dependent, so it
-  looks like random "play similar sometimes only fills 4–5". The fix is
-  `hnsw.iterative_scan=relaxed_order`, set pool-wide beside `jit=off` in
-  `src/db/index.ts` (pgvector 0.8 resumes the index until the LIMIT/POOL_SIZE is
-  filled; `relaxed_order` is safe because the pool is re-scored + sampled). Any
-  NEW filtered vector query inherits this - don't reintroduce per-query HNSW
-  without it. The noise scale comes from the viewer's
-  `users.similar_variation` (0..4, `SIGMA_BY_VARIATION` in `lib/similar.ts`;
-  4 = deterministic cosine).
-  The PlayerBar toggle seeds an auto-refilling queue; the client sends
-  already-served ids in `excludeIds` (POST body, not a query string) to avoid
-  repeats, since sampling isn't deterministic. With `users.similar_drift` (the
-  default) each refill re-seeds from the currently-playing track so the radio
-  drifts; off, it stays anchored to the original seed. Disabling the radio
-  removes nothing from the queue; when it took over a collection queue,
-  `startSimilar` stashed the collection + takeover point in `similarContext`
-  and `stopSimilar` appends the collection's in-order remainder to the end
-  (enabling shuffle instead discards unplayed radio results and shuffles that
-  stashed collection as though it had started with shuffle on; starting a new
-  queue drops the stash). The drift + variation +
-  volume-normalization controls live in the global `SettingsModal` (gear in the
-  Sidebar / mobile top bar). `scripts/analyze-clap-embeddings.mjs` backfills.
-  Both the lib and the script must share the same model id + dtype (fp32) or
-  embeddings stop being comparable.
-- Image uploads (track cover art, playlist covers) are resolved through the
-  `lib/image-upload.ts` allowlist - never echo the browser-supplied MIME type
-  or filename extension back into the stored S3 Content-Type/key, since the
-  offline SW replays Content-Type from a same-origin cache (stored-XSS risk).
-- Online cover-art lookup: `lib/metadata-lookup.ts`'s `findCoverArt` fetches
-  cover art via the iTunes Search API (no key; searches by title then album;
-  upscales `100x100bb.jpg`→`600x600bb.jpg`) for tracks with an artist but no
-  embedded art. Best-effort like loudness/lyrics - null on miss. It is no longer
-  called inline on upload; it is now the **art fallback** inside the recognition
-  worker (Cover Art Archive first, iTunes second - see the note below). Remote art
-  is untrusted, so the stored kind/Content-Type comes from `imageKindFromBytes`
-  (magic-number sniff through the same allowlist), never the URL/response header
-  - same stored-XSS reasoning as image uploads above.
-  `scripts/backfill-online-metadata.mjs` backfills the existing library in two
-  phases (`reextract` recovers embedded art never pulled at upload → `art` looks
-  it up online); it defaults to dry-run (proposals to
-  `backfill-online-review.jsonl`) and only writes with `--apply` (revert log to
-  `backfill-online-revert.jsonl`). The script mirrors the lib + the
-  `image-upload.ts` allowlist (keep in sync) and rate-limits iTunes.
-- Recognition worker (fill MISSING metadata): the upload route enqueues to
-  `lib/recognize-queue.ts` (after the row exists, like the CLAP queue) whenever a
-  track lands with a missing artist, album, **or** cover. It fingerprints with
-  **fpcalc/Chromaprint** only when artist/album tags are missing (a runtime
-  dependency on PATH like ffmpeg, through the shared `ffmpeg-gate`) and looks
-  the fingerprint up against **AcoustID** (`meta=recordings+releasegroups`, so
-  artist/album/release-group MBID come back inline - no MusicBrainz call).
-  Art-only jobs never download/fingerprint audio: they use iTunes by existing
-  tags, or Cover Art Archive when an identity is already present. It
-  fills **only empty** fields and the `title` is never touched: it re-reads the
-  row and every write is a conditional `... WHERE col IS NULL` UPDATE, so the
-  no-overwrite rule is atomic even against a concurrent fill. Recognized art
-  uploads to disjoint `art/{owner}/{trackId}.rec.{ext}` / `….rec.thumb.jpg`
-  keys and only then runs the conditional UPDATE as a claim - so it can never
-  clobber the objects of a cover the owner uploaded mid-recognition; a lost
-  claim best-effort-deletes the fresh objects (reconcile script backstops).
-  Best-effort like
-  loudness/CLAP - any failure (no key, no/low-confidence match, fpcalc/network
-  error) just leaves the gaps. `ACOUSTID_API_KEY` (free app key from
-  acoustid.org; unset = recognition disabled, but the worker still does the iTunes
-  art-by-tags fallback for already-tagged tracks). **1 worker** (vs CLAP's 2)
-  because it's gated by external politeness - AcoustID ≤3 req/s, Cover Art
-  Archive/MusicBrainz ≤1 req/s on a shared app key - not CPU; a single serial
-  worker stays under all limits with no cross-worker coordination. Only the
-  compact fingerprint leaves the box, never the audio.
-  `scripts/recognize-missing-metadata.mjs` backfills the existing library
-  (dry-run default → `recognize-missing-review.jsonl`; `--apply` → revert log;
-  mirrors the lib + allowlist + thumbnail logic, keep in sync); missing identity
-  alone is deliberately not selected.
-- Suggested Import seed identity uses authenticated, batched ListenBrainz
-  `POST /1/metadata/lookup/` against existing artist/title tags (25 seeds per
-  refill pass), validates the returned names/UUIDs, and persists recording +
-  artist MBIDs in `track_identities`. `LISTENBRAINZ_TOKEN` is a server token used
-  only for that mapping call; no listen history is read or submitted. AcoustID
-  is a bounded fallback (at most 2 queued per pass) only for missing tags or a
-  completed textual mapping miss, never the normal Top-100 path. Candidate
-  downloads remain globally serial, but claims are a persistent priority queue:
-  the user with the fewest `ready` + `importing` suggestions goes next, with
-  candidate age as the tie-breaker. This gives round-robin behavior across
-  users and survives restarts without an in-memory cursor. Accepting a staged
-  suggestion resets `tracks.created_at` to the acceptance time so it enters the
-  top of the newest-first library; the explicit upload/import dedupe-promotion
-  path must do the same.
-- Duplicate handling: uploads are rejected (409) when the file's sha256 already
-  exists in the owner's library (`tracks.content_hash`, unique per owner;
-  pre-feature rows are NULL). Separately, `users.hide_friend_duplicates`
-  (default true, toggled from the library page via `PATCH /api/settings`)
-  hides friends' tracks whose normalized title+artist matches one of the
-  viewer's own (`notDuplicateOfOwn` in `lib/tracks.ts`) in scope=all/friends
-  listings and search; friend profile pages are intentionally unfiltered.
-- Next buffers bodies for routes matched by `src/proxy.ts`. API routes are
-  deliberately excluded from the cookie-presence gate (their handlers enforce
-  real auth), so 90 MB track uploads reach the route without Proxy cloning.
-  `experimental.proxyClientMaxBodySize` is therefore only 1 MB for page/Server
-  Action traffic, limiting unauthenticated per-request buffering.
-- Offline/PWA: the player streams via the stable
-  `GET /api/tracks/[id]/stream` (302 to presigned URL); `public/sw.js` serves
-  downloaded tracks from the `wt-audio` cache with Range-aware 206s (iOS
-  refuses plain 200s). Cache names and the hardcoded basePath in `sw.js` must
-  stay in sync with `src/lib/offline/*` and `src/lib/base-path.ts`. Download
-  metadata mirrors DTOs into IndexedDB (`src/lib/offline/db.ts`); queue/UI
-  state in `src/stores/downloads.ts`. Downloads persist until manually
-  deleted; downloaded playlists auto-sync on app load when online.
-- Bluetooth keep-alive: the single reused `<audio>` element pauses briefly
-  between tracks; on Bluetooth (A2DP) that gap lets the output device sleep,
-  and waking it for the next track flushes the previous track's ~178 ms still
-  in the BT buffer as an audible glitch/bleed (inaudible on wired - tiny
-  buffer, never sleeps). Nothing on the `<audio>` element (`muted`/`pause()`/
-  `load()`) fixes it: those samples are downstream in the OS/BT pipeline.
-  `PlayerBar`'s `ensureOutputAwake` runs a continuous inaudible Web Audio tone
-  (~-80 dB / 40 Hz on its own `AudioContext`) while a track plays so the device
-  never sleeps across the gap - resumed within the play gesture (autoplay
-  policy requires it) and suspended on pause so it isn't holding BT open while
-  idle. Corollary when debugging: a Bluetooth-only audio symptom that survives
-  element-level fixes lives in the output pipeline, not the element.
-- iOS playback resilience (intent vs reality): `usePlayerStore.isPlaying` is the
-  play *intent*; the `<audio>` element's `paused` is *reality*. The only bridge
-  that re-asserts a stuck/owed `play()` is `pendingPlayRef` + `retryPendingPlay`
-  (fired by `canplay`/`stalled`/`visibilitychange`). Three iOS-only failure modes
-  diverge intent from reality and each has a targeted fix in `PlayerBar`:
-  - **Lock-screen / Control-Center resume - now works *while locked* via a silent
-    keep-alive `<audio>`.** The MediaSession `play` handler resumes *inside the
-    handler* via `attemptPlay(true)` (owed-play on a blocked resume, never a
-    teardown) and the `[isPlaying]` effect guards with `if (audio.paused)` to avoid
-    a second, tearing-down `play()`. That alone fixes **foreground**/Control-Center
-    resume but NOT a locked screen: on-device logs (`wt-audio-debug`) proved a
-    backgrounded installed PWA can't (re)start a *paused* `<audio>` - `audio.play()`
-    hangs pending until foregrounded (`vis hidden` → `mediasession:play` …silence…
-    → `vis visible` → N×`play-ok`). THE FIX (`silenceRef` in `PlayerBar`, gated to
-    `navigator.standalone`): a second `<audio>` looping `public/silence.m4a` is
-    played *through* the pause so the iOS audio session is never released - a real
-    media element keeps playing in the background where the keep-alive
-    `AudioContext` tone gets *suspended* (that tone, tried through the pause, did
-    **not** help - reverted; this is the key difference). With the session held
-    there is no cold (re)start to hang on, so the lock-screen `play` resumes the
-    still-loaded track element; the silence loop is stopped in `onPlaying`. COST: a
-    silent element keeps the output/device awake during a pause (battery) - hence
-    the iOS-PWA-only gate. `silence.m4a` is exempted from the `src/proxy.ts` cookie
-    gate like the other PWA assets. DISPLAY caveat: iOS drives Now Playing off the
-    actively-playing silence element, so the scrubber is pinned to the track's
-    frozen position via per-tick `setPositionState` (position is advisory →
-    last-writer-wins → it holds), but the play/pause **icon** can linger on ▶ for a
-    beat after a resume - iOS derives the icon from the playing element and only
-    weakly honors `playbackState` (set once per transition via `setPlaybackState`);
-    forcing it per-tick only causes flicker / spontaneous "playing" flips, so the
-    lag is accepted. Single-element variants (mute the track) are a dead end: iOS
-    ignores `element.volume`, and muting may drop the session.
-  - **Involuntary pauses** (headphone/Bluetooth/CarPlay disconnect, call,
-    audio-focus loss, iOS handing the shared audio session to another PWA) fire a
-    DOM `pause` with no transport handler, leaving `isPlaying` true. The
-    `<audio onPause>` handler reconciles them ALL to paused - foreground and
-    background alike - so a Bluetooth disconnect while locked stays paused
-    instead of resuming out of the phone speaker. This deliberately traded away
-    the old background reclaim (auto-resume-on-foreground after another PWA's
-    session handoff - now one tap to resume); don't reintroduce it without
-    solving BT disconnect, which is indistinguishable from a handoff on iOS.
-    `expectedPauseRef` (set before every deliberate `pause()`/`src` swap,
-    cleared in `onPlaying`) tags our own pauses so they aren't mistaken for
-    involuntary ones.
-  - **Extended background pause → iOS freezes then DISCARDS the page** (the paused
-    element holds no audio session, so the page loses its freeze/discard
-    exemption), wiping the in-memory zustand store → no track → no `<audio>` → no
-    Now Playing controls. A minimal session snapshot (queue track DTOs + index +
-    position) is persisted to `wt-player-session` on `visibilitychange→hidden` /
-    `pagehide` and rehydrated **paused** on a cold mount (`hydrateSession`), with
-    the playhead restored in `onLoadedMetadata`. `isPlaying:false` on restore is
-    load-bearing - gesture-less autoplay at mount would recreate the keep-alive
-    `AudioContext` off-gesture (BT/battery regression) and reject; the first tap
-    resumes via the in-gesture path. Lock-screen controls return on that tap.
-  - **Locked auto-advance dies at the track-end gap**: after `ended`, nothing is
-    playing, so iOS releases the audio session and freezes the page - a next
-    track not already in the SW `wt-prefetch` cache (`NextTrackPrefetcher` →
-    `lib/offline/prefetch.ts`, `PREFETCH_AHEAD = 3`) needs a live fetch that
-    never completes, the owed `play()` never fires, silence until foreground.
-    Fix: `onEnded` runs `startSilenceLoop()` (the same silent keep-alive as the
-    pause path) so the session - and the page - stays alive through the gap
-    while the next source loads; `onPlaying` stops it. Keeping the page alive is
-    also what lets `NextTrackPrefetcher` and the radio refill
-    (`usePlaySimilarRefill`) keep topping up across locked advances (throttled
-    but working network) instead of the warmed window shrinking to nothing.
-  Lock-screen/Control-Center scrubbing works via a MediaSession `seekto` handler
-  (routes through the store's `seekTo`, and moves `pausedPosRef` so the silence
-  loop's per-tick pin doesn't snap a scrub-while-paused back). Only
-  `seekbackward`/`seekforward` stay nulled (re-asserted every `onPlaying`) -
-  they, not `seekto`, are what swap the prev/next arrows for ±10/15s buttons.
-  Debugging is on-device: set `localStorage.setItem("wt-audio-debug", "1")` (the
-  old Settings → Diagnostics panel was removed), which persists `logAudio` lines
-  to `localStorage` (`wt-audio-log`, survives a discard) - no Mac
-  / Web Inspector needed. Key markers: `mediasession:play`/`:pause` (did iOS use
-  our handlers?), `play-ok`/`play-reject`, `silence:play`/`silence:reject` (did
-  the keep-alive loop start?), `pause … vis=…` + `pause:reconcile`,
-  `vis <state>`, `save idx=…`, `mount cold=… snap=…`. Corollary: a "stuck
-  playing-UI with dead audio" usually means the silent keep-alive didn't hold the
-  session (look for `silence:reject` / a missing `silence:play`), which falls back
-  to the old behavior (resumes on foreground); "controls/queue gone after
-  backgrounding" is a discard - check whether `mount cold=true` fired.
+- `src/db/schema.ts`: the single Drizzle schema. `search_vector` and several concurrent/expression indexes intentionally exist only in raw SQL migrations.
+- `src/lib/`: shared server logic. Queries used by both routes and server pages live here, never in both consumers.
+- `src/app/api/`: intentionally reusable JSON API for web and future mobile clients. Do not delete an endpoint merely because the web client does not call it.
+- `src/app/(app)/`: authenticated server pages; `src/app/(auth)/`: unauthenticated flows.
+- `src/components/`: client UI. `src/stores/player.ts` owns queue intent; `PlayerBar` owns the only track `<audio>` element.
+- `src/lib/offline/`: IndexedDB and Cache Storage logic. `public/sw.js` contains matching cache names and the hard-coded base path.
+- `src/lib/import/ytdlp.ts`: the only module allowed to spawn yt-dlp.
 
-## Production logs
+Keep routes thin: authenticate, validate, call shared logic, map the response.
 
-- The app runs on the OVH VPS as systemd unit `webtunes.service`
-  (`sh -c next start` under user `debian`, repo at `/home/debian/WebTunes`).
-  All app output goes to the journal: `journalctl -u webtunes.service`
-  (add `-q` to silence the "not seeing other users' messages" hint; the
-  `debian` user is not in `adm`/`systemd-journal`, but the unit's own logs
-  are visible).
-- Postgres runs via `docker compose` on the VPS - `docker compose logs` from
-  `/home/debian/WebTunes` for DB-side issues.
+## Data and API invariants
 
-## Known TODOs
+- Dates cross JSON boundaries as ISO strings. Map tracks/playlists through `toTrackDTO` / `toPlaylistDTO`; never return raw Drizzle rows.
+- Validate UUID path parameters before querying UUID columns. Invalid casts become PostgreSQL errors instead of normal 404s.
+- `canAccessTrack` is the canonical track rule: owners can access their tracks; friends can access non-private, non-suggested tracks. `resolveTrackMedia` applies the same rule plus owner-only Suggested Import previews.
+- `notDuplicateOfOwn` implements the optional friend-duplicate filter. Friend profile pages intentionally do not apply it.
+- Catch unique races with `isUniqueViolation` and return the normal conflict response.
+- Playlist-content mutations bump `playlists.updatedAt`.
+- Playlist duplication accepts any accessible playlist, keeps visible tracks in order, preserves privacy, omits collaborators, and copies explicit cover objects.
+- Security headers live in `next.config.ts`. API routes bypass Proxy and enforce real authentication themselves.
 
-- PWA offline (deployed to prod 2026-06-12): prod S3 CORS applied
-  2026-06-12 via the Cloudflare dashboard - the R2 token in `.env.local` is
-  object-scoped, so `scripts/apply-s3-cors.mjs` gets AccessDenied unless run
-  with an Admin Read & Write R2 token in the environment. (The `PWA-PLAN.md`
-  design doc was removed once the feature shipped.)
-- Deploys are build-in-place (`npm run build` in the live repo): the running
-  server keeps references into the old `.next` and throws "Element type is
-  invalid" render errors once it's replaced - restart `webtunes.service`
-  immediately after building. A restart can also leave the previous `next start`
-  children orphaned (reparented to init, outside the unit's cgroup, ~70 MB each
-  holding a stale `.next`); after restarting, check `pgrep -af next-server` and
-  reap stragglers whose cwd is this repo - the `v15` next-server is the separate
-  `matteob.dev` service, not WebTunes.
-- Deployed to production 2026-06-11 (OVH VPS, no written runbook yet).
-  Resend domain `matteob.dev` verified; send-only key set locally and in prod.
-  Without `RESEND_API_KEY`, `lib/email.ts` logs the message (reset links,
-  verification links) to the server console instead of sending (dev behavior).
-- Hot-path performance indexes are **hand-applied out-of-band** (CREATE INDEX
-  CONCURRENTLY can't run inside drizzle's per-migration transaction): they live
-  in `drizzle/0015_perf_indexes.sql` + `drizzle/0019_audit_indexes_and_share_fk.sql`,
-  NOT in `src/db/schema.ts` or the journal. Apply each with
-  `docker compose exec -T postgres psql -U webtunes -d webtunes -f - < <file>`
-  and verify with `node scripts/check-perf-indexes.mjs` (fails loudly if any are
-  missing - run after provisioning a new DB). `0019` (FK-cascade indexes on
-  `playlist_tracks.track_id` / `similar_exclusions.track_id` + softens
-  `track_shares.created_by` to `ON DELETE SET NULL`, matching `schema.ts`) was
-  applied to prod 2026-06-28.
-- Username uniqueness is also hand-applied out-of-band: `drizzle/0020_username_
-  unique.sql` makes `users.name` `NOT NULL` + `UNIQUE (lower(name))` (the
-  expression index lives only in raw SQL, like `search_vector`, with a comment
-  in `schema.ts`). `name` IS the public username now - friend search keys on it
-  (`searchUsers` in `lib/users.ts`), it's the only identifier shown to other
-  users (email is never exposed: `FriendDTO` has no email), and uniqueness is
-  enforced on registration (`registerInvitedUser`) and rename (`updateDisplay-
-  Name`) - both pre-check `isNameTaken` and catch the index 23505 via
-  `uniqueViolationConstraint`. Live "taken" warning via the public, IP-rate-
-  limited `GET /api/username-available` (`useUsernameAvailability` hook). Applied
-  to prod 2026-06-29.
+## Authentication, accounts, and sharing
+
+- `requireUser()` returns null for API 401s; `requirePageUser()` redirects pages to login. `src/proxy.ts` is only a cookie-presence page gate.
+- Auth.js credentials plus database sessions requires the `jwt.encode` override in `lib/auth.ts`. Do not set `session.strategy`; Auth.js asserts.
+- Registration is invite-only. Both web and mobile registration call `registerInvitedUser`, whose transaction locks the user-count cap, atomically consumes one invite, creates the user, and auto-friends the inviter.
+- Invite tokens are plaintext, single-use, seven-day capability links. Demo accounts cannot create them.
+- The shared demo-account guard also blocks uploads, imports/search, and account deletion. The UI may show showcase controls, but actions must display `Demo accounts are read-only.` without opening.
+- Public track shares are absolute seven-day capabilities. Anyone who can access a track may mint one; the token overrides later privacy/friendship changes until expiry.
+- Share tokens remain plaintext so active links can be re-displayed. `createOrGetShare` is atomic and does not extend an active link.
+- `/share/[token]` and its stream/art routes are public and exempt from the page auth gate.
+- Incoming friend-request dots are server-rendered from cached `pendingRequestsFor`; refresh through navigation, not polling.
+
+## Storage and media
+
+- Streaming routes return presigned S3 redirects; the app server never proxies audio.
+- For rows owning S3 objects, delete the DB row first, then best-effort delete objects. A leak is safer than a dangling row; `scripts/reconcile-r2.mjs` removes old unreferenced objects.
+- Never derive stored image MIME types or key extensions from browser names/headers. Use `lib/image-upload.ts` and byte sniffing for remote art.
+- Upload metadata, loudness analysis, duration probing, and Opus remux are best-effort. Failures must not reject an otherwise valid upload.
+- All ffmpeg work uses `lib/ffmpeg-gate.ts` so concurrent uploads cannot oversubscribe the host.
+- Opus is losslessly remuxed to MP4 for iOS Safari. Non-Opus input or remux failure stores the original.
+- Cover lookup/recognition fills only missing values. Conditional `WHERE col IS NULL` updates prevent races with owner edits.
+- Recognition uses one polite worker. Audio never leaves the host; only Chromaprint fingerprints are sent to AcoustID.
+- CLAP embeddings are computed after upload by `clap-queue`, fetched back from S3, normalized to 512 dimensions, and stored in `track_embeddings`.
+- Filtered pgvector queries require pool-wide `hnsw.iterative_scan=relaxed_order` in `src/db/index.ts`; otherwise restrictive access filters can return too few neighbours.
+
+## Import and recommendation workers
+
+- Manual imports run server-side through the standalone `bin/yt-dlp` (`YT_DLP_PATH` may override). yt-dlp requires Node and ffmpeg on `PATH`.
+- One global serial download lane is intentional: parallel YouTube downloads trigger 429s. Preserve the 60-second cooldown and bounded retries.
+- Import jobs are in memory and polled every two seconds. Restart loss is acceptable because content-hash dedupe makes resubmission cheap.
+- Spotify/Apple imports scrape fixed hosts, then fuzzy-match YouTube. Below-threshold and sub-100 kbps candidates are reported as missed, never guessed.
+- Suggested Imports resolve seed identities in ListenBrainz batches and use only a bounded AcoustID fallback. Candidate claims form a persistent fairness queue across users.
+- Accepting staged or dedupe-promoted suggestions resets `tracks.createdAt` so the accepted track appears as new.
+- CLAP model id and fp32 dtype must match between runtime and backfill scripts.
+
+## Playback and offline invariants
+
+- `usePlayerStore.isPlaying` is intent; the media element's `paused` state is reality. `pendingPlayRef` and `retryPendingPlay` are the recovery bridge—do not introduce another.
+- `expectedPauseRef` marks deliberate pauses/source swaps. Unmarked DOM pauses reconcile intent to paused so Bluetooth disconnects or audio-focus loss never resume through speakers.
+- A low-level Web Audio tone holds Bluetooth output awake while playing, preventing buffered audio bleed between tracks. Suspend it while idle.
+- Installed iOS PWAs also play `public/silence.m4a` through pauses and track-end loading gaps. A real media element is required because iOS suspends AudioContext in the background.
+- Player sessions persist queue/index/position to `wt-player-session` on hide/pagehide and rehydrate paused after an iOS discard. Restoring paused is required by autoplay and battery constraints.
+- MediaSession `seekto` is supported. Keep `seekbackward` / `seekforward` unset so iOS displays previous/next track controls.
+- On-device audio diagnostics are opt-in via `localStorage.setItem("wt-audio-debug", "1")`; logs persist under `wt-audio-log`.
+- Offline audio is served from `wt-audio` with Range-aware 206 responses. Downloads persist until manually deleted; downloaded playlists sync on online app load.
+- `PlayerQueueWarmers` preloads nearby art and the next three tracks. The iOS silence loop keeps background auto-advance/refill alive beyond that window.
+
+## Operational constraints
+
+- Secrets belong only in ignored `.env*` files. Never commit credentials.
+- Production runs as `webtunes.service` from `/home/debian/WebTunes`; inspect app logs with `journalctl -q -u webtunes.service` and database logs with `docker compose logs`.
+- Deployment builds currently replace `.next` in place. Restart the service immediately after a build, then use `pgrep -af next-server` to find stale WebTunes children. Do not kill the separate matteob.dev Next server.
+- PostgreSQL hot-path concurrent indexes are out-of-band in `drizzle/0015_perf_indexes.sql` and `drizzle/0019_audit_indexes_and_share_fk.sql`. Apply them separately and verify with `node scripts/check-perf-indexes.mjs`.
+- Case-insensitive username uniqueness is out-of-band in `drizzle/0020_username_unique.sql`; registration and rename must still pre-check and catch its 23505 race.
+- Production R2 CORS may require an Admin Read & Write token; the normal object-scoped token cannot apply bucket CORS.
+- A purge timer removes expired shares, and yt-dlp's timer performs its daily self-update. Expired unused invites do not yet have a purge job.
+
+## Comments and maintenance
+
+Prefer comments that preserve a non-obvious invariant, security boundary, external platform quirk, or destructive-operation ordering. Remove narration, historical implementation stories, and comments that simply restate the code. Keep migrations and repeatable backfills needed by older self-hosted installations; remove completed one-off incident recovery tooling.
+
+Do not modify or discard unrelated work in a dirty worktree. Never create a commit unless the user explicitly asks for one.

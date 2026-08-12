@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { canAccessTrack } from "@/lib/friends";
 import { imageKindFromUpload, validateImageUpload } from "@/lib/image-upload";
 import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
 import {
@@ -13,48 +12,24 @@ import {
 } from "@/lib/thumbnail";
 import { toTrackDTO } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
+import { resolveTrackMedia, trackMediaError } from "@/lib/track-media";
 
 // Stable per-track cover-art URL (mirrors the stream route): the client keys
 // on this URL while the presigned redirect target rotates per request.
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/art">
 ) {
   const { id } = await params;
-  if (!isUuid(id)) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  // The track row doesn't depend on the session, so fetch both concurrently -
-  // list views fan out many /art requests, each saving a serial DB hop.
-  const [user, [track]] = await Promise.all([
-    requireUser(),
-    db
-      .select({
-        id: tracks.id,
-        ownerId: tracks.ownerId,
-        isPrivate: tracks.isPrivate,
-        suggestedImportId: tracks.suggestedImportId,
-        artS3Key: tracks.artS3Key,
-        artThumbS3Key: tracks.artThumbS3Key,
-      })
-      .from(tracks)
-      .where(eq(tracks.id, id)),
-  ]);
-  if (!user) return unauthorized();
-  if (!track || !track.artS3Key) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  const canPreview = track.suggestedImportId && track.ownerId === user.id;
-  if (!canPreview && !(await canAccessTrack(user.id, track))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const media = await resolveTrackMedia(id, "art");
+  if (!media.ok) return trackMediaError(media.error);
 
   // `?v=thumb` serves the downscaled thumbnail when one exists, else falls back
   // to the full art (so pre-feature rows and failed thumbs still render).
   const key =
-    req.nextUrl.searchParams.get("v") === "thumb" && track.artThumbS3Key
-      ? track.artThumbS3Key
-      : track.artS3Key;
+    req.nextUrl.searchParams.get("v") === "thumb" && media.thumbnailKey
+      ? media.thumbnailKey
+      : media.key;
   const { url } = await getPresignedGetUrl(key);
   // This stable URL is shared by every account in a browser profile. Never let
   // its authenticated redirect survive a logout/account switch.
@@ -68,7 +43,7 @@ export async function GET(
 // art extracted on upload, so TrackArt's stable URL keeps working.
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/tracks/[id]/art">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

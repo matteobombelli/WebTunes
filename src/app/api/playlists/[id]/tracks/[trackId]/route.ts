@@ -8,7 +8,7 @@ import { isUuid } from "@/lib/validate";
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; trackId: string }> }
+  { params }: RouteContext<"/api/playlists/[id]/tracks/[trackId]">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();

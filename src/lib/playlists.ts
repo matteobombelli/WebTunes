@@ -17,7 +17,7 @@ import { isLibraryTrack, toTrackDTO, trackDtoColumns } from "@/lib/tracks";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
 
-export type PlaylistRole = "owner" | "collaborator" | null;
+type PlaylistRole = "owner" | "collaborator" | null;
 
 function acceptedCollaboratorFriendship() {
   return and(

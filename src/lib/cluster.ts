@@ -51,7 +51,7 @@ function normalize(v: number[]): number[] {
   return n > 0 ? v.map((x) => x / n) : v;
 }
 
-export type ClusterResult = { centroids: number[][]; assignments: number[] };
+type ClusterResult = { centroids: number[][]; assignments: number[] };
 
 /**
  * k-means++ seeding under cosine distance (1 − dot): first centroid uniform at
@@ -112,7 +112,7 @@ function dropEmpty(centroids: number[][], assignments: number[]): ClusterResult 
  * Runs `restarts` times and keeps the lowest within-cluster cosine inertia.
  * Empty clusters are dropped, so the returned centroid count may be < `k`.
  */
-export function sphericalKMeans(
+function sphericalKMeans(
   vectors: number[][],
   k: number,
   rng: () => number,

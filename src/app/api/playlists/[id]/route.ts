@@ -15,7 +15,7 @@ import {
 import { deleteObject } from "@/lib/s3";
 import { getDisplayName } from "@/lib/users";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/playlists/[id]">;
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await requireUser();

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-export type NameAvailability = "idle" | "checking" | "available" | "taken";
+type NameAvailability = "idle" | "checking" | "available" | "taken";
 
 /**
  * Debounced live username-availability check, shared by the register form and

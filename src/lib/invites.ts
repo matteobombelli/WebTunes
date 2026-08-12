@@ -17,10 +17,10 @@ import {
 // account at /register?invite=<token>, then gets auto-friended with the inviter.
 // Multiple concurrent links per user; each single-use (used_at is the consumed
 // flag - robust even if the redeemer is later deleted). Mirrors lib/shares.ts.
-export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Hard cap on TOTAL platform accounts (counts the demo accounts too).
-export const MAX_USERS = 100;
+const MAX_USERS = 100;
 
 // These accounts may use the app but can't send invites.
 export const INVITE_BLOCKED_EMAILS = DEMO_ACCOUNT_EMAILS;
@@ -107,7 +107,7 @@ export async function getInviteByToken(
   return { inviterName: row.name };
 }
 
-export type RegisterInvitedResult =
+type RegisterInvitedResult =
   | { user: { id: string; email: string; name: string | null } }
   | { error: string };
 

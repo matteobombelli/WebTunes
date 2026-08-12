@@ -9,7 +9,7 @@ import { deleteObject } from "@/lib/s3";
 import { toTrackDTO } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/tracks/[id]">;
 
 function trackNotFound() {
   return NextResponse.json({ error: "Track not found" }, { status: 404 });

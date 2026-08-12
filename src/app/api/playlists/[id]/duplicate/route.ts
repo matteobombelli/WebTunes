@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { duplicatePlaylist } from "@/lib/playlists";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = RouteContext<"/api/playlists/[id]/duplicate">;
 
 export async function POST(_req: NextRequest, { params }: Params) {
   const user = await requireUser();

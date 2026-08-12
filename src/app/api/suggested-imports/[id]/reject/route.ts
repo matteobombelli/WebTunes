@@ -5,7 +5,7 @@ import { isUuid } from "@/lib/validate";
 
 export async function POST(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext<"/api/suggested-imports/[id]/reject">
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();
