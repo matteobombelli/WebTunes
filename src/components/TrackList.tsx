@@ -849,18 +849,6 @@ export default function TrackList({
           <span className="shrink-0 whitespace-nowrap text-sm text-fg-muted">
             {validSelected.size} selected
           </span>
-          {canBulkEdit && (
-            <button
-              onClick={() => setBulkEditing(editableSelectedTracks)}
-              disabled={bulkBusy || editableSelectedTracks.length === 0}
-              aria-label="Edit artist and album"
-              title="Edit artist and album"
-              className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
-            >
-              <PencilIcon size={18} />
-              <span>Edit</span>
-            </button>
-          )}
           <div className="shrink-0">
             <AddToPlaylistMenu
               bulk
@@ -899,6 +887,18 @@ export default function TrackList({
             <DownloadIcon size={18} />
             <span className="hidden md:inline">Download</span>
           </button>
+          {canBulkEdit && (
+            <button
+              onClick={() => setBulkEditing(editableSelectedTracks)}
+              disabled={bulkBusy || editableSelectedTracks.length === 0}
+              aria-label="Edit artist and album"
+              title="Edit artist and album"
+              className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
+            >
+              <PencilIcon size={18} />
+              <span>Edit</span>
+            </button>
+          )}
           {onRemove ? (
             <button
               onClick={bulkRemove}

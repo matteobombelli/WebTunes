@@ -17,6 +17,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource-variable/figtree": "^5.3.0",
     "@huggingface/transformers": "^4.2.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
