@@ -37,7 +37,7 @@ export default function CurrentTrackDetails({
   const titleClass = row ? "text-sm" : centered ? "text-lg" : "text-base";
 
   const text = (
-    <div className="min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full flex-1">
       <p className={`truncate font-semibold text-fg ${titleClass}`}>
         {track.title}
       </p>
@@ -89,31 +89,21 @@ export default function CurrentTrackDetails({
     </div>
   );
 
-  if (row) {
-    return (
-      <div className="flex min-w-0 items-center gap-3">
-        <TrackArt track={track} size={artSize} iconSize={iconSize} thumb />
-        <div className="min-w-0 flex-1">{text}</div>
-        {trailing}
-      </div>
-    );
-  }
-
   return (
     <div
-      className={`flex min-w-0 flex-col gap-3 ${
+      className={`flex min-w-0 ${row ? "items-center gap-3" : "flex-col gap-3"} ${
         centered ? (trailing ? "items-center" : "items-center text-center") : ""
       }`}
     >
-      <TrackArt track={track} size={artSize} iconSize={iconSize} />
-      {trailing ? (
-        <div className="flex w-full items-center gap-2">
-          <div className="min-w-0 flex-1">{text}</div>
-          {trailing}
-        </div>
-      ) : (
-        text
-      )}
+      <TrackArt track={track} size={artSize} iconSize={iconSize} thumb={row} />
+      <div
+        className={`flex min-w-0 items-center ${
+          row ? "flex-1 gap-3" : "w-full gap-2"
+        }`}
+      >
+        {text}
+        {trailing}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   type CollisionDetection,
@@ -39,7 +47,7 @@ import {
 
 const EXIT_MS = 100; // matches the animate-*-out durations in globals.css
 const DISMISS_PX = 90; // mobile: swipe-down past this (on release) closes the sheet
-const COLLAPSE_TRANSITION_MS = 280;
+const FRAME_TRANSITION_MS = 280;
 const COLLAPSE_CONTENT_MS = 100;
 
 // Rows above/below the visible window kept mounted so a fast scroll or a drag
@@ -105,7 +113,9 @@ export default memo(function QueuePanel({
   // separate from the target state so the queue can fade before they swap.
   const [cardCollapsed, setCardCollapsed] = useState(false);
   const expandedHeightRef = useRef(DEFAULT_FRAME_HEIGHT);
-  const desktopBodyRef = useRef<HTMLDivElement | null>(null);
+  const desktopRootRef = useRef<HTMLDivElement | null>(null);
+  const desktopHeaderRef = useRef<HTMLDivElement | null>(null);
+  const desktopCurrentRef = useRef<HTMLDivElement | null>(null);
   const frameInteractionRef = useRef<{
     pointerId: number;
     kind: "move" | "resize";
@@ -274,10 +284,16 @@ export default memo(function QueuePanel({
       setCardCollapsed(false);
       collapseLayoutTimerRef.current = null;
     }
-    collapseTimerRef.current = setTimeout(() => {
-      setCollapseMotion("idle");
-      collapseTimerRef.current = null;
-    }, COLLAPSE_TRANSITION_MS);
+    // Collapsing retargets the frame once the full artwork card enters layout.
+    // Keep the transition class through that second height transition so it
+    // cannot be removed mid-flight and snap to the final size.
+    collapseTimerRef.current = setTimeout(
+      () => {
+        setCollapseMotion("idle");
+        collapseTimerRef.current = null;
+      },
+      FRAME_TRANSITION_MS + (nextCollapsed ? COLLAPSE_CONTENT_MS : 0)
+    );
   }, [collapsed]);
 
   useEffect(
@@ -290,15 +306,23 @@ export default memo(function QueuePanel({
     []
   );
 
-  // The restored square art makes the collapsed card's height width-dependent,
-  // while owner metadata can add another line. Measure the real card so it is
-  // never clipped and clamp the corrected frame back into the viewport.
-  useEffect(() => {
+  // The square art makes the collapsed height width-dependent, and owner
+  // metadata can add another line. Size the frame before paint when the track
+  // changes; ResizeObserver covers later font/layout changes. scrollHeight
+  // preserves the intrinsic card height even when a short viewport constrains
+  // the visible card to a scrollable region.
+  useLayoutEffect(() => {
     if (mobile || !collapsed || !cardCollapsed) return;
-    const node = desktopBodyRef.current;
-    if (!node) return;
+    const root = desktopRootRef.current;
+    const header = desktopHeaderRef.current;
+    const card = desktopCurrentRef.current;
+    if (!root || !header) return;
     const syncHeight = () => {
-      const height = Math.ceil(node.getBoundingClientRect().height);
+      const rootBorder = root.offsetHeight - root.clientHeight;
+      const cardBorder = card ? card.offsetHeight - card.clientHeight : 0;
+      const height = Math.ceil(
+        header.offsetHeight + (card?.scrollHeight ?? 0) + cardBorder + rootBorder
+      );
       if (height <= 0) return;
       setDesktopFrame((frame) => {
         if (!frame || Math.abs(frame.height - height) < 1) return frame;
@@ -306,13 +330,15 @@ export default memo(function QueuePanel({
         return next.height === frame.height && next.y === frame.y ? frame : next;
       });
     };
-    const frame = requestAnimationFrame(syncHeight);
+    syncHeight();
     const observer = new ResizeObserver(syncHeight);
-    observer.observe(node);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
+    observer.observe(header);
+    if (card) {
+      observer.observe(card);
+      const details = card.firstElementChild;
+      if (details instanceof HTMLElement) observer.observe(details);
+    }
+    return () => observer.disconnect();
   }, [cardCollapsed, collapsed, current?.id, mobile]);
 
   // Windowing: only the visible slice of rows is mounted. The list lives in
@@ -510,6 +536,7 @@ export default memo(function QueuePanel({
     <>
       {!mobile && (
         <div
+          ref={desktopHeaderRef}
           onPointerDown={(event) => beginFrameInteraction(event, "move")}
           onPointerMove={moveFrameInteraction}
           onPointerUp={endFrameInteraction}
@@ -584,11 +611,11 @@ export default memo(function QueuePanel({
       )}
       {current && (
         <div
-          key={mobile ? "mobile" : cardCollapsed ? "collapsed" : "expanded"}
+          ref={mobile ? undefined : desktopCurrentRef}
           {...(mobile ? swipe : {})}
           className={`border-b border-border px-4 ${
             mobile ? "pb-3 pt-1" : cardCollapsed ? "pb-3 pt-4" : "py-3"
-          } ${
+          } ${cardCollapsed && !mobile ? "min-h-0 overflow-y-auto" : ""} ${
             cardCollapsed && collapseMotion === "collapsing"
               ? "animate-queue-current-collapse"
               : !cardCollapsed && collapseMotion === "expanding"
@@ -723,6 +750,7 @@ export default memo(function QueuePanel({
 
   return (
     <div
+      ref={desktopRootRef}
       className={rootChrome}
       style={
         mobile
@@ -742,9 +770,8 @@ export default memo(function QueuePanel({
         body
       ) : (
         <div
-          ref={desktopBodyRef}
           className={`flex min-h-0 flex-col ${
-            cardCollapsed ? "shrink-0" : "h-full"
+            cardCollapsed ? "max-h-full shrink-0" : "h-full"
           }`}
         >
           {body}
