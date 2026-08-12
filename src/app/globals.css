@@ -127,6 +127,21 @@ button:not(:disabled):active {
     transform: none;
   }
 }
+/* Playlist add dialog: acknowledge success, then close the row's space instead
+   of removing it abruptly. The row is a fixed-height compact track surface, so
+   max-height can collapse it without measuring every item in JavaScript. */
+@keyframes add-track-out {
+  0%,
+  28% {
+    max-height: 4rem;
+    opacity: 1;
+  }
+  100% {
+    max-height: 0;
+    opacity: 0;
+    border-color: transparent;
+  }
+}
 /* Removed queue row: close the gap after the row has slid out sideways. The
    implicit `from` resolves to the computed height, so the element needs an
    explicit inline height (`auto` is not interpolable). `forwards` without
@@ -208,6 +223,9 @@ button:not(:disabled):active {
      animated values outrank inline styles - which silently discards the
      swipe gesture's inline transform on rows that use this entrance. */
   animation: fade-in-up 0.22s ease-out backwards;
+}
+.animate-add-track-out {
+  animation: add-track-out 0.42s ease-in 0.18s forwards;
 }
 .animate-queue-row-collapse {
   animation: queue-row-collapse 0.16s ease-in 0.18s forwards;

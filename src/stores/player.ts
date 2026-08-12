@@ -104,6 +104,9 @@ type PlayerState = {
   duration: number;
   /** One-shot seek target consumed by PlayerBar's audio element. */
   seekRequest: number | null;
+  /** One-shot fractional start for a newly selected queue slot. PlayerBar uses
+   *  the media fragment/retry path so fresh streamed loads honor it on iOS. */
+  startAt: { uid: string; fraction: number } | null;
 
   /** Replace the queue and start playing. `collection` marks a "play outright"
    *  (playlist / discover mix): it skips the play-similar auto-start and clears
@@ -114,7 +117,11 @@ type PlayerState = {
   playQueue: (
     tracks: TrackDTO[],
     startIndex: number,
-    opts?: { collection?: boolean; noAutoSimilar?: boolean }
+    opts?: {
+      collection?: boolean;
+      noAutoSimilar?: boolean;
+      startAtFraction?: number;
+    }
   ) => number;
   /** Expand a paginated collection without restarting the playing track. */
   completeCollection: (session: number, tracks: TrackDTO[]) => void;
@@ -169,6 +176,7 @@ type PlayerState = {
   _setProgress: (currentTime: number, duration: number) => void;
   _setPlaying: (isPlaying: boolean) => void;
   _clearSeek: () => void;
+  _clearStartAt: (uid: string) => void;
 };
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -194,6 +202,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   seekRequest: null,
+  startAt: null,
 
   playQueue: (tracks, startIndex, opts) => {
     log.info(
@@ -223,13 +232,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         : null;
     const prefReset = opts?.collection ? { playSimilarPref: false } : {};
     const items = wrap(tracks);
+    const requestedFraction = opts?.startAtFraction;
+    const startAt =
+      requestedFraction != null && items[startIndex]
+        ? {
+            uid: items[startIndex].uid,
+            fraction: Math.max(0, Math.min(1, requestedFraction)),
+          }
+        : null;
+    const initialPosition =
+      startAt && tracks[startIndex]?.durationSec != null
+        ? tracks[startIndex].durationSec * startAt.fraction
+        : 0;
+    const initialDuration = tracks[startIndex]?.durationSec ?? 0;
     // Re-selecting the track that's already current won't change track?.id, so
     // PlayerBar's load effect won't refire - restart it with a seek to 0 so
     // clicking a song you're already playing starts it over.
     const prevCurrentId =
       prev.index >= 0 ? prev.queue[prev.index].track.id : null;
     const restart =
-      prevCurrentId !== null && tracks[startIndex]?.id === prevCurrentId
+      startAt == null &&
+      prevCurrentId !== null &&
+      tracks[startIndex]?.id === prevCurrentId
         ? { seekRequest: 0 }
         : {};
     if (prev.shuffled && items.length > 0) {
@@ -244,7 +268,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         collectionSession,
         unshuffledQueue: null,
         isPlaying: true,
-        currentTime: 0,
+        currentTime: initialPosition,
+        duration: initialDuration,
+        seekRequest: null,
+        startAt,
         ...stopSim,
         ...prefReset,
         pendingSimilarSeed: autoSeed,
@@ -262,7 +289,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         collectionSession,
         unshuffledQueue: null,
         isPlaying: true,
-        currentTime: 0,
+        currentTime: initialPosition,
+        duration: initialDuration,
+        seekRequest: null,
+        startAt,
         ...stopSim,
         ...prefReset,
         pendingSimilarSeed: autoSeed,
@@ -345,7 +375,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ isPlaying: true, currentTime: 0, seekRequest: 0 });
       return;
     }
-    set({ index, isPlaying: true, currentTime: 0 });
+    set({
+      index,
+      isPlaying: true,
+      currentTime: 0,
+      duration: s.queue[index].track.durationSec ?? 0,
+    });
   },
 
   playNext: (tracks) => {
@@ -362,6 +397,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
+        duration: tracks[0].durationSec ?? 0,
       });
       return;
     }
@@ -396,6 +432,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         unshuffledQueue: s.shuffled ? items : null,
         isPlaying: true,
         currentTime: 0,
+        duration: tracks[0].durationSec ?? 0,
       });
       return;
     }
@@ -468,6 +505,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           unshuffledQueue,
           isPlaying: true,
           currentTime: 0,
+          duration: after[0].track.durationSec ?? 0,
         });
       }
       return;
@@ -728,7 +766,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const s = get();
     if (s.index < 0) return;
     if (s.index + 1 < s.queue.length) {
-      set({ index: s.index + 1, isPlaying: true, currentTime: 0 });
+      set({
+        index: s.index + 1,
+        isPlaying: true,
+        currentTime: 0,
+        duration: s.queue[s.index + 1].track.durationSec ?? 0,
+      });
     } else {
       set({ isPlaying: false });
     }
@@ -743,7 +786,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (s.currentTime > 3 || s.index === 0) {
       set({ seekRequest: 0 });
     } else {
-      set({ index: s.index - 1, isPlaying: true, currentTime: 0 });
+      set({
+        index: s.index - 1,
+        isPlaying: true,
+        currentTime: 0,
+        duration: s.queue[s.index - 1].track.durationSec ?? 0,
+      });
     }
   },
 
@@ -768,11 +816,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       collectionSession: null,
       isPlaying: false,
       currentTime,
+      duration: tracks[index]?.durationSec ?? 0,
     }),
 
   _setProgress: (currentTime, duration) => set({ currentTime, duration }),
   _setPlaying: (isPlaying) => set({ isPlaying }),
   _clearSeek: () => set({ seekRequest: null }),
+  _clearStartAt: (uid) =>
+    set((state) => ({
+      startAt: state.startAt?.uid === uid ? null : state.startAt,
+    })),
 }));
 
 export const useCurrentTrack = () =>

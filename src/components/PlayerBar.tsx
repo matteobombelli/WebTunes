@@ -225,6 +225,11 @@ export default function PlayerBar({
   // The track id the <audio> src was last loaded for, so the load effect can
   // skip the src reload (a refetch) when only the queue slot changed.
   const loadedTrackIdRef = useRef<string | null>(null);
+  // The queue slot currently represented by the media element. A store update
+  // switches the visible track before the load effect swaps `audio.src`; ignore
+  // any final timeupdate from the outgoing slot so it cannot flash stale
+  // progress through the bottom player during that render-to-effect gap.
+  const loadedUidRef = useRef<string | null>(null);
   const track = useCurrentTrack();
   // The current queue SLOT's identity: the same track can occupy multiple
   // slots, so advancing between duplicates changes uid but not track.id - the
@@ -349,6 +354,7 @@ export default function PlayerBar({
     _setProgress,
     _setPlaying,
     _clearSeek,
+    _clearStartAt,
   } = usePlayerStore.getState();
 
   const resetListenSample = (audio: HTMLAudioElement) => {
@@ -647,6 +653,15 @@ export default function PlayerBar({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
+    const requestedStart = usePlayerStore.getState().startAt;
+    const startFraction =
+      requestedStart?.uid === currentUid ? requestedStart.fraction : null;
+    const requestedPosition =
+      startFraction != null &&
+      track.durationSec != null &&
+      track.durationSec > 0
+        ? track.durationSec * startFraction
+        : null;
     // A queue-slot change always starts a new qualified-listen session, even
     // when the same track appears in adjacent slots. Flush the previous slot
     // before resetting currentTime or swapping the source.
@@ -659,11 +674,36 @@ export default function PlayerBar({
     // never dips, so no other effect fires), stopping playback at the first
     // slot's end.
     if (loadedTrackIdRef.current === track.id) {
+      const loadedDuration =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : track.durationSec;
+      const sameTrackPosition =
+        startFraction != null && loadedDuration != null && loadedDuration > 0
+          ? loadedDuration * startFraction
+          : requestedPosition;
       const autoAdvance = autoAdvanceRef.current;
       autoAdvanceRef.current = false; // consume the flag
       recoverAttemptsRef.current = 0; // fresh recovery budget, like a load
-      audio.currentTime = 0;
-      startListenSession(track.id, 0, track.durationSec);
+      if (sameTrackPosition != null) {
+        restoredPositionRef.current = {
+          trackId: track.id,
+          position: sameTrackPosition,
+        };
+        restoreAttemptsRef.current = 0;
+      } else {
+        restoredPositionRef.current = null;
+      }
+      audio.currentTime = sameTrackPosition ?? 0;
+      loadedUidRef.current = currentUid;
+      if (sameTrackPosition != null && currentUid)
+        _clearStartAt(currentUid);
+      startListenSession(
+        track.id,
+        sameTrackPosition ?? 0,
+        track.durationSec
+      );
+      if (sameTrackPosition != null) tryRestorePosition();
       if (usePlayerStore.getState().isPlaying && audio.paused)
         attemptPlay(autoAdvance);
       return;
@@ -680,6 +720,13 @@ export default function PlayerBar({
     // plays from 0 - whereas the fragment is honored by the media pipeline during
     // the gesture-driven load. The fragment is client-only (never sent in the HTTP
     // request), so the SW cache key (streamSrc, no fragment) still matches.
+    if (requestedPosition != null) {
+      restoredPositionRef.current = {
+        trackId: track.id,
+        position: requestedPosition,
+      };
+      if (currentUid) _clearStartAt(currentUid);
+    }
     const restoreTarget = restoredPositionRef.current;
     const startAt =
       restoreTarget && restoreTarget.trackId === track.id
@@ -687,6 +734,7 @@ export default function PlayerBar({
         : 0;
     audio.src =
       startAt > 0 ? `${streamSrc(track.id)}#t=${startAt}` : streamSrc(track.id);
+    loadedUidRef.current = currentUid;
     startListenSession(track.id, startAt, track.durationSec);
     // A restored start is the intended position, not cold-stream drift - clearing
     // freshLoadRef stops onPlaying's snap-to-0 from resetting it. A normal fresh
@@ -1152,6 +1200,7 @@ export default function PlayerBar({
           resetListenSample(e.currentTarget);
         }}
         onTimeUpdate={(e) => {
+          if (loadedUidRef.current !== currentUid) return;
           const ct = e.currentTarget.currentTime;
           const dur = e.currentTarget.duration || 0;
           sampleListen(e.currentTarget);
@@ -1245,6 +1294,18 @@ export default function PlayerBar({
           // single one rarely sticks on a freshly-loaded streamed element on iOS.
           const audio = audioRef.current;
           if (!audio) return;
+          const requestedStart = usePlayerStore.getState().startAt;
+          if (
+            requestedStart?.uid === currentUid &&
+            Number.isFinite(audio.duration) &&
+            audio.duration > 0
+          ) {
+            restoredPositionRef.current = {
+              trackId: track.id,
+              position: audio.duration * requestedStart.fraction,
+            };
+            _clearStartAt(currentUid);
+          }
           // Very old tracks can lack a probed duration. Use the media element's
           // measured duration for both the client threshold and the server's
           // fallback validation in that case.
