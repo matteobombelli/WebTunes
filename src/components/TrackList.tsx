@@ -119,17 +119,14 @@ type TrackRowProps = {
   /** Only meaningful when isCurrent; false otherwise so non-current rows stay
    *  referentially stable and skip re-render on play/pause. */
   isPlaying: boolean;
-  selectable: boolean;
   /** Whether the checkbox column is expanded (selection mode active). */
   selectMode: boolean;
   selected: boolean;
   showOwner: boolean;
-  canEdit: boolean;
   canDelete: boolean;
   playQueue: (tracks: TrackDTO[], startIndex: number) => number;
   onToggleSelect: (id: string, shiftKey: boolean) => void;
   onRemove?: (track: TrackDTO) => Promise<void>;
-  removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
   onDelete: (track: TrackDTO) => void;
 };
@@ -142,16 +139,13 @@ const TrackRow = memo(function TrackRow({
   view,
   isCurrent,
   isPlaying,
-  selectable,
   selectMode,
   selected,
   showOwner,
-  canEdit,
   canDelete,
   playQueue,
   onToggleSelect,
   onRemove,
-  removeLabel,
   onEdit,
   onDelete,
 }: TrackRowProps) {
@@ -171,26 +165,24 @@ const TrackRow = memo(function TrackRow({
         isCurrent ? "text-accent-bright" : "text-fg"
       }`}
     >
-      {selectable && (
-        <td className="overflow-hidden py-2">
-          <input
-            type="checkbox"
-            aria-label={`Select ${track.title}`}
-            checked={selected}
-            // React backs checkbox onChange with the native click, so the
-            // nativeEvent carries shiftKey - used for range selection.
-            onChange={(e) =>
-              onToggleSelect(track.id, (e.nativeEvent as MouseEvent).shiftKey)
-            }
-            tabIndex={selectMode ? 0 : -1}
-            className={`checkbox transition-[opacity,transform] duration-200 ${
-              selectMode
-                ? "translate-x-0 opacity-100"
-                : "pointer-events-none -translate-x-2 opacity-0"
-            }`}
-          />
-        </td>
-      )}
+      <td className="overflow-hidden py-2">
+        <input
+          type="checkbox"
+          aria-label={`Select ${track.title}`}
+          checked={selected}
+          // React backs checkbox onChange with the native click, so the
+          // nativeEvent carries shiftKey - used for range selection.
+          onChange={(e) =>
+            onToggleSelect(track.id, (e.nativeEvent as MouseEvent).shiftKey)
+          }
+          tabIndex={selectMode ? 0 : -1}
+          className={`checkbox transition-[opacity,transform] duration-200 ${
+            selectMode
+              ? "translate-x-0 opacity-100"
+              : "pointer-events-none -translate-x-2 opacity-0"
+          }`}
+        />
+      </td>
       <td className="relative py-2.5 sm:py-2">
         {/* A <tr> can hold no backdrop layer of its own, so the swipe's action
             colour is painted from the first cell: a fixed-width panel whose
@@ -316,10 +308,8 @@ const TrackRow = memo(function TrackRow({
               shown on mobile (where it also hosts Play next / Add to queue). */}
           <TrackActionsMenu
             track={track}
-            canEdit={canEdit}
             canDelete={canDelete}
             onRemove={onRemove}
-            removeLabel={removeLabel}
             onEdit={onEdit}
             onDelete={onDelete}
           />
@@ -431,13 +421,9 @@ function ReorderableTrackList({
 export default function TrackList({
   tracks,
   showOwner = false,
-  canDelete = false,
-  canEdit = false,
-  canBulkEdit = false,
-  selectable = false,
+  inPlaylist = false,
   sortable = false,
   onRemove,
-  removeLabel,
   onReorder,
   onMutated,
   emptyMessage,
@@ -449,19 +435,12 @@ export default function TrackList({
 }: {
   tracks: TrackDTO[];
   showOwner?: boolean;
-  /** Shows the delete action on the viewer's own tracks. */
-  canDelete?: boolean;
-  /** Shows the edit (pencil) action on the viewer's own tracks. */
-  canEdit?: boolean;
-  /** Shows bulk artist/album editing for selected owned tracks. */
-  canBulkEdit?: boolean;
-  /** Enables checkbox multi-select with a bulk add-to-playlist bar. */
-  selectable?: boolean;
+  /** Playlist rows remove tracks from the playlist instead of deleting them. */
+  inPlaylist?: boolean;
   /** Enables click-to-sort column headers. */
   sortable?: boolean;
   /** Custom remove handler (e.g. remove from playlist instead of deleting). */
   onRemove?: (track: TrackDTO) => Promise<void>;
-  removeLabel?: string;
   /** Enables a drag-to-reorder mode (playlist view); persists the new order. */
   onReorder?: (trackIds: string[]) => Promise<void>;
   /** Called after a track is deleted or edited (for client-state parents). */
@@ -804,8 +783,7 @@ export default function TrackList({
         cross-fades between three mutually-exclusive layers: the default toggles
         (Select… / Reorder), the bulk-actions bar (select mode), and the reorder
         bar (reorder mode). */}
-    {(selectable || reorderable) && (
-      <div className="relative mb-3 h-11">
+    <div className="relative mb-3 h-11">
         <div
           className={`absolute inset-0 flex items-center gap-2 transition-opacity duration-150 ${
             !selectMode && !reorderMode
@@ -813,18 +791,16 @@ export default function TrackList({
               : "pointer-events-none opacity-0"
           }`}
         >
-          {selectable && (
-            <button
-              onClick={() => {
-                setSelectMode(true);
-                setReorderMode(false);
-              }}
-              className={MODE_TOGGLE_BTN}
-            >
-              <CheckIcon size={16} />
-              Select…
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setSelectMode(true);
+              setReorderMode(false);
+            }}
+            className={MODE_TOGGLE_BTN}
+          >
+            <CheckIcon size={16} />
+            Select…
+          </button>
           {reorderable && (
             <button
               onClick={() => {
@@ -887,24 +863,22 @@ export default function TrackList({
             <DownloadIcon size={18} />
             <span className="hidden md:inline">Download</span>
           </button>
-          {canBulkEdit && (
-            <button
-              onClick={() => setBulkEditing(editableSelectedTracks)}
-              disabled={bulkBusy || editableSelectedTracks.length === 0}
-              aria-label="Edit artist and album"
-              title="Edit artist and album"
-              className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
-            >
-              <PencilIcon size={18} />
-              <span>Edit</span>
-            </button>
-          )}
+          <button
+            onClick={() => setBulkEditing(editableSelectedTracks)}
+            disabled={bulkBusy || editableSelectedTracks.length === 0}
+            aria-label="Edit artist and album"
+            title="Edit artist and album"
+            className={`${BULK_BAR_BTN} text-fg-muted hover:bg-surface-3`}
+          >
+            <PencilIcon size={18} />
+            <span>Edit</span>
+          </button>
           {onRemove ? (
             <button
               onClick={bulkRemove}
               disabled={bulkBusy || validSelected.size === 0}
-              aria-label={removeLabel ?? "Remove"}
-              title={removeLabel ?? "Remove"}
+              aria-label="Remove"
+              title="Remove"
               className={`${BULK_BAR_BTN} text-red-400 hover:bg-red-500/10`}
             >
               <TrashIcon size={18} />
@@ -912,7 +886,7 @@ export default function TrackList({
                 {bulkBusy ? "Removing…" : "Remove"}
               </span>
             </button>
-          ) : canDelete ? (
+          ) : !inPlaylist ? (
             <button
               onClick={bulkDelete}
               disabled={bulkBusy || deletableSelectedIds.length === 0}
@@ -953,8 +927,7 @@ export default function TrackList({
             Done
           </button>
         </div>
-      </div>
-    )}
+    </div>
     {reorderMode ? (
       <ReorderableTrackList tracks={order} onDragEnd={handleReorder} />
     ) : (
@@ -964,30 +937,28 @@ export default function TrackList({
     <table className="w-full table-fixed text-left text-sm">
       <thead className="text-xs uppercase text-fg-subtle">
         <tr className="border-b border-border-subtle">
-          {selectable && (
-            <th
-              className={`overflow-hidden py-2 transition-[width] duration-200 ${
-                selectMode ? "w-8" : "w-0"
+          <th
+            className={`overflow-hidden py-2 transition-[width] duration-200 ${
+              selectMode ? "w-8" : "w-0"
+            }`}
+          >
+            <input
+              type="checkbox"
+              aria-label="Select all"
+              checked={allSelected}
+              onChange={() =>
+                setSelected(
+                  allSelected ? new Set() : new Set(tracks.map((t) => t.id))
+                )
+              }
+              tabIndex={selectMode ? 0 : -1}
+              className={`checkbox transition-[opacity,transform] duration-200 ${
+                selectMode
+                  ? "translate-x-0 opacity-100"
+                  : "pointer-events-none -translate-x-2 opacity-0"
               }`}
-            >
-              <input
-                type="checkbox"
-                aria-label="Select all"
-                checked={allSelected}
-                onChange={() =>
-                  setSelected(
-                    allSelected ? new Set() : new Set(tracks.map((t) => t.id))
-                  )
-                }
-                tabIndex={selectMode ? 0 : -1}
-                className={`checkbox transition-[opacity,transform] duration-200 ${
-                  selectMode
-                    ? "translate-x-0 opacity-100"
-                    : "pointer-events-none -translate-x-2 opacity-0"
-                }`}
-              />
-            </th>
-          )}
+            />
+          </th>
           <th className="py-2" aria-sort={ariaSort("title")}>
             {sortHeader("title", "Title")}
           </th>
@@ -1050,16 +1021,13 @@ export default function TrackList({
             view={view}
             isCurrent={current?.id === track.id}
             isPlaying={current?.id === track.id ? isPlaying : false}
-            selectable={selectable}
             selectMode={selectMode}
             selected={validSelected.has(track.id)}
             showOwner={showOwner}
-            canEdit={canEdit}
-            canDelete={canDelete}
+            canDelete={!inPlaylist}
             playQueue={playQueue}
             onToggleSelect={toggleSelected}
             onRemove={onRemove}
-            removeLabel={removeLabel}
             onEdit={setEditing}
             onDelete={remove}
           />

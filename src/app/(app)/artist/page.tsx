@@ -27,7 +27,7 @@ export default async function ArtistPage({
     <div className="mx-auto max-w-5xl">
       <p className="text-xs uppercase text-fg-subtle">Artist</p>
       <h1 className="mb-6 font-display text-4xl font-bold tracking-tight">{name}</h1>
-      <TrackList tracks={tracks} showOwner canDelete selectable sortable />
+      <TrackList tracks={tracks} showOwner sortable />
     </div>
   );
 }

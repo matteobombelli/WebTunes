@@ -247,18 +247,13 @@ export function AddToPlaylistMenu({
 
 type TrackActionsProps = {
   track: TrackDTO;
-  canEdit: boolean;
   canDelete: boolean;
   onRemove?: (track: TrackDTO) => Promise<void>;
-  removeLabel?: string;
   onEdit: (track: TrackDTO) => void;
   onDelete: (track: TrackDTO) => void;
   /** Fires alongside onClose when an artist/album link is tapped, so a
    *  containing overlay (now-playing sheet, queue panel) can dismiss first. */
   onNavigate?: () => void;
-  /** Current-track surfaces (queue header, now-playing sheet): drop the
-   *  mobile-only Play next / Add to queue rows (the player already does that). */
-  playerContext?: boolean;
   onClose: () => void;
 };
 
@@ -266,14 +261,11 @@ type TrackActionsProps = {
 // and the desktop three-dot dropdown.
 function TrackActions({
   track,
-  canEdit,
   canDelete,
   onRemove,
-  removeLabel,
   onEdit,
   onDelete,
   onNavigate,
-  playerContext = false,
   onClose,
 }: TrackActionsProps) {
   const excluded = useIsExcluded(track.id);
@@ -305,10 +297,7 @@ function TrackActions({
           <span className="truncate text-fg-muted">{track.album}</span>
         </Link>
       )}
-      {/* Desktop hosts Play next / Add to queue as single-click icons on the
-          row itself; the menu only needs them on mobile (no hover row). The
-          player surfaces (queue/now-playing) drop them entirely. */}
-      <div className={`flex-col gap-2 md:hidden ${playerContext ? "hidden" : "flex"}`}>
+      <div className="flex flex-col gap-2">
         <button
           onClick={() => {
             usePlayerStore.getState().playNext([track]);
@@ -361,7 +350,7 @@ function TrackActions({
             <span>Share</span>
             <ShareIcon size={16} className="shrink-0 text-fg-muted" />
           </button>
-          {canEdit && !track.ownerName && (
+          {!track.ownerName && (
             <button
               onClick={() => {
                 onEdit(track);
@@ -382,7 +371,7 @@ function TrackActions({
               }}
               className="flex items-center justify-between rounded-md bg-surface-2/40 px-3 py-2.5 text-left text-red-400 hover:bg-red-500/10"
             >
-              <span>{removeLabel ?? "Delete"}</span>
+              <span>{onRemove ? "Remove" : "Delete"}</span>
               <TrashIcon size={16} />
             </button>
           )}
@@ -445,8 +434,7 @@ export function TrackActionsMenu({
 
 // A self-contained song-options kebab for the "current track" surfaces (queue
 // header, now-playing sheet) that aren't backed by a table row. It wires
-// Edit/Delete against the library and, via `playerContext`, drops the queue
-// actions. The edit dialog is portalled to <body> so an ancestor's
+// Edit/Delete against the library. The edit dialog is portalled to <body> so an ancestor's
 // transform/overflow (the queue popover) can't clip it.
 export function CurrentTrackKebab({
   track,
@@ -480,9 +468,7 @@ export function CurrentTrackKebab({
     <>
       <TrackActionsMenu
         track={track}
-        canEdit
         canDelete
-        playerContext
         alwaysVisible
         onEdit={setEditing}
         onDelete={remove}

@@ -478,15 +478,13 @@ export default function PlaylistDetail({
         <TrackList
           tracks={tracks}
           showOwner
-          canEdit
-          selectable
+          inPlaylist
           sortable
           onRemove={removeTrack}
-          removeLabel="Remove from playlist"
           onReorder={reorderTracks}
         />
       ) : (
-        <TrackList tracks={tracks} showOwner selectable sortable />
+        <TrackList tracks={tracks} showOwner inPlaylist sortable />
       )}
 
       <PlaylistRecommendations playlistId={playlist.id} canEdit={canEdit} />

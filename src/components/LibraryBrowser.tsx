@@ -336,10 +336,6 @@ export default function LibraryBrowser({
           <TrackList
             tracks={tracks}
             showOwner={!browsingOwn}
-            canEdit
-            canBulkEdit
-            canDelete
-            selectable
             sortable
             onMutated={onMutated}
             hasMore={hasMore && !loadMoreFailed}
