@@ -21,6 +21,7 @@ import {
 import { DEFAULT_STRICTNESS, findMatch, MIN_SOURCE_KBPS } from "@/lib/import/match";
 import type { SourceTrack } from "@/lib/import/sources";
 import { downloadAudio, probeVideo } from "@/lib/import/ytdlp";
+import { withYtDlpRetry } from "@/lib/import/retry";
 import { listTopTracks } from "@/lib/discover";
 import { log } from "@/lib/log";
 import { enqueueRecognition } from "@/lib/recognize-queue";
@@ -47,8 +48,6 @@ const IDENTITY_LOOKUP_BATCH = 25;
 const ACOUSTID_FALLBACK_BATCH = 2;
 const IDENTITY_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PER_ARTIST = 2;
-const RATE_LIMIT_COOLDOWN_MS = 60_000;
-const MAX_RATE_LIMIT_RETRIES = 3;
 
 function normalizeSuggestedText(value: string): string {
   return value
@@ -640,6 +639,7 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
     };
     const match = await withSuggestedRetry(
       candidate.id,
+      abort.signal,
       () =>
         findMatch(
           source,
@@ -650,7 +650,7 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
         )
     );
     if (match.url === null) throw new Error(match.reason);
-    const info = await withSuggestedRetry(candidate.id, () =>
+    const info = await withSuggestedRetry(candidate.id, abort.signal, () =>
       probeVideo(match.url, abort.signal, "suggested")
     );
     if (info.bestAudioKbps > 0 && info.bestAudioKbps < MIN_SOURCE_KBPS) {
@@ -661,7 +661,7 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
     dir = await mkdtemp(
       join(/* turbopackIgnore: true */ tmpdir(), "webtunes-suggested-")
     );
-    const file = await withSuggestedRetry(candidate.id, () =>
+    const file = await withSuggestedRetry(candidate.id, abort.signal, () =>
       downloadAudio({
         url: match.url,
         quality: "opus",
@@ -730,27 +730,23 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
 
 async function withSuggestedRetry<T>(
   suggestionId: string,
+  signal: AbortSignal,
   run: () => Promise<T>
 ): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : "";
-      const rateLimited =
-        message.includes("429") || message.includes("too many requests");
-      if (!rateLimited || attempt >= MAX_RATE_LIMIT_RETRIES) throw error;
+  return withYtDlpRetry(run, {
+    signal,
+    onRetry: async (retry) => {
       await db
         .update(suggestedImports)
         .set({
-          error: "YouTube is rate-limiting imports; retrying shortly",
+          error:
+            retry.status === 429
+              ? "YouTube is rate-limiting imports; retrying shortly"
+              : "YouTube temporarily rejected the download; retrying shortly",
           leaseExpiresAt: new Date(Date.now() + LEASE_MS),
           updatedAt: new Date(),
         })
         .where(eq(suggestedImports.id, suggestionId));
-      await new Promise((resolve) =>
-        setTimeout(resolve, RATE_LIMIT_COOLDOWN_MS)
-      );
-    }
-  }
+    },
+  });
 }

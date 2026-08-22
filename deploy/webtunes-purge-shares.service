@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=debian
-WorkingDirectory=/home/debian/WebTunes
-# Login shell so node resolves on PATH, exactly like webtunes.service.
-ExecStart=/bin/sh -lc 'node scripts/purge-expired-shares.mjs'
+User=hs
+WorkingDirectory=/home/hs/WebTunes
+# Invoke node directly: a login shell (`sh -lc`) dies sourcing
+# /etc/profile.d/devpkg-helpers.sh, whose dashed function names dash rejects.
+ExecStart=/usr/bin/node scripts/purge-expired-shares.mjs

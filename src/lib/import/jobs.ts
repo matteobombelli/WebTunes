@@ -11,6 +11,7 @@ import {
   type SourceTrack,
 } from "@/lib/import/sources";
 import { downloadAudio, flatExtract, probeVideo } from "@/lib/import/ytdlp";
+import { withYtDlpRetry, type YtDlpRetry } from "@/lib/import/retry";
 import { log } from "@/lib/log";
 import type {
   ImportItemDTO,
@@ -47,8 +48,6 @@ type Job = {
 
 const MAX_PLAYLIST_TRACKS = 500;
 const JOB_RETENTION_MS = 60 * 60 * 1000;
-const RATE_LIMIT_COOLDOWN_MS = 60_000;
-const MAX_RATE_LIMIT_RETRIES = 3;
 const MAX_LOG_LINES = 2000; // like the desktop log view's block cap
 
 /** Append to the job's user-facing log (the Import dialog's log view). */
@@ -184,45 +183,30 @@ async function runWorker(): Promise<void> {
   }
 }
 
-/** Sleep that rejects on abort so a cancel doesn't wait out a 429 cooldown. */
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new Error("cancelled"));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-/** Retry a yt-dlp call after a cooldown on YouTube 429 rate-limits. Anything
- * else - including a 403 - propagates to the caller, which records the miss
- * and moves on. */
 async function withRetry<T>(
   fn: () => Promise<T>,
   job: Job
 ): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      const message = err instanceof Error ? err.message.toLowerCase() : "";
-      const rateLimited =
-        message.includes("429") || message.includes("too many requests");
-      if (!rateLimited || attempt >= MAX_RATE_LIMIT_RETRIES) throw err;
-      jobLog(
-        job,
-        `YouTube rate-limiting (HTTP 429). Pausing ${RATE_LIMIT_COOLDOWN_MS / 1000}s, then retrying…`
-      );
-      log.info("import", `YouTube 429 - cooling down ${RATE_LIMIT_COOLDOWN_MS / 1000}s`);
-      await sleep(RATE_LIMIT_COOLDOWN_MS, job.abort.signal);
-      jobLog(job, "Cooldown over - resuming.");
-    }
-  }
+  return withYtDlpRetry(fn, {
+    signal: job.abort.signal,
+    onRetry: (retry) => logRetry(job, retry),
+  });
+}
+
+function logRetry(job: Job, retry: YtDlpRetry): void {
+  const seconds = retry.delayMs / 1000;
+  const reason =
+    retry.status === 429
+      ? "YouTube rate-limiting (HTTP 429)"
+      : "Transient YouTube media rejection (HTTP 403)";
+  jobLog(
+    job,
+    `${reason}. Pausing ${seconds}s, then retrying (${retry.retry}/${retry.maxRetries})…`
+  );
+  log.info(
+    "import",
+    `YouTube ${retry.status} - cooling down ${seconds}s before retry ${retry.retry}/${retry.maxRetries}`
+  );
 }
 
 async function runJob(job: Job): Promise<void> {

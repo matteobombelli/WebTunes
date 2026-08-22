@@ -6,7 +6,10 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=debian
-WorkingDirectory=/home/debian/WebTunes
-# Login shell so node/docker resolve on PATH, exactly like webtunes.service.
-ExecStart=/bin/sh -lc 'node scripts/backup-db-to-r2.mjs'
+User=hs
+WorkingDirectory=/home/hs/WebTunes
+# Invoke node directly: a login shell (`sh -lc`) dies sourcing
+# /etc/profile.d/devpkg-helpers.sh, whose dashed function names dash rejects.
+# node and docker both live in /usr/bin, which systemd's default PATH covers,
+# and the script loads its own .env files.
+ExecStart=/usr/bin/node scripts/backup-db-to-r2.mjs

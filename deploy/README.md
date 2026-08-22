@@ -8,11 +8,11 @@ bucket under the `backups/` prefix, then prunes to the **7 newest** dumps. It
 reuses the app's `S3_*` and `DATABASE_URL` env vars (R2 at-rest encryption; no
 extra key to manage).
 
-### Install (on the VPS, as `debian`)
+### Install (as `hs`)
 
 ```sh
-sudo cp /home/debian/WebTunes/deploy/webtunes-backup.service /etc/systemd/system/
-sudo cp /home/debian/WebTunes/deploy/webtunes-backup.timer   /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-backup.service /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-backup.timer   /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now webtunes-backup.timer
 ```
@@ -45,11 +45,11 @@ Expired rows are already inert - `lib/shares.ts` filters by expiry and the
 create-upsert self-heals same-track collisions - so this timer is the guarantee
 they don't linger in the table. Reuses `DATABASE_URL`.
 
-### Install (on the VPS, as `debian`)
+### Install (as `hs`)
 
 ```sh
-sudo cp /home/debian/WebTunes/deploy/webtunes-purge-shares.service /etc/systemd/system/
-sudo cp /home/debian/WebTunes/deploy/webtunes-purge-shares.timer   /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-purge-shares.service /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-purge-shares.timer   /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now webtunes-purge-shares.timer
 ```
@@ -71,11 +71,11 @@ history on the Invite tab). Expired unused rows are already inert
 (`lib/invites.ts` filters by `used_at` + expiry), so this timer is the guarantee
 they don't linger. Reuses `DATABASE_URL`.
 
-### Install (on the VPS, as `debian`)
+### Install (as `hs`)
 
 ```sh
-sudo cp /home/debian/WebTunes/deploy/webtunes-purge-invites.service /etc/systemd/system/
-sudo cp /home/debian/WebTunes/deploy/webtunes-purge-invites.timer   /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-purge-invites.service /etc/systemd/system/
+sudo cp /home/hs/WebTunes/deploy/webtunes-purge-invites.timer   /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now webtunes-purge-invites.timer
 ```

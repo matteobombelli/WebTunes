@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=debian
-WorkingDirectory=/home/debian/WebTunes
+User=hs
+WorkingDirectory=/home/hs/WebTunes
 # -U rewrites bin/yt-dlp in place (the dir is app-user-owned).
-ExecStart=/home/debian/WebTunes/bin/yt-dlp -U
+ExecStart=/home/hs/WebTunes/bin/yt-dlp -U

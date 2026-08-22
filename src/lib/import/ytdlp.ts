@@ -33,15 +33,24 @@ type VideoInfo = {
 const EXTRACT_TIMEOUT_MS = 5 * 60_000; // a 500-entry flat playlist is paginated
 const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 
-// --js-runtimes node: yt-dlp's JS challenge solver needs a runtime; the box has
-// Node (no deno). --remote-components ejs:github lets it fetch that solver,
-// needed for full YouTube format access.
+// YouTube can bind signed media URLs to an IP family, and its IPv6 GVS path is
+// prone to intermittent 403s on dual-stack hosts. Keep extraction and download
+// on IPv4, and use yt-dlp's recommended pacing to protect the shared guest
+// session while the background suggestion worker is filling users' pools. The
+// Node/EJS options solve YouTube's player challenges for full format access.
 const COMMON_ARGS = [
   "--no-warnings",
+  "--force-ipv4",
   "--js-runtimes",
   "node",
   "--remote-components",
   "ejs:github",
+  "--sleep-requests",
+  "0.75",
+  "--sleep-interval",
+  "5",
+  "--max-sleep-interval",
+  "10",
 ];
 
 function ytdlpPath(): string {
@@ -255,7 +264,7 @@ export async function downloadAudio(opts: {
     });
   } catch (err) {
     // Only the format-selection failure means "no AAC stream" - anything else
-    // (unavailable video, exhausted 429 retries) keeps its real message.
+    // (unavailable video, exhausted network retries) keeps its real message.
     if (
       opts.quality === "m4a" &&
       err instanceof Error &&

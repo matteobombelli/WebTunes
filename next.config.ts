@@ -22,7 +22,8 @@ const csp = [
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
-  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  // No X-Frame-Options: CSP frame-ancestors governs framing and, unlike XFO,
+  // can allow a specific cross-origin embedder (matteob.dev).
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {

@@ -100,12 +100,12 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 ## Operational constraints
 
 - Secrets belong only in ignored `.env*` files. Never commit credentials.
-- Production runs as `webtunes.service` from `/home/debian/WebTunes`; inspect app logs with `journalctl -q -u webtunes.service` and database logs with `docker compose logs`.
-- Deployment builds currently replace `.next` in place. Restart the service immediately after a build, then use `pgrep -af next-server` to find stale WebTunes children. Do not kill the separate matteob.dev Next server.
+- Production runs as `webtunes.service` (user `hs`) from `/home/hs/WebTunes`; inspect app logs with `journalctl -q -u webtunes.service` and database logs with `docker compose logs`.
+- Deployment builds currently replace `.next` in place. Restart the service immediately after a build, then use `pgrep -af next-server` to find stale WebTunes children.
 - PostgreSQL hot-path concurrent indexes are out-of-band in `drizzle/0015_perf_indexes.sql` and `drizzle/0019_audit_indexes_and_share_fk.sql`. Apply them separately and verify with `node scripts/check-perf-indexes.mjs`.
 - Case-insensitive username uniqueness is out-of-band in `drizzle/0020_username_unique.sql`; registration and rename must still pre-check and catch its 23505 race.
 - Production R2 CORS may require an Admin Read & Write token; the normal object-scoped token cannot apply bucket CORS.
-- A purge timer removes expired shares, and yt-dlp's timer performs its daily self-update. Expired unused invites do not yet have a purge job.
+- Daily timers purge expired share links and expired unused invite links, back up Postgres to R2, and self-update yt-dlp (unit definitions in `deploy/`).
 
 ## Comments and maintenance
 
