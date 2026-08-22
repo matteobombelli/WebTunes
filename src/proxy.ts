@@ -6,6 +6,7 @@ const AUTH_PAGES = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/demo",
 ];
 
 // Lightweight gate: checks cookie presence only (database sessions cannot be

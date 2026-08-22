@@ -16,7 +16,7 @@ const csp = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'self'",
+  "frame-ancestors 'self' https://matteob.dev",
 ]
   .join("; ");
 

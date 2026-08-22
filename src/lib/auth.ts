@@ -11,7 +11,7 @@ import { BASE_PATH } from "@/lib/base-path";
 import { getClientIp } from "@/lib/client-ip";
 import { clearRateLimit, rateLimit } from "@/lib/rate-limit";
 
-const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
+export const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
 const LOGIN_ATTEMPT_LIMIT = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 // Per-IP ceiling on login attempts, on top of the per-email limit: bounds the
