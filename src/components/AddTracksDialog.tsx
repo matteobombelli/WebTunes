@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { sortTracks } from "@/lib/sort-tracks";
 import type { TrackDTO, TrackPageDTO } from "@/lib/types";
 import { usePersistedScope, type Scope } from "@/lib/use-persisted-scope";
 import { usePlayerStore } from "@/stores/player";
@@ -29,6 +30,13 @@ const ADD_TRACK_SCOPES = [
   { value: "all", label: "Everything", icon: <GlobeIcon size={17} /> },
   { value: "friends", label: "Friends", icon: <UsersIcon size={17} /> },
 ] as const;
+const ADD_SORTS = [
+  { value: "recent", label: "Recent" },
+  { value: "title", label: "Title" },
+  { value: "artist", label: "Artist" },
+  { value: "album", label: "Album" },
+] as const;
+type AddSortKey = (typeof ADD_SORTS)[number]["value"];
 
 // Stays mounted so the Dialog can animate out; the body mounts per open so
 // the filter and selection start fresh each time.
@@ -54,7 +62,13 @@ export default function AddTracksDialog({
   };
 
   return (
-    <Dialog title="Add songs" open={open} onClose={close} wide>
+    <Dialog
+      title="Add songs"
+      open={open}
+      onClose={close}
+      wide
+      fullScreenOnMobile
+    >
       {open && (
         <AddTracksBody
           playlistId={playlistId}
@@ -88,6 +102,7 @@ function AddTracksBody({
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<AddSortKey>("recent");
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
@@ -157,9 +172,7 @@ function AddTracksBody({
     };
   }, [activeSearchKey, query, scope]);
 
-  const loadMore = async () => {
-    const cursor = allScope === scope ? all?.nextCursor : null;
-    if (!cursor || loadingMore) return;
+  const loadPage = async (cursor: string) => {
     setLoadingMore(true);
     try {
       const scopeParam = scope === "own" ? "" : `scope=${scope}&`;
@@ -192,6 +205,46 @@ function AddTracksBody({
     }
   };
 
+  const loadMore = () => {
+    const cursor = allScope === scope ? all?.nextCursor : null;
+    if (!cursor || loadingMore) return;
+    void loadPage(cursor);
+  };
+
+  // The browse list is keyset-paged, so any ordering other than the server's
+  // must see the whole collection: one unlimited request (as LibraryBrowser's
+  // loadCompleteCollection does) replaces the remaining pages. Keyed on
+  // whether a sort is wanted, not which, so switching sorts doesn't abort it.
+  const needsAll = sort !== "recent";
+  const loadingAllRef = useRef(false);
+  useEffect(() => {
+    if (!needsAll || loadFailed || loadingAllRef.current) return;
+    if (allScope !== scope || !all?.nextCursor) return;
+    const controller = new AbortController();
+    // Starts off the commit so the loading flag doesn't cascade a re-render.
+    const timer = window.setTimeout(async () => {
+      loadingAllRef.current = true;
+      setLoadingMore(true);
+      try {
+        const scopeParam = scope === "own" ? "" : `?scope=${scope}`;
+        const tracks = await api<TrackDTO[]>(`/tracks${scopeParam}`, {
+          signal: controller.signal,
+        });
+        setAll({ tracks, totalCount: tracks.length, nextCursor: null });
+        setLoadFailed(false);
+      } catch {
+        if (!controller.signal.aborted) setLoadFailed(true);
+      } finally {
+        loadingAllRef.current = false;
+        setLoadingMore(false);
+      }
+    });
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [all?.nextCursor, allScope, loadFailed, needsAll, scope]);
+
   const candidates = useMemo(() => {
     const source = query
       ? searchKey === activeSearchKey
@@ -205,7 +258,8 @@ function AddTracksBody({
     for (const id of removedIds) existing.add(id);
     // Search results are already filtered server-side, including lyric
     // matches. Re-filtering DTO fields here hid valid lyrics-only results.
-    return source.filter((t) => !existing.has(t.id));
+    const list = source.filter((t) => !existing.has(t.id));
+    return sort === "recent" ? list : sortTracks(list, { key: sort, dir: 1 });
   }, [
     activeSearchKey,
     all,
@@ -216,6 +270,7 @@ function AddTracksBody({
     scope,
     searchKey,
     searchResults,
+    sort,
   ]);
 
   const setAdding = (id: string, adding: boolean) => {
@@ -261,7 +316,7 @@ function AddTracksBody({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           autoFocus
@@ -275,8 +330,9 @@ function AddTracksBody({
           value={scope}
           onChange={setScope}
         />
+        <SegmentedControl options={ADD_SORTS} value={sort} onChange={setSort} />
       </div>
-      <div className="max-h-80 overflow-y-auto rounded-md border border-border-subtle">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border-subtle md:max-h-80 md:flex-none">
         {candidates === null && (
           <p className="p-4 text-sm text-fg-muted">Loading…</p>
         )}
@@ -316,18 +372,23 @@ function AddTracksBody({
                     className="pointer-events-none relative z-[1] flex min-w-0 flex-1 items-center gap-3"
                   >
                     <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
-                    <span
-                      className={`flex min-w-0 flex-1 items-center gap-1.5 font-medium ${
-                        isCurrent ? "text-accent-bright" : ""
-                      }`}
-                    >
-                      {isCurrent && (
-                        <NowPlayingBars
-                          playing={isPlaying}
-                          className="h-3 w-3 shrink-0"
-                        />
-                      )}
-                      <span className="truncate">{t.title}</span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span
+                        className={`flex min-w-0 items-center gap-1.5 font-medium ${
+                          isCurrent ? "text-accent-bright" : ""
+                        }`}
+                      >
+                        {isCurrent && (
+                          <NowPlayingBars
+                            playing={isPlaying}
+                            className="h-3 w-3 shrink-0"
+                          />
+                        )}
+                        <span className="truncate">{t.title}</span>
+                      </span>
+                      <span className="block truncate text-xs text-fg-muted sm:hidden">
+                        {t.artist ?? "-"}
+                      </span>
                     </span>
                     <span className="hidden max-w-32 truncate text-fg-muted sm:block">
                       {t.artist ?? "-"}
@@ -378,7 +439,7 @@ function AddTracksBody({
         )}
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <div className="flex justify-end gap-2">
+      <div className="flex shrink-0 justify-end gap-2">
         <Button onClick={onClose}>Done</Button>
       </div>
     </div>

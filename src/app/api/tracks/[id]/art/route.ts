@@ -4,7 +4,12 @@ import { db } from "@/db";
 import { tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { imageKindFromUpload, validateImageUpload } from "@/lib/image-upload";
-import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
+import {
+  deleteObject,
+  getPresignedGetUrl,
+  PRESIGN_REUSE_SEC,
+  uploadObject,
+} from "@/lib/s3";
 import {
   makeThumbnail,
   THUMBNAIL_CONTENT_TYPE,
@@ -31,10 +36,12 @@ export async function GET(
       ? media.thumbnailKey
       : media.key;
   const { url } = await getPresignedGetUrl(key);
-  // This stable URL is shared by every account in a browser profile. Never let
-  // its authenticated redirect survive a logout/account switch.
+  // Cached for the presign reuse window so repeat renders skip both the app
+  // hop and the R2 hop. `private` keeps the redirect out of shared caches; the
+  // stable URL is shared by every account in a browser profile, so an account
+  // switch can surface already-fetched cover art for at most that window.
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, no-store");
+  res.headers.set("Cache-Control", `private, max-age=${PRESIGN_REUSE_SEC}`);
   return res;
 }
 

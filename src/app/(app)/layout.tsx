@@ -1,5 +1,6 @@
 import { requirePageUser } from "@/lib/auth-helpers";
 import { pendingRequestsFor } from "@/lib/friends";
+import { storageOrigin } from "@/lib/s3";
 import { getUserSettings } from "@/lib/users";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ImportProgressBar from "@/components/ImportProgressBar";
@@ -29,13 +30,28 @@ export default async function AppLayout({
       tutorialSeen,
     },
     pendingRequests,
-  ] = await Promise.all([getUserSettings(user.id), pendingRequestsFor(user.id)]);
+    artOrigin,
+  ] = await Promise.all([
+    getUserSettings(user.id),
+    pendingRequestsFor(user.id),
+    // Signing needs S3 credentials, which a build-time render may not have.
+    storageOrigin().catch(() => null),
+  ]);
   const hasIncomingRequests = pendingRequests.some(
     (r) => r.direction === "incoming"
   );
 
   return (
     <div className="flex h-dvh flex-col">
+      {/* Saves DNS+TLS on the first art/audio request of the document. Two
+          links because browsers pool connections by credentials mode: the SW's
+          CORS art fetch uses the anonymous pool, <img>/<audio> the other. */}
+      {artOrigin && (
+        <>
+          <link rel="preconnect" href={artOrigin} />
+          <link rel="preconnect" href={artOrigin} crossOrigin="anonymous" />
+        </>
+      )}
       <ServiceWorkerRegistrar userId={user.id} />
       <UploadProgressBar />
       <ImportProgressBar />

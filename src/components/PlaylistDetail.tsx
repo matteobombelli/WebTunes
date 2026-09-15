@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, playlistCoverSrc } from "@/lib/api";
+import { evictRuntimeArt } from "@/lib/offline/art-cache";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
 import { useConfirmStore } from "@/stores/confirm";
 import { usePlayerStore } from "@/stores/player";
@@ -117,6 +118,11 @@ export default function PlaylistDetail({
       // api() handles the basePath and error extraction; it sets no headers,
       // so the FormData boundary is preserved.
       await api(`/playlists/${playlist.id}/cover`, { method: "POST", body: form });
+      // The cover URL is stable, so any runtime-cached copy of the previous
+      // image would keep winning everywhere else in the app.
+      void evictRuntimeArt(
+        new URL(playlistCoverSrc(playlist.id), location.origin).href
+      );
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cover upload failed");

@@ -20,9 +20,16 @@ import {
 } from "./db";
 
 // Every Cache Storage bucket that may hold the signed-in user's audio/art/app
-// shell. KEEP IN SYNC with public/sw.js (AUDIO_CACHE / ART_CACHE / PREFETCH /
-// SHELL_CACHE) and audio-cache.ts / art-cache.ts.
-const OFFLINE_CACHES = ["wt-audio", "wt-art", "wt-prefetch", "wt-shell-v2"];
+// shell. KEEP IN SYNC with public/sw.js (AUDIO_CACHE / ART_CACHE /
+// ART_RUNTIME_CACHE / PREFETCH / SHELL_CACHE) and audio-cache.ts /
+// art-cache.ts.
+const OFFLINE_CACHES = [
+  "wt-audio",
+  "wt-art",
+  "wt-art-runtime",
+  "wt-prefetch",
+  "wt-shell-v2",
+];
 
 type PlaylistWithTracks = PlaylistDTO & { tracks: TrackDTO[] };
 

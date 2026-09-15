@@ -17,11 +17,14 @@ export default async function FriendLibraryPage({
 
   const { userId } = await params;
   if (!isUuid(userId)) notFound();
-  if (!(await areFriends(user.id, userId))) notFound();
 
-  const displayName = await getDisplayName(userId);
+  const [friends, displayName, { hideFriendDuplicates }] = await Promise.all([
+    areFriends(user.id, userId),
+    getDisplayName(userId),
+    getUserSettings(user.id),
+  ]);
+  if (!friends) notFound();
   if (!displayName) notFound();
-  const { hideFriendDuplicates } = await getUserSettings(user.id);
   const [topTracks, trackDTOs] = await Promise.all([
     listUserTopTracks(userId, user.id, hideFriendDuplicates),
     listTracksOfFriend(userId, displayName),

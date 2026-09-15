@@ -18,6 +18,13 @@ const PREFETCH_CACHE = "wt-prefetch";
 /** How many upcoming tracks to keep warmed (bounds the wt-prefetch cache to N+1). */
 export const PREFETCH_AHEAD = 3;
 
+// Run generation and the serializing chain (see prefetchUpcoming).
+let warmSeq = 0;
+let warmChain: Promise<void> = Promise.resolve();
+// Aborting the superseded run's download frees the chain immediately; without
+// it a new queue would wait for a whole stale file on a throttled link.
+let warmAbort: AbortController | null = null;
+
 /**
  * Warm the next few tracks' audio for cache-served background advances, keeping
  * only the current + those tracks in the prefetch cache. The current id is kept
@@ -26,10 +33,30 @@ export const PREFETCH_AHEAD = 3;
  * hand-off. Warms sequentially (most-imminent first) so it doesn't blast the
  * iOS-throttled network; per-id dedup means a single advance is usually ~one
  * fetch. No-op for already-downloaded tracks (served from wt-audio) and offline.
+ *
+ * Runs are serialized and only the newest may touch the cache: an older run's
+ * pruneExcept could otherwise delete the very entry a newer run is mid-put on,
+ * and overlapping runs double-download audio on an already-bottlenecked link.
  */
 export async function prefetchUpcoming(
   currentId: string | undefined,
   nextIds: (string | undefined)[]
+): Promise<void> {
+  const run = ++warmSeq;
+  warmAbort?.abort();
+  const abort = new AbortController();
+  warmAbort = abort;
+  warmChain = warmChain.then(() =>
+    run === warmSeq ? warm(currentId, nextIds, run, abort.signal) : undefined
+  );
+  return warmChain;
+}
+
+async function warm(
+  currentId: string | undefined,
+  nextIds: (string | undefined)[],
+  run: number,
+  signal: AbortSignal
 ): Promise<void> {
   if (typeof caches === "undefined") return;
   try {
@@ -37,11 +64,12 @@ export async function prefetchUpcoming(
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const cache = await caches.open(PREFETCH_CACHE);
     for (const id of nextIds) {
+      if (run !== warmSeq) return; // a newer run supersedes this one
       if (!id) continue;
       if (await hasAudio(id)) continue; // already a download → served from wt-audio
       const url = streamSrc(id);
       if (await cache.match(url)) continue; // already warmed
-      const res = await fetch(url); // SW → 302 → presigned S3
+      const res = await fetch(url, { signal }); // SW → 302 → presigned S3
       if (res.ok) await cache.put(url, res);
     }
   } catch (err) {

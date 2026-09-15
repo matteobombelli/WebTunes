@@ -65,6 +65,7 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 ## Storage and media
 
 - Streaming routes return presigned S3 redirects; the app server never proxies audio.
+- Authenticated art/cover/stream redirects are cached `private, max-age=300`, matched to the presign reuse window in `lib/s3.ts`; the SW keeps an ephemeral `wt-art-runtime` cache of recently viewed art, purged on account switch.
 - For rows owning S3 objects, delete the DB row first, then best-effort delete objects. A leak is safer than a dangling row; `scripts/reconcile-r2.mjs` removes old unreferenced objects.
 - Never derive stored image MIME types or key extensions from browser names/headers. Use `lib/image-upload.ts` and byte sniffing for remote art.
 - Upload metadata, loudness analysis, duration probing, and Opus remux are best-effort. Failures must not reject an otherwise valid upload.
@@ -88,14 +89,15 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 ## Playback and offline invariants
 
 - `usePlayerStore.isPlaying` is intent; the media element's `paused` state is reality. `pendingPlayRef` and `retryPendingPlay` are the recovery bridge—do not introduce another.
-- `expectedPauseRef` marks deliberate pauses/source swaps. Unmarked DOM pauses reconcile intent to paused so Bluetooth disconnects or audio-focus loss never resume through speakers.
+- `expectedPauseRef` marks deliberate pauses/source swaps. Unmarked DOM pauses reconcile intent to paused so Bluetooth disconnects or audio-focus loss never resume through speakers. Marks expire after 2 s, because a source swap flips `paused` without firing `pause` and a surviving mark would swallow a later genuine system pause.
 - A low-level Web Audio tone holds Bluetooth output awake while playing, preventing buffered audio bleed between tracks. Suspend it while idle.
 - Installed iOS PWAs also play `public/silence.m4a` through pauses and track-end loading gaps. A real media element is required because iOS suspends AudioContext in the background.
 - Player sessions persist queue/index/position to `wt-player-session` on hide/pagehide and rehydrate paused after an iOS discard. Restoring paused is required by autoplay and battery constraints.
 - MediaSession `seekto` is supported. Keep `seekbackward` / `seekforward` unset so iOS displays previous/next track controls.
 - On-device audio diagnostics are opt-in via `localStorage.setItem("wt-audio-debug", "1")`; logs persist under `wt-audio-log`.
 - Offline audio is served from `wt-audio` with Range-aware 206 responses. Downloads persist until manually deleted; downloaded playlists sync on online app load.
-- `PlayerQueueWarmers` preloads nearby art and the next three tracks. The iOS silence loop keeps background auto-advance/refill alive beyond that window.
+- `/downloads` is the offline entry point: its client UI lives in `downloads/layout.tsx` above an empty `loading.tsx` so the tab paints from Next's partial prefetch, and the SW serves it cache-first (redirecting other uncached navigations there after a 1 s grace).
+- `PlayerQueueWarmers` preloads nearby art and the next three tracks once the current track actually starts playing (2.5 s fallback), so warming never competes with the tapped track's first bytes. The iOS silence loop keeps background auto-advance/refill alive beyond that window.
 
 ## Operational constraints
 

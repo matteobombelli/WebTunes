@@ -16,12 +16,15 @@ export default function Dialog({
   onClose,
   children,
   wide = false,
+  fullScreenOnMobile = false,
 }: {
   title: string;
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
+  /** Below md the panel fills the viewport, like the Now Playing sheet. */
+  fullScreenOnMobile?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   // Stay mounted briefly after close so the exit animation can play.
@@ -93,11 +96,16 @@ export default function Dialog({
 
   if (!open && !closing) return null;
 
+  // Tailwind only sees complete class names, so each variant is spelled out.
+  const panelSize = fullScreenOnMobile
+    ? `flex h-dvh max-h-none max-w-none flex-col rounded-none border-0 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)] md:block md:h-auto md:max-h-[85vh] md:rounded-xl md:border md:border-border md:p-6 ${wide ? "md:max-w-2xl" : "md:max-w-sm"}`
+    : `max-h-[85vh] ${wide ? "max-w-2xl" : "max-w-sm"} rounded-xl border border-border p-6`;
+
   // z-[75]: above the mobile sheets (z-50/60) and the kebab menus (z-[70]) that
   // open dialogs (Edit details, delete confirms), below Toast (z-[80]).
   return (
     <div
-      className={`${open ? "animate-fade-in" : "animate-fade-out"} fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4`}
+      className={`${open ? "animate-fade-in" : "animate-fade-out"} fixed inset-0 z-[75] flex items-center justify-center bg-black/70 ${fullScreenOnMobile ? "p-0 md:p-4" : "p-4"}`}
       onClick={open ? onClose : undefined}
     >
       <div
@@ -107,9 +115,9 @@ export default function Dialog({
         aria-label={title}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={`${open ? "animate-pop-in" : "animate-pop-out"} max-h-[85vh] w-full ${wide ? "max-w-2xl" : "max-w-sm"} overflow-y-auto rounded-xl border border-border bg-surface-1 p-6 shadow-2xl outline-none`}
+        className={`${open ? "animate-pop-in" : "animate-pop-out"} w-full ${panelSize} overflow-y-auto bg-surface-1 shadow-2xl outline-none`}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex shrink-0 items-center justify-between">
           <h2 className="font-display text-lg font-semibold">{title}</h2>
           <IconButton onClick={onClose} aria-label="Close" className="text-fg-muted">
             <XIcon size={18} />

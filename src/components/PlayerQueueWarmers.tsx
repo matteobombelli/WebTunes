@@ -1,16 +1,41 @@
 "use client";
 
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import { artSrc } from "@/lib/api";
 import { PREFETCH_AHEAD, prefetchUpcoming } from "@/lib/offline/prefetch";
 import { usePlayerStore } from "@/stores/player";
 
+/** How long to wait for the current slot to report playback before warming anyway. */
+const WARM_FALLBACK_MS = 2500;
+
 /** Warm nearby art and upcoming audio without re-rendering the player bar. */
-export default memo(function PlayerQueueWarmers() {
+export default memo(function PlayerQueueWarmers({
+  startedUid,
+}: {
+  startedUid: string | null;
+}) {
   const queue = usePlayerStore((state) => state.queue);
   const index = usePlayerStore((state) => state.index);
+  const currentUid = index >= 0 ? (queue[index]?.uid ?? null) : null;
+  const [armedUid, setArmedUid] = useState<string | null>(null);
 
   useEffect(() => {
+    if (currentUid === null) return;
+    if (startedUid === currentUid) {
+      setArmedUid(currentUid);
+      return;
+    }
+    // Background iOS advances may never surface `playing`, and the next track
+    // must still be warmed or auto-advance stalls.
+    const t = setTimeout(() => setArmedUid(currentUid), WARM_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [currentUid, startedUid]);
+
+  // Derived, so a new tap un-arms instantly without an extra render.
+  const armed = armedUid !== null && armedUid === currentUid;
+
+  useEffect(() => {
+    if (!armed) return;
     const seen = new Set<string>();
     const nearby = [
       ...queue.slice(0, 10),
@@ -23,15 +48,16 @@ export default memo(function PlayerQueueWarmers() {
       const image = new Image();
       image.src = artSrc(track.id, { thumb: true });
     }
-  }, [index, queue]);
+  }, [armed, index, queue]);
 
   useEffect(() => {
+    if (!armed) return;
     if (index < 0) return;
     const nextIds = queue
       .slice(index + 1, index + 1 + PREFETCH_AHEAD)
       .map(({ track }) => track.id);
     prefetchUpcoming(queue[index]?.track.id, nextIds);
-  }, [index, queue]);
+  }, [armed, index, queue]);
 
   return null;
 });

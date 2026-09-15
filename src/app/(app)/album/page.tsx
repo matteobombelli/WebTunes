@@ -11,10 +11,12 @@ export default async function AlbumPage({
   searchParams: Promise<{ name?: string }>;
 }) {
   const user = await requirePageUser();
-  const { name } = await searchParams;
+  const [{ name }, settings] = await Promise.all([
+    searchParams,
+    getUserSettings(user.id),
+  ]);
   if (!name) notFound();
 
-  const settings = await getUserSettings(user.id);
   const tracks = await listTracksByAlbum(
     user.id,
     name,

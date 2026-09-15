@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { api } from "@/lib/api";
 import { BASE_PATH } from "@/lib/base-path";
 import { log } from "@/lib/log";
 import { useDownloadsStore } from "@/stores/downloads";
@@ -43,6 +44,20 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
       } catch {
         // ignore
       }
+      // The SW may have served another account's cached shell, whose userId
+      // would pass the guard above. Confirm against the session in parallel
+      // (a switch always needs the network, so offline is trustworthy) and
+      // start over from a purged, uncached state on a mismatch.
+      if (navigator.onLine) {
+        void api<{ id: string }>("/account").then(
+          async ({ id }) => {
+            if (id === userId) return;
+            await useDownloadsStore.getState().purgeForAccountSwitch();
+            location.reload();
+          },
+          () => {}
+        );
+      }
       // Hydrate the downloads store (and kick playlist auto-sync when online).
       void useDownloadsStore.getState().init();
       // Load the Play Similar exclusion list so kebab labels are correct.
@@ -55,7 +70,7 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
         scope: `${BASE_PATH}/`,
         updateViaCache: "none",
       })
-      .then(() => primeOfflineFallback())
+      .then(() => schedulePrime())
       .catch((err) => {
         // The SW is progressive enhancement; the app works without it.
         log.warn(
@@ -66,6 +81,25 @@ export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
       });
   }, [userId]);
   return null;
+}
+
+// Priming fetches the downloads page and all its chunks; on a slow link that
+// would compete with the page the user actually opened, so wait for idle.
+function schedulePrime() {
+  const idle = () => {
+    // Race the idle callback against a timer: a hidden document may never get
+    // an idle period, and priming must still happen eventually.
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      void primeOfflineFallback();
+    };
+    window.requestIdleCallback?.(run, { timeout: 10_000 });
+    setTimeout(run, 10_000);
+  };
+  if (document.readyState === "complete") idle();
+  else window.addEventListener("load", idle, { once: true });
 }
 
 // Cache the downloads page (the offline entry point) so it renders offline

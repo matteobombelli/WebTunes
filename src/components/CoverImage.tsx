@@ -75,6 +75,7 @@ export default function CoverImage({
       src={url}
       alt=""
       loading="lazy"
+      decoding="async"
       onError={onError}
       className={`object-cover ${className}`}
     />

@@ -10,10 +10,12 @@ export default async function ArtistPage({
   searchParams: Promise<{ name?: string }>;
 }) {
   const user = await requirePageUser();
-  const { name } = await searchParams;
+  const [{ name }, settings] = await Promise.all([
+    searchParams,
+    getUserSettings(user.id),
+  ]);
   if (!name) notFound();
 
-  const settings = await getUserSettings(user.id);
   const tracks = await listTracksByArtist(
     user.id,
     name,

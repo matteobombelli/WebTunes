@@ -23,6 +23,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api } from "@/lib/api";
+import { sortTracks, type SortKey, type SortState } from "@/lib/sort-tracks";
 import type { TrackDTO } from "@/lib/types";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import {
@@ -62,41 +63,6 @@ function formatDuration(seconds: number | null): string {
 const PAGE_SIZE = 50;
 // Where the swipe-to-queue icon sits, measured from the row's resting left edge.
 const ICON_INSET = 16;
-
-type SortKey = "title" | "artist" | "album" | "owner" | "duration" | "plays";
-type SortState = { key: SortKey; dir: 1 | -1 } | null;
-
-// U+FFFF sentinel sorts null fields after real values (ascending).
-const NULL_SENTINEL = "￿";
-
-// "owner" maps to ownerName (own tracks show as "You"), not a direct field.
-function sortText(
-  t: TrackDTO,
-  key: "title" | "artist" | "album" | "owner"
-): string {
-  if (key === "owner") return t.ownerName ?? "You";
-  return t[key] ?? NULL_SENTINEL;
-}
-
-function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
-  if (!sort) return tracks;
-  const copy = [...tracks];
-  copy.sort((a, b) => {
-    if (sort.key === "duration") {
-      return ((a.durationSec ?? -1) - (b.durationSec ?? -1)) * sort.dir;
-    }
-    if (sort.key === "plays") {
-      return (a.friendPlayCount - b.friendPlayCount) * sort.dir;
-    }
-    return (
-      sortText(a, sort.key).localeCompare(sortText(b, sort.key), undefined, {
-        sensitivity: "base",
-      }) * sort.dir
-    );
-  });
-  return copy;
-}
-
 
 // The "Select…" / "Reorder" mode toggles above the table.
 const MODE_TOGGLE_BTN =

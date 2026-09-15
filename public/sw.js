@@ -15,6 +15,10 @@
 //                 it holds user downloads that must outlive SW updates.
 //   wt-art      - downloaded track cover art, keyed by the stable art URL
 //                 (/api/tracks/:id/art). Same lifecycle as wt-audio.
+//   wt-art-runtime - recently viewed cover art, populated here on a miss so
+//                 repeat renders skip the presigned-redirect round trip.
+//                 Ephemeral and safe to drop (bounded by pruneRuntimeArt);
+//                 purged on account switch by src/lib/offline/downloads.ts.
 //   wt-prefetch - the next few upcoming tracks' audio, pre-cached (keyed by the
 //                 stable stream URL) while the current track plays so consecutive
 //                 background auto-advances are served from here instead of a live
@@ -27,11 +31,22 @@ const BASE_PATH = "/projects/webtunes";
 const SHELL_CACHE = "wt-shell-v2";
 const AUDIO_CACHE = "wt-audio";
 const ART_CACHE = "wt-art";
+const ART_RUNTIME_CACHE = "wt-art-runtime";
 const PREFETCH_CACHE = "wt-prefetch";
 const OFFLINE_FALLBACK = `${BASE_PATH}/downloads`;
+// Never bounce unauthenticated flows or token-bearing links to the downloads
+// page: a logged-out user must be able to reach the login form on a slow link,
+// and a redirect would drop the reset/verify/invite/share token from the URL.
+const NO_FALLBACK = new RegExp(
+  `^${BASE_PATH}/(login|register|forgot-password|reset-password|verify-email|demo|share)(/|$)`
+);
 
 const STREAM_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/stream$`);
-const ART_PATH = new RegExp(`^${BASE_PATH}/api/tracks/[^/]+/art$`);
+// Track art and explicit playlist covers share the runtime cache; only track
+// art can also be a download (wt-art).
+const ART_PATH = new RegExp(
+  `^${BASE_PATH}/api/(tracks/[^/]+/art|playlists/[^/]+/cover)$`
+);
 const CANONICAL_AUDIO_TYPE = {
   "audio/mpeg": "audio/mpeg",
   "audio/mp3": "audio/mpeg",
@@ -80,7 +95,7 @@ self.addEventListener("fetch", (event) => {
   if (STREAM_PATH.test(url.pathname)) {
     event.respondWith(serveStream(request));
   } else if (ART_PATH.test(url.pathname)) {
-    event.respondWith(serveArt(request));
+    event.respondWith(serveArt(event));
   } else if (url.pathname.startsWith(`${BASE_PATH}/_next/static/`)) {
     event.respondWith(cacheFirst(request));
   } else if (request.mode === "navigate") {
@@ -148,16 +163,20 @@ function safeAudioType(value) {
     "application/octet-stream";
 }
 
+// How long a runtime-cached image is served without revalidating.
+const ART_RUNTIME_TTL_MS = 60 * 60 * 1000;
+
 /**
- * Downloaded cover art. Cache hit → serve the stored image (no Range dance;
- * <img> requests don't need 206). Cache miss → network (the route 302s to a
- * presigned S3 URL, which the image request follows when online).
+ * Cover art. Downloads (wt-art) win; otherwise the runtime cache answers, and a
+ * miss fetches and stores the image so later renders skip the app hop and the
+ * presigned-redirect hop entirely. No Range dance - <img> requests don't need 206.
  *
  * Downloads only cache the full-art URL (no query), so a `?v=thumb` request
  * misses the exact-URL match; fall back to the cached full art (stripping the
  * query) so downloaded rows still show art offline.
  */
-async function serveArt(request) {
+async function serveArt(event) {
+  const { request } = event;
   const cache = await caches.open(ART_CACHE);
   let cached = await cache.match(request.url);
   if (!cached) {
@@ -167,7 +186,45 @@ async function serveArt(request) {
       cached = await cache.match(u.toString());
     }
   }
-  return cached || fetch(request);
+  if (cached) return cached;
+
+  const runtime = await caches.open(ART_RUNTIME_CACHE);
+  const hit = await runtime.match(request.url);
+  if (hit) {
+    const cachedAt = Number(hit.headers.get("x-wt-cached-at"));
+    if (!(Date.now() - cachedAt < ART_RUNTIME_TTL_MS)) {
+      event.waitUntil(refreshArt(runtime, request.url).catch(() => {}));
+    }
+    return hit;
+  }
+  return refreshArt(runtime, request.url).catch(() => fetch(request));
+}
+
+async function refreshArt(cache, url) {
+  // A CORS fetch (the 302 to S3 is followed cross-origin, which the bucket
+  // allows for this origin) is storable as-is; the opaque response a no-cors
+  // <img> fetch produces would be padded against Chrome's cache quota instead.
+  const res = await fetch(url, { mode: "cors", credentials: "same-origin" });
+  if (!res.ok) throw new Error(`art fetch failed (${res.status})`);
+  // Re-wrapping also drops the `redirected` flag, which a SW may not return.
+  const stored = new Response(await res.blob(), {
+    headers: {
+      "Content-Type": res.headers.get("Content-Type") || "application/octet-stream",
+      "x-wt-cached-at": String(Date.now()),
+    },
+  });
+  await cache.put(url, stored.clone());
+  if (++runtimeArtPuts % 50 === 0) await pruneRuntimeArt(cache);
+  return stored;
+}
+
+let runtimeArtPuts = 0;
+
+/** Bounds the ephemeral cache, dropping oldest first (keys() is insertion order). */
+async function pruneRuntimeArt(cache) {
+  const keys = await cache.keys();
+  if (keys.length <= 800) return;
+  await Promise.all(keys.slice(0, keys.length - 600).map((k) => cache.delete(k)));
 }
 
 /** null → no/unusable Range header (serve full); "invalid" → 416. */
@@ -201,21 +258,33 @@ async function cacheFirst(request) {
   return response;
 }
 
-// Grace period before a slow navigation falls back to cache. Long enough for a
-// healthy connection to answer, short enough that a bad one feels responsive.
-const NAV_TIMEOUT_MS = 2000;
+// Grace period before a slow navigation falls back to cache: one second, after
+// which any cached copy wins.
+const NAV_TIMEOUT_MS = 1000;
 
 /**
- * Page navigations: network-first with a grace period, so the app stays
- * fresh. A fast network wins as before; after NAV_TIMEOUT_MS (or a hard
- * network error) we fall back to the cached copy of the same page, then to
- * the downloads page (the one route designed to render fully offline). If
- * nothing is cached we keep waiting on the slow network - a late page always
- * beats an instant 503. A timed-out fetch is kept alive (event.waitUntil) so
- * its response still refreshes the cache for next time.
+ * Page navigations: network-first with a one-second grace period, so the app
+ * stays fresh while a bad connection still feels responsive.
+ *
+ * The downloads page is the exception: it renders entirely from IndexedDB, so
+ * a cached copy is served immediately and revalidated in the background. For
+ * every other page a fast network wins; after the grace period (or a hard
+ * network error) the cached copy of that same page is served, and if nothing
+ * is cached for it we redirect to the downloads page instead of serving its
+ * HTML under a foreign URL. Only when even that is missing do we keep waiting
+ * on the slow network - a late page beats an instant 503. A timed-out fetch is
+ * kept alive (event.waitUntil) so its response still refreshes the cache.
+ *
+ * After a deploy the stale cached HTML still boots: wt-shell-v2 keeps the
+ * previous build's hashed chunks, and the build-id mismatch turns the first
+ * soft navigation into a hard one (primeOfflineFallback re-primes once per
+ * session). A cached shell can carry another account's identity, which is why
+ * ServiceWorkerRegistrar confirms the session against /api/account and purges
+ * (wt-shell-v2 included) plus reloads on a mismatch.
  */
 async function serveNavigation(event) {
   const { request } = event;
+  const url = new URL(request.url);
   const cache = await caches.open(SHELL_CACHE);
 
   // Start the fetch immediately; successful responses refresh the cache
@@ -232,6 +301,17 @@ async function serveNavigation(event) {
   // fails after losing the race can't surface as an unhandled rejection.
   const networkSafe = network.catch(() => null);
 
+  // The downloads page renders entirely from IndexedDB, so a stale copy is as
+  // useful as a fresh one: serve it immediately and revalidate in the
+  // background. This is the one route that must open on any connection.
+  if (url.pathname === OFFLINE_FALLBACK) {
+    const shell = await cache.match(request);
+    if (shell) {
+      event.waitUntil(networkSafe);
+      return shell;
+    }
+  }
+
   let timer;
   const grace = new Promise((resolve) => {
     timer = setTimeout(() => resolve("timeout"), NAV_TIMEOUT_MS);
@@ -242,13 +322,27 @@ async function serveNavigation(event) {
   if (winner instanceof Response) return winner; // network answered in time
 
   // Slow ("timeout") or dead ("offline"): serve what we have.
-  const cached =
-    (await cache.match(request)) || (await cache.match(OFFLINE_FALLBACK));
+  const cached = await cache.match(request);
   if (cached) {
     // Stale-while-revalidate: keep the slow fetch alive so its cache.put
     // above still lands and the next visit is fresh.
     if (winner === "timeout") event.waitUntil(networkSafe);
     return cached;
+  }
+  // Nothing cached for this URL. Never serve the downloads HTML under another
+  // path (the Next router would hydrate a tree whose URL doesn't match it);
+  // redirect instead so the downloads page runs at its own URL. Loop-safe: the
+  // fallback path itself is excluded and must already be cached.
+  if (
+    url.pathname !== OFFLINE_FALLBACK &&
+    !NO_FALLBACK.test(url.pathname) &&
+    (await cache.match(OFFLINE_FALLBACK))
+  ) {
+    if (winner === "timeout") event.waitUntil(networkSafe);
+    return Response.redirect(
+      new URL(OFFLINE_FALLBACK, self.location.origin).href,
+      302
+    );
   }
 
   // Nothing cached. On a timeout, keep waiting - never replace a possible

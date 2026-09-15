@@ -128,7 +128,7 @@ function SettingsTab({
         <select
           value={options.quality}
           onChange={(e) => onChange({ quality: e.target.value as ImportQuality })}
-          className="rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-fg"
+          className="rounded-md border border-border bg-surface-2 px-3 py-2 text-base sm:text-sm text-fg"
         >
           {QUALITY_CHOICES.map((q) => (
             <option key={q.value} value={q.value}>

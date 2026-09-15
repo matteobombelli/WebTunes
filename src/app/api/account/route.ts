@@ -14,6 +14,14 @@ import { nameSchema, updateDisplayName } from "@/lib/users";
 const schema = z.object({ email: z.string() });
 const patchSchema = z.object({ name: nameSchema });
 
+// Identity of the session that actually holds the cookie. The client compares
+// it with the userId baked into a possibly cached page shell.
+export async function GET() {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+  return NextResponse.json({ id: user.id });
+}
+
 // Rename the signed-in user (the username). The database session reads
 // users.name fresh per request, so the new name surfaces everywhere on the
 // client's next refresh. Usernames are unique - a clash returns 409.

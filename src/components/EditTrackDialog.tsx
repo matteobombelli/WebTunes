@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, artSrc } from "@/lib/api";
 import { log } from "@/lib/log";
+import { evictRuntimeArt } from "@/lib/offline/art-cache";
 import type { TrackDTO } from "@/lib/types";
 import Dialog from "@/components/Dialog";
 import TrackArt from "@/components/TrackArt";
@@ -70,6 +71,9 @@ function EditTrackForm({
       // api() handles the basePath and error extraction; it sets no headers,
       // so the FormData boundary is preserved.
       await api(`/tracks/${track.id}/art`, { method: "POST", body: form });
+      // The art URL is stable, so the service worker's runtime copy of the
+      // previous image would keep winning everywhere else in the app.
+      void evictRuntimeArt(new URL(artSrc(track.id), location.origin).href);
       setArtPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(file);

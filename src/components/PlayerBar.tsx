@@ -38,6 +38,9 @@ const SESSION_KEY = "wt-player-session";
 /** Bounded retry/reload budget per track load, for background play() recovery. */
 const MAX_ATTEMPTS = 4;
 
+/** How long a deliberate-pause mark stays valid before it is treated as stale. */
+const EXPECTED_PAUSE_MS = 2000;
+
 const LISTEN_CHECKPOINT_SECONDS = 60;
 
 type ListenSession = {
@@ -87,8 +90,11 @@ export default function PlayerBar({
   const pendingPlayRef = useRef(false);
   // Bounded recovery budget per track load (reset on load and on foreground).
   const recoverAttemptsRef = useRef(0);
-  // Distinguishes deliberate element pauses from system/audio-focus pauses.
-  const expectedPauseRef = useRef(false);
+  // Distinguishes deliberate element pauses from system/audio-focus pauses,
+  // as the timestamp of the mark: assigning src flips `paused` without firing
+  // `pause`, so a source-swap mark can outlive its transition. Expiring it stops
+  // that leftover from swallowing a later genuine system pause.
+  const expectedPauseRef = useRef(0);
   // Track-bound restore target prevents a delayed seek leaking to another song.
   const restoredPositionRef = useRef<{
     trackId: string;
@@ -130,6 +136,9 @@ export default function PlayerBar({
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   // Latches the lazy overlay bundle once idle or explicitly opened.
   const [overlaysReady, setOverlaysReady] = useState(false);
+  // Set when the element reports real playback for a slot; gates queue warming
+  // so art/next-track fetches never compete with the tapped track's first bytes.
+  const [playingUid, setPlayingUid] = useState<string | null>(null);
   // Stable callbacks preserve QueuePanel memoization.
   const closeQueue = useCallback(() => setQueueOpen(false), [setQueueOpen]);
   const closeNp = useCallback(() => setNpOpen(false), []);
@@ -458,6 +467,7 @@ export default function PlayerBar({
   // Retry transient network failures in place; skip hard/exhausted failures.
   const onAudioError = () => {
     const audio = audioRef.current;
+    if (loadedUidRef.current !== currentUid) return; // outgoing slot: a tap already moved on
     const mediaErr = audio?.error;
     logAudio("error", mediaErr ? `code=${mediaErr.code}` : "");
     if (!usePlayerStore.getState().isPlaying) return;
@@ -528,7 +538,8 @@ export default function PlayerBar({
     }
     loadedTrackIdRef.current = track.id;
     // Source swaps emit pause; mark it deliberate before assignment.
-    if (!audio.paused) expectedPauseRef.current = true;
+    // eslint-disable-next-line react-hooks/purity -- effect body, not render
+    if (!audio.paused) expectedPauseRef.current = Date.now();
     // A media fragment restores cold iOS sessions at load time; the fragment is
     // client-only, so the service-worker cache key remains the stable URL.
     if (requestedPosition != null) {
@@ -581,7 +592,8 @@ export default function PlayerBar({
         setPlaybackState("paused");
         updatePositionState(pausedPosRef.current ?? undefined);
       });
-      if (!audio.paused) expectedPauseRef.current = true;
+      // eslint-disable-next-line react-hooks/purity -- effect body, not render
+      if (!audio.paused) expectedPauseRef.current = Date.now();
       audio.pause();
       keepAliveRef.current?.suspend().catch(() => {});
       updatePositionState(pausedPosRef.current ?? undefined); // pin to frozen position
@@ -856,7 +868,7 @@ export default function PlayerBar({
 
   return (
     <div className="relative border-t border-border-subtle bg-surface-1">
-      <PlayerQueueWarmers />
+      <PlayerQueueWarmers startedUid={playingUid} />
       {overlaysReady && (
         <>
           <QueuePanel open={queueOpen} onClose={closeQueue} variant="desktop" />
@@ -878,7 +890,8 @@ export default function PlayerBar({
         onPlaying={(e) => {
           logAudio("playing");
           pendingPlayRef.current = false; // playback truly began: nothing owed
-          expectedPauseRef.current = false; // ...and no deliberate pause is pending
+          expectedPauseRef.current = 0; // ...and no deliberate pause is pending
+          setPlayingUid(currentUid);
           pausedPosRef.current = null; // resumed: stop pinning the frozen scrubber
           silenceRef.current?.pause(); // the track holds the session again
           setPlaybackState("playing");
@@ -930,6 +943,7 @@ export default function PlayerBar({
         }}
         onError={onAudioError}
         onEnded={() => {
+          if (loadedUidRef.current !== currentUid) return; // outgoing slot: a tap already moved on
           logAudio("ended");
           finishListenSession(audioRef.current);
           // Keep locked-page networking alive through the track-end gap.
@@ -949,9 +963,13 @@ export default function PlayerBar({
             "pause",
             `exp=${expectedPauseRef.current} ended=${audio.ended} playing=${playing} vis=${document.visibilityState}`
           );
-          // Consume deliberate pauses before reconciling system pauses.
-          if (expectedPauseRef.current) {
-            expectedPauseRef.current = false;
+          // Consume deliberate pauses before reconciling system pauses; an
+          // expired mark is stale and must not suppress the reconcile.
+          if (
+            expectedPauseRef.current &&
+            Date.now() - expectedPauseRef.current < EXPECTED_PAUSE_MS
+          ) {
+            expectedPauseRef.current = 0;
             return;
           }
           if (audio.ended) return; // natural track end → onEnded advances

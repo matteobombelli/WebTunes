@@ -44,10 +44,11 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
 
 const PRESIGN_TTL_SEC = 3600;
 // Reuse a freshly-signed URL briefly to avoid repeated signing work when list
-// views request the same object. Authenticated redirect routes are no-store;
-// callers that receive the URL directly can still benefit from target caching.
-// The short window also ensures a reused URL retains at least 55 min validity.
-const PRESIGN_REUSE_MS = 5 * 60 * 1000;
+// views request the same object. The authenticated redirect routes cache their
+// 302 for exactly this window, so a cached redirect (up to 300 s old, minted
+// from a URL up to 300 s old) always points at a URL with >= 50 min left.
+export const PRESIGN_REUSE_SEC = 300;
+const PRESIGN_REUSE_MS = PRESIGN_REUSE_SEC * 1000;
 const PRESIGN_CACHE_CAP = 2000;
 const presignCache = new Map<string, { url: string; signedAt: number }>();
 
@@ -69,7 +70,13 @@ export async function getPresignedGetUrl(
   }
   const url = await getSignedUrl(
     s3,
-    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      // Signed into the query so it can't be tampered with; without it the
+      // browser falls back to heuristic freshness for the object response.
+      ResponseCacheControl: "private, max-age=86400",
+    }),
     { expiresIn: expiresInSec }
   );
   if (expiresInSec === PRESIGN_TTL_SEC) {
@@ -89,4 +96,25 @@ export async function getPresignedGetUrl(
     presignCache.set(key, { url, signedAt: now });
   }
   return { url, expiresAt: new Date(now + expiresInSec * 1000) };
+}
+
+let originPromise: Promise<string> | null = null;
+
+/**
+ * Origin the presigned URLs point at, for a document-level preconnect. Derived
+ * by signing a throwaway key (local HMAC, no network) rather than rebuilt from
+ * S3_ENDPOINT, because whether the SDK uses path or virtual-host style depends
+ * on the endpoint and bucket name. Bypasses the presign cache via a custom TTL.
+ */
+export function storageOrigin(): Promise<string> {
+  if (!originPromise) {
+    originPromise = getPresignedGetUrl("preconnect", 60).then(
+      ({ url }) => new URL(url).origin,
+      (err) => {
+        originPromise = null; // don't memoize a transient credential failure
+        throw err;
+      }
+    );
+  }
+  return originPromise;
 }

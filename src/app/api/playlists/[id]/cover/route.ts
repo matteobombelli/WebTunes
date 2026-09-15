@@ -9,7 +9,12 @@ import {
   getEditablePlaylist,
   toPlaylistDTO,
 } from "@/lib/playlists";
-import { deleteObject, getPresignedGetUrl, uploadObject } from "@/lib/s3";
+import {
+  deleteObject,
+  getPresignedGetUrl,
+  PRESIGN_REUSE_SEC,
+  uploadObject,
+} from "@/lib/s3";
 
 // Stable per-playlist cover URL (mirrors the track /art route): the client keys
 // on this URL while the presigned redirect target rotates per request, so a
@@ -31,8 +36,11 @@ export async function GET(
 
   const { url } = await getPresignedGetUrl(playlist.coverS3Key);
   const res = NextResponse.redirect(url, 302);
-  // The stable path is shared across account switches in a browser profile.
-  res.headers.set("Cache-Control", "private, no-store");
+  // Cached for the presign reuse window so repeat renders skip both the app
+  // hop and the R2 hop. `private` keeps the redirect out of shared caches; the
+  // stable path is shared across account switches in a browser profile, so a
+  // switch can surface already-fetched cover art for at most that window.
+  res.headers.set("Cache-Control", `private, max-age=${PRESIGN_REUSE_SEC}`);
   return res;
 }
 

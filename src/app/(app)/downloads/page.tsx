@@ -1,7 +1,5 @@
-import DownloadsBrowser from "@/components/DownloadsBrowser";
-
-// This page must render fully offline: all data comes from IndexedDB in the
-// client component. Keep it free of server-side data fetching.
+// The UI lives in layout.tsx (above this route's loading boundary) so the page
+// paints from Next's partial prefetch without waiting on an RSC round trip.
 export default function DownloadsPage() {
-  return <DownloadsBrowser />;
+  return null;
 }

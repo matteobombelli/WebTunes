@@ -16,10 +16,13 @@ export const metadata: Metadata = {
   description: "Your personal music library, anywhere",
 };
 
-// Keep the standard mobile viewport while allowing browser pinch zoom.
+// Zoom is locked because an accidental pinch or input-focus zoom breaks the fixed
+// player and nav chrome; iOS ignores this for pinch but honours it on input focus.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
