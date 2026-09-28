@@ -7,7 +7,6 @@ import { flatExtract } from "@/lib/import/ytdlp";
 import { log } from "@/lib/log";
 import {
   appendImportedTrack,
-  playlistUpdatedAt,
   recordAction,
   undoAction,
 } from "@/lib/mcp/actions";
@@ -115,7 +114,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
             playlistId: playlist.id,
             name,
             trackIds: added,
-            updatedAt: await playlistUpdatedAt(tx, playlist.id),
+            isPrivate: isPrivate ?? false,
           },
         });
         return { playlist, added, recorded };

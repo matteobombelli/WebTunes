@@ -12,6 +12,7 @@ import {
 import { cancelJob, getJob } from "@/lib/import/jobs";
 import {
   deleteOwnedPlaylist,
+  getPlaylistTrackIds,
   insertPlaylistTracksAt,
   lockEditablePlaylist,
   removePlaylistTracks,
@@ -67,8 +68,7 @@ const payloadSchemas = {
     playlistId: id,
     name: z.string(),
     trackIds: z.array(id),
-    /** playlists.updated_at as Postgres text, keeping the microseconds a Date would drop. */
-    updatedAt: z.string(),
+    isPrivate: z.boolean().optional(),
   }),
   "playlist.update": z.object({
     ...playlistIdentity,
@@ -163,18 +163,6 @@ export async function recordAction(
     id: row.id,
     undoableUntil: new Date(row.createdAt.getTime() + MCP_UNDO_WINDOW_MS),
   };
-}
-
-/** playlists.updated_at as text, for the playlist.create payload. */
-export async function playlistUpdatedAt(
-  tx: DbTransaction,
-  playlistId: string
-): Promise<string> {
-  const [row] = await tx
-    .select({ updatedAt: sql<string>`${playlists.updatedAt}::text` })
-    .from(playlists)
-    .where(eq(playlists.id, playlistId));
-  return row.updatedAt;
 }
 
 /**
@@ -439,19 +427,23 @@ async function undoPlaylistCreate(
     out.skipped.push({ item: label, reason: "Only the owner can delete it" });
     return out;
   }
-  // Every name, privacy and membership change bumps updated_at; covers and
-  // collaborators do not, so they are checked directly.
-  const [state] = await tx
-    .select({
-      sameVersion: sql<boolean>`${playlists.updatedAt} = ${p.updatedAt}::timestamp`,
-      hasCollaborators: sql<boolean>`exists (
-        select 1 from ${playlistCollaborators}
-        where ${playlistCollaborators.playlistId} = ${p.playlistId})`,
-    })
-    .from(playlists)
-    .where(eq(playlists.id, p.playlistId));
+  // Compares state, not updated_at: undoing later MCP actions restores the
+  // contents but still bumps updated_at.
+  const [currentIds, collaborators] = await Promise.all([
+    getPlaylistTrackIds(p.playlistId, tx),
+    tx
+      .select({ userId: playlistCollaborators.userId })
+      .from(playlistCollaborators)
+      .where(eq(playlistCollaborators.playlistId, p.playlistId))
+      .limit(1),
+  ]);
   const unchanged =
-    state.sameVersion && !state.hasCollaborators && playlist.coverS3Key === null;
+    playlist.name === p.name &&
+    (p.isPrivate === undefined || playlist.isPrivate === p.isPrivate) &&
+    currentIds.length === p.trackIds.length &&
+    currentIds.every((trackId, i) => trackId === p.trackIds[i]) &&
+    collaborators.length === 0 &&
+    playlist.coverS3Key === null;
   if (!unchanged) {
     const later = await tx
       .select({ summary: mcpActions.summary })
