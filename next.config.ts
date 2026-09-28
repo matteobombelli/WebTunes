@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // Next/Tailwind require inline bootstrap/styles; dev HMR also needs unsafe-eval.
 // HTTPS media/connect sources permit rotating presigned storage hosts.
-const csp = [
+const cspBase = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
@@ -16,9 +16,10 @@ const csp = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'self' https://matteob.dev",
-]
-  .join("; ");
+];
+const csp = [...cspBase, "frame-ancestors 'self' https://matteob.dev"].join("; ");
+// The OAuth consent page must never be framed (clickjacking of "Allow").
+const consentCsp = [...cspBase, "frame-ancestors 'none'"].join("; ");
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
@@ -62,6 +63,11 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      // Must follow /:path*: for a duplicate key the last matching rule wins.
+      {
+        source: "/oauth/authorize",
+        headers: [{ key: "Content-Security-Policy", value: consentCsp }],
       },
     ];
   },

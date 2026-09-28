@@ -1,0 +1,12 @@
+[Unit]
+Description=WebTunes purge of expired MCP undo-log and OAuth state
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hs
+WorkingDirectory=/home/hs/WebTunes
+# Invoke node directly: a login shell (`sh -lc`) dies sourcing
+# /etc/profile.d/devpkg-helpers.sh, whose dashed function names dash rejects.
+ExecStart=/usr/bin/node scripts/purge-mcp-state.mjs

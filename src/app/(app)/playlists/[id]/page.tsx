@@ -1,13 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePageUser } from "@/lib/auth-helpers";
-import {
-  getAccessiblePlaylist,
-  getPlaylistRole,
-  getPlaylistTracks,
-  listCollaborators,
-  toPlaylistDTO,
-} from "@/lib/playlists";
-import { getDisplayName } from "@/lib/users";
+import { getPlaylistWithTracks, listCollaborators } from "@/lib/playlists";
+import { isUuid } from "@/lib/validate";
 import PlaylistDetail from "@/components/PlaylistDetail";
 
 export default async function PlaylistPage({
@@ -18,24 +12,22 @@ export default async function PlaylistPage({
   const user = await requirePageUser();
 
   const { id } = await params;
-  const playlist = await getAccessiblePlaylist(id, user.id);
-  if (!playlist) notFound();
-
-  const isOwner = playlist.ownerId === user.id;
-  const [trackDTOs, ownerName, role, collaborators] = await Promise.all([
-    getPlaylistTracks(id, user.id),
-    isOwner ? Promise.resolve(null) : getDisplayName(playlist.ownerId),
-    getPlaylistRole(id, user.id),
-    listCollaborators(id),
+  // Collaborators load alongside the access check (discarded on 404); the id
+  // guard keeps a malformed id from reaching the uuid column.
+  const [data, collaborators] = await Promise.all([
+    getPlaylistWithTracks(id, user.id),
+    isUuid(id) ? listCollaborators(id) : Promise.resolve([]),
   ]);
+  if (!data) notFound();
+  const { tracks, ...playlist } = data;
 
   return (
     <PlaylistDetail
-      playlist={await toPlaylistDTO(playlist, trackDTOs.length, ownerName, role)}
-      tracks={trackDTOs}
+      playlist={playlist}
+      tracks={tracks}
       viewerId={user.id}
-      isOwner={isOwner}
-      canEdit={role !== null}
+      isOwner={playlist.ownerId === user.id}
+      canEdit={playlist.role !== null}
       collaborators={collaborators}
     />
   );

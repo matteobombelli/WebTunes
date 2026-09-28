@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { use, useActionState, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { loginAction, type AuthFormState } from "../actions";
@@ -56,7 +56,12 @@ function ResendVerification({ email }: { email: string }) {
   );
 }
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const { next } = use(searchParams);
   const [state, formAction, pending] = useActionState(
     loginAction,
     initialState
@@ -65,6 +70,9 @@ export default function LoginPage() {
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <h2 className="font-display text-lg font-semibold">Sign in</h2>
+      {typeof next === "string" && (
+        <input type="hidden" name="next" value={next} />
+      )}
       <Input
         name="email"
         type="email"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Purge expired WebTunes MCP undo-log and OAuth state daily
+
+[Timer]
+OnCalendar=*-*-* 04:50:00
+# Fire on next boot if the box was down at the scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

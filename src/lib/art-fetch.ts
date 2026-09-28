@@ -1,8 +1,8 @@
 import { spawn } from "child_process";
-import { isIP } from "net";
 import { withFfmpeg } from "@/lib/ffmpeg-gate";
 import { imageKindFromBytes } from "@/lib/image-upload";
 import { log } from "@/lib/log";
+import { isPublicHttpsUrl } from "@/lib/safe-url";
 import type { CoverArt } from "@/lib/metadata-lookup";
 
 // Fetch cover art for server-side import metadata (Spotify/Apple artwork, or a
@@ -22,30 +22,6 @@ const CROP_TIMEOUT_MS = 15_000;
 const USER_AGENT = "WebTunes/0.1 (personal project)";
 
 /**
- * SSRF guard: this is the one outbound fetch whose URL a client controls, so
- * require a public-web-shaped https URL - no IP literals, localhost, or
- * internal-suffix hosts (blocks loopback/LAN/cloud-metadata targets). Not
- * DNS-rebinding-proof, but with redirects disabled below it closes the doors
- * an art URL has no business opening.
- */
-function isAllowedArtUrl(raw: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== "https:") return false;
-  const host = url.hostname.toLowerCase();
-  const bare =
-    host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  if (isIP(bare) !== 0) return false;
-  if (host === "localhost" || host.endsWith(".localhost")) return false;
-  if (host.endsWith(".local") || host.endsWith(".internal")) return false;
-  return host.includes(".");
-}
-
-/**
  * Download cover art from `url`. When `cropSquare` is set (YouTube's 16:9
  * thumbnails), center-crop to a square first - mirrors the reference
  * exporter's `_fetch_art(crop_square=True)`. Returns null on any failure.
@@ -54,7 +30,7 @@ export async function fetchCoverArt(
   url: string,
   opts?: { cropSquare?: boolean }
 ): Promise<CoverArt | null> {
-  if (!isAllowedArtUrl(url)) return null;
+  if (!isPublicHttpsUrl(url)) return null;
   let buf: Buffer;
   try {
     const res = await fetch(url, {

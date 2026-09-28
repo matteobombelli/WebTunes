@@ -31,6 +31,12 @@ type Item = ImportItemDTO & {
   track: SourceTrack | null;
 };
 
+export type ImportHooks = {
+  /** Called for each genuinely new track (not dedupe hits or promoted
+   * suggestions). A throwing hook is logged and never fails the item. */
+  onTrackCreated?: (trackId: string) => Promise<void> | void;
+};
+
 type Job = {
   id: string;
   userId: string;
@@ -44,6 +50,7 @@ type Job = {
   createdAt: Date;
   finishedAt: Date | null;
   abort: AbortController;
+  hooks: ImportHooks;
 };
 
 const MAX_PLAYLIST_TRACKS = 500;
@@ -98,7 +105,8 @@ function toDTO(job: Job): ImportJobDTO {
 export function startImport(
   userId: string,
   url: string,
-  opts: ImportOptions
+  opts: ImportOptions,
+  hooks: ImportHooks = {}
 ): { ok: true; jobId: string } | { ok: false; error: string } {
   prune();
   const kind = classifyUrl(url);
@@ -118,6 +126,7 @@ export function startImport(
     createdAt: new Date(),
     finishedAt: null,
     abort: new AbortController(),
+    hooks,
   };
   jobs.set(job.id, job);
   queue.push(job);
@@ -134,6 +143,12 @@ export function listJobs(userId: string): ImportJobDTO[] {
     .filter((j) => j.userId === userId)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map(toDTO);
+}
+
+export function getJob(userId: string, jobId: string): ImportJobDTO | null {
+  prune();
+  const job = jobs.get(jobId);
+  return job && job.userId === userId ? toDTO(job) : null;
 }
 
 export function cancelJob(userId: string, jobId: string): boolean {
@@ -405,6 +420,17 @@ async function runItem(job: Job, item: Item, tag: string): Promise<void> {
     } else {
       item.status = "done";
       log.info("import", `imported ${result.track.id} from ${videoUrl.slice(0, 200)}`);
+      if (!result.promoted && job.hooks.onTrackCreated) {
+        try {
+          await job.hooks.onTrackCreated(result.track.id);
+        } catch (err) {
+          log.warn(
+            "import",
+            `onTrackCreated hook failed for ${result.track.id}`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      }
     }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});

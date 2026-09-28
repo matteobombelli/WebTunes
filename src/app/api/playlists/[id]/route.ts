@@ -1,19 +1,14 @@
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
-import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import {
-  getAccessiblePlaylist,
+  deleteOwnedPlaylist,
   getEditablePlaylist,
-  getOwnPlaylist,
-  getPlaylistRole,
-  getPlaylistTracks,
+  getPlaylistWithTracks,
   toPlaylistDTO,
+  updatePlaylist,
 } from "@/lib/playlists";
-import { deleteObject } from "@/lib/s3";
-import { getDisplayName } from "@/lib/users";
+import { deleteObjectsBestEffort } from "@/lib/s3";
 
 type Params = RouteContext<"/api/playlists/[id]">;
 
@@ -22,21 +17,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getAccessiblePlaylist(id, user.id);
+  const playlist = await getPlaylistWithTracks(id, user.id);
   if (!playlist) {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
-
-  const isOwner = playlist.ownerId === user.id;
-  const [trackDTOs, ownerName, role] = await Promise.all([
-    getPlaylistTracks(id, user.id),
-    isOwner ? Promise.resolve(null) : getDisplayName(playlist.ownerId),
-    getPlaylistRole(id, user.id),
-  ]);
-  return NextResponse.json({
-    ...(await toPlaylistDTO(playlist, trackDTOs.length, ownerName, role)),
-    tracks: trackDTOs,
-  });
+  return NextResponse.json(playlist);
 }
 
 const patchSchema = z
@@ -53,38 +38,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  // Editors (owner or collaborator) may rename; toggling privacy is owner-only.
-  const playlist = await getEditablePlaylist(id, user.id);
-  if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-  }
-
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
+    // An inaccessible playlist is a 404 even when the body is also invalid.
+    if (!(await getEditablePlaylist(id, user.id))) {
+      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+    }
     return NextResponse.json({ error: "Invalid playlist update" }, { status: 400 });
   }
 
-  const { name, isPrivate } = parsed.data;
-  if (isPrivate !== undefined && playlist.ownerId !== user.id) {
+  const result = await updatePlaylist(id, user.id, parsed.data);
+  if (result.status === "not_found") {
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  if (result.status === "forbidden") {
     return NextResponse.json(
       { error: "Only the owner can change privacy" },
       { status: 403 }
     );
   }
-  const [updated] = await db
-    .update(playlists)
-    .set({
-      ...(name !== undefined && { name }),
-      ...(isPrivate !== undefined && { isPrivate }),
-      updatedAt: new Date(),
-    })
-    .where(eq(playlists.id, id))
-    .returning();
-  // Deleted between the ownership check and the update.
-  if (!updated) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-  }
-  return NextResponse.json(await toPlaylistDTO(updated));
+  return NextResponse.json(await toPlaylistDTO(result.playlist));
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
@@ -92,18 +65,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getOwnPlaylist(id, user.id);
-  if (!playlist) {
+  const result = await deleteOwnedPlaylist(id, user.id);
+  if (result.status === "not_found") {
     return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
   }
-
-  await db.delete(playlists).where(eq(playlists.id, id));
-  if (playlist.coverS3Key) {
-    try {
-      await deleteObject(playlist.coverS3Key);
-    } catch {
-      // Orphaned cover object is harmless.
-    }
-  }
+  await deleteObjectsBestEffort(result.objectKeys);
   return new NextResponse(null, { status: 204 });
 }

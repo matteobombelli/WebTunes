@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { rejectSuggestedImport } from "@/lib/suggested-imports";
+import { deleteObjectsBestEffort } from "@/lib/s3";
+import {
+  rejectSuggestedImport,
+  wakeSuggestedImportWorker,
+} from "@/lib/suggested-imports";
 import { isUuid } from "@/lib/validate";
 
 export async function POST(
@@ -23,5 +27,7 @@ export async function POST(
       { status: 409 }
     );
   }
+  await deleteObjectsBestEffort(result.objectKeys);
+  wakeSuggestedImportWorker();
   return new NextResponse(null, { status: 204 });
 }

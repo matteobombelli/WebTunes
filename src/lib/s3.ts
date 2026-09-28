@@ -6,6 +6,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import type { Readable } from "stream";
+import { log } from "@/lib/log";
 
 // Works against MinIO in dev and Cloudflare R2 in prod (both via S3_ENDPOINT)
 // with no code change.
@@ -34,6 +35,25 @@ export async function uploadObject(
 
 export async function deleteObject(key: string) {
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+}
+
+/**
+ * Delete objects one at a time in the given order, logging and skipping any
+ * failure. Call only after the owning rows' deletion has committed: an orphaned
+ * object is harmless, a row pointing at a deleted object is not.
+ */
+export async function deleteObjectsBestEffort(keys: string[]): Promise<void> {
+  for (const key of keys) {
+    try {
+      await deleteObject(key);
+    } catch (err) {
+      log.warn(
+        "s3",
+        `Could not delete object ${key}`,
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
 }
 
 /** Download an object's full bytes into a Buffer (server-side use only). */

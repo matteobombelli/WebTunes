@@ -35,6 +35,12 @@ export const dbPool = pool;
 
 export const db = drizzle(pool, { schema });
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** The pool or an open transaction; lib writes accept either so a caller can
+ * compose them into its own transaction. */
+export type DbExecutor = typeof db | DbTransaction;
+
 /**
  * True when an error is (or wraps) a Postgres unique-constraint violation,
  * so check-then-insert flows can return their friendly 409 instead of a 500

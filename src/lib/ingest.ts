@@ -75,7 +75,8 @@ function audioKind(filename: string, mimeType: string): AudioKind | null {
 }
 
 type IngestResult =
-  | { status: "created"; track: Track }
+  // `promoted`: an existing staged suggestion became this library track.
+  | { status: "created"; track: Track; promoted?: true }
   | { status: "duplicate"; message: string };
 
 /**
@@ -188,7 +189,7 @@ export async function ingestTrack({
         }
         return row;
       });
-      if (promoted) return { status: "created", track: promoted };
+      if (promoted) return { status: "created", track: promoted, promoted: true };
     }
     return {
       status: "duplicate",

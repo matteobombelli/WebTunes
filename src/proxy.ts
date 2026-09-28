@@ -17,6 +17,8 @@ export function proxy(req: NextRequest) {
   const pathname = nextUrl.pathname;
 
   if (pathname.startsWith("/api")) return NextResponse.next();
+  // OAuth discovery documents are fetched by unauthenticated MCP clients.
+  if (pathname.startsWith("/.well-known/")) return NextResponse.next();
 
   const hasSessionCookie =
     req.cookies.has("authjs.session-token") ||
@@ -31,6 +33,10 @@ export function proxy(req: NextRequest) {
   if (!hasSessionCookie && !isAuthPage && !isPublicPage) {
     const url = nextUrl.clone();
     url.pathname = "/login";
+    // Return to the consent screen after signing in (see loginAction).
+    if (pathname === "/oauth/authorize") {
+      url.search = `?next=${encodeURIComponent(pathname + nextUrl.search)}`;
+    }
     return NextResponse.redirect(url);
   }
   // The reverse ("cookie present + auth page → /library") is intentionally NOT

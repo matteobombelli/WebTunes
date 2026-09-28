@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
-import { playlists } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import {
+  createPlaylist,
   listAccessiblePlaylists,
   listPlaylistsWithCount,
   toPlaylistDTO,
@@ -31,10 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Playlist name is required" }, { status: 400 });
   }
 
-  const [playlist] = await db
-    .insert(playlists)
-    .values({ ownerId: user.id, name: parsed.data.name })
-    .returning();
+  const playlist = await createPlaylist(user.id, parsed.data.name);
   return NextResponse.json(await toPlaylistDTO(playlist, 0, null, "owner"), {
     status: 201,
   });

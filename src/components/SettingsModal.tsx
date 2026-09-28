@@ -10,6 +10,7 @@ import { useExclusionsStore } from "@/stores/exclusions";
 import { useToastStore } from "@/stores/toast";
 import Dialog from "@/components/Dialog";
 import ExcludedSongsList from "@/components/ExcludedSongsList";
+import McpSettingsSection from "@/components/McpSettingsSection";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ChevronRightIcon } from "@/components/icons";
@@ -315,6 +316,8 @@ export default function SettingsModal({
             <span>Show the tutorial</span>
             <ChevronRightIcon size={14} className="text-fg-muted" />
           </button>
+
+          <McpSettingsSection />
 
           <div className="mt-6 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-red-400">Danger zone</h3>

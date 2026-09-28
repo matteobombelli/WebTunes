@@ -87,6 +87,15 @@ minimum.
   track, stream, playlist-add, and search routes).
 - **basePath**: single source of truth in `src/lib/base-path.ts` (imported by
   `next.config.ts` and the client fetch wrapper `lib/api.ts`).
+- **MCP**: `/api/mcp` is a Model Context Protocol server, so assistants such
+  as Claude can search, build playlists, read stats, import and triage
+  suggestions for a signed-in user. It authenticates with a built-in OAuth 2.1
+  server (`src/lib/oauth/`). Connect by adding the URL
+  `https://<host>/projects/webtunes/api/mcp` as a custom connector (Claude) or
+  with `claude mcp add --transport http webtunes <url>` (Claude Code), then log
+  in and approve. Every change made through MCP is recorded and can be undone
+  for 30 days, from the `undo_action` tool or from Settings, which also lists
+  and disconnects connected apps.
 - **Auth gotcha**: credentials provider + database sessions requires the
   `jwt.encode` override in `lib/auth.ts`; do not set `session.strategy`
   explicitly (see comment there).

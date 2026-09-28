@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { cache } from "react";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type DbExecutor } from "@/db";
 import { trackShares, tracks } from "@/db/schema";
 
 // Public track-share links. A row is an unguessable capability: anyone holding
@@ -31,8 +31,11 @@ type ResolvedShare = {
 // The currently-active (non-expired) link for a track, or null. Serves the
 // GET /api/tracks/[id]/shares endpoint (unused by the web client, which mints
 // via POST - kept for the future mobile client).
-export async function getActiveShare(trackId: string): Promise<ShareLink | null> {
-  const [row] = await db
+export async function getActiveShare(
+  trackId: string,
+  exec: DbExecutor = db
+): Promise<ShareLink | null> {
+  const [row] = await exec
     .select({ token: trackShares.token, expiresAt: trackShares.expiresAt })
     .from(trackShares)
     .where(
@@ -45,14 +48,16 @@ export async function getActiveShare(trackId: string): Promise<ShareLink | null>
 // upsert on the UNIQUE(track_id): an EXPIRED row is replaced (fresh token + 7
 // days), an ACTIVE row is left untouched (re-sharing returns the same URL - to
 // reset the clock the owner revokes then re-shares). This closes the
-// create-create race where two callers would otherwise both insert.
+// create-create race where two callers would otherwise both insert. `created`
+// is true only when this call minted the returned token.
 export async function createOrGetShare(
   trackId: string,
-  userId: string
-): Promise<ShareLink> {
+  userId: string,
+  exec: DbExecutor = db
+): Promise<ShareLink & { created: boolean }> {
   const token = randomBytes(18).toString("base64url");
   const expiresAt = new Date(Date.now() + SHARE_TTL_MS);
-  const [row] = await db
+  const [row] = await exec
     .insert(trackShares)
     .values({ trackId, createdBy: userId, token, expiresAt })
     .onConflictDoUpdate({
@@ -62,13 +67,13 @@ export async function createOrGetShare(
     })
     .returning({ token: trackShares.token, expiresAt: trackShares.expiresAt });
   // Inserted, or replaced an expired row → DO UPDATE ran and returned the row.
-  if (row) return row;
+  if (row) return { ...row, created: true };
   // Conflict with an active row (setWhere was false → no row returned): return it.
-  const existing = await getActiveShare(trackId);
-  if (existing) return existing;
+  const existing = await getActiveShare(trackId, exec);
+  if (existing) return { ...existing, created: false };
   // The active row expired in the microseconds between the upsert and the read;
   // retry once - now the setWhere matches and the expired row is replaced.
-  return createOrGetShare(trackId, userId);
+  return createOrGetShare(trackId, userId, exec);
 }
 
 // Look up the track behind a share token, or null when the token is unknown or
@@ -96,7 +101,22 @@ export const resolveShareToken = cache(async function resolveShareToken(
 });
 
 // Revoke a track's share link (deletes the row, freeing the UNIQUE slot). The
-// caller has already verified the user owns the track.
-export async function deleteShare(trackId: string): Promise<void> {
-  await db.delete(trackShares).where(eq(trackShares.trackId, trackId));
+// caller has already verified the user owns the track. With `onlyToken`, the
+// link is revoked only while it is still that token (undoing a mint must not
+// revoke a later re-mint). Returns whether a row was deleted.
+export async function deleteShare(
+  trackId: string,
+  onlyToken?: string,
+  exec: DbExecutor = db
+): Promise<boolean> {
+  const deleted = await exec
+    .delete(trackShares)
+    .where(
+      and(
+        eq(trackShares.trackId, trackId),
+        onlyToken === undefined ? undefined : eq(trackShares.token, onlyToken)
+      )
+    )
+    .returning({ trackId: trackShares.trackId });
+  return deleted.length > 0;
 }

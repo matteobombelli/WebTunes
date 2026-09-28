@@ -1,8 +1,15 @@
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { tracks, users, type Track } from "@/db/schema";
-import { friendIdsOf } from "@/lib/friends";
-import type { TrackDTO, TrackPageDTO } from "@/lib/types";
+import { z } from "zod";
+import { db, type DbExecutor } from "@/db";
+import {
+  playlists,
+  playlistTracks,
+  tracks,
+  users,
+  type Track,
+} from "@/db/schema";
+import { canAccessTrack, friendIdsOf } from "@/lib/friends";
+import type { TrackDetailDTO, TrackDTO, TrackPageDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
 
 /**
@@ -94,7 +101,7 @@ export function parseTrackCursor(value: string): TrackCursor | null {
   }
 }
 
-function encodeTrackCursor(cursor: TrackCursor): string {
+export function encodeTrackCursor(cursor: TrackCursor): string {
   return Buffer.from(JSON.stringify([cursor.createdAt, cursor.id])).toString(
     "base64url"
   );
@@ -155,6 +162,172 @@ export function toTrackDTO(
     createdAt: track.createdAt.toISOString(),
     ownerName,
   };
+}
+
+/**
+ * Load a track by id for a viewer. Suggested-import rows report "forbidden"
+ * (canAccessTrack), matching GET /api/tracks/[id]'s 403.
+ */
+export async function loadAccessibleTrack(
+  userId: string,
+  trackId: string
+): Promise<
+  | { status: "ok"; track: Track }
+  | { status: "not_found" }
+  | { status: "forbidden" }
+> {
+  if (!isUuid(trackId)) return { status: "not_found" };
+  const [track] = await db.select().from(tracks).where(eq(tracks.id, trackId));
+  if (!track) return { status: "not_found" };
+  if (!(await canAccessTrack(userId, track))) return { status: "forbidden" };
+  return { status: "ok", track };
+}
+
+/** A viewer-accessible track with its lyrics; null when unavailable. */
+export async function getTrackDetail(
+  userId: string,
+  trackId: string
+): Promise<TrackDetailDTO | null> {
+  const result = await loadAccessibleTrack(userId, trackId);
+  if (result.status !== "ok") return null;
+  const { track } = result;
+  let ownerName: string | null = null;
+  if (track.ownerId !== userId) {
+    const [owner] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, track.ownerId));
+    ownerName = owner?.name ?? null;
+  }
+  return {
+    track: toTrackDTO(track, ownerName),
+    lyrics: track.lyrics,
+    lyricsSource: track.lyricsSource,
+  };
+}
+
+export type OwnedTrackResult =
+  | { status: "ok"; track: Track }
+  | { status: "not_found" }
+  | { status: "forbidden" }
+  | { status: "suggested_import" };
+
+/**
+ * Load one of the user's library tracks for a write, row-locked when `exec` is
+ * a transaction. Suggested Import previews are managed only through
+ * accept/reject.
+ */
+export async function loadOwnedLibraryTrack(
+  userId: string,
+  trackId: string,
+  exec: DbExecutor = db
+): Promise<OwnedTrackResult> {
+  if (!isUuid(trackId)) return { status: "not_found" };
+  const [track] = await exec
+    .select()
+    .from(tracks)
+    .where(eq(tracks.id, trackId))
+    .for("update");
+  if (!track) return { status: "not_found" };
+  if (track.ownerId !== userId) return { status: "forbidden" };
+  if (track.suggestedImportId) return { status: "suggested_import" };
+  return { status: "ok", track };
+}
+
+/** Request validation for a metadata edit; shared by PATCH /api/tracks/[id] and MCP. */
+export const trackMetadataPatchSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    artist: z.string().trim().max(200).nullable(),
+    album: z.string().trim().max(200).nullable(),
+    isPrivate: z.boolean(),
+  })
+  .partial();
+
+export type TrackMetadataFields = {
+  title?: string;
+  artist?: string | null;
+  album?: string | null;
+  isPrivate?: boolean;
+};
+
+export type UpdateTrackMetadataResult =
+  | Exclude<OwnedTrackResult, { status: "ok" }>
+  | {
+      status: "ok";
+      before: Required<TrackMetadataFields>;
+      track: Track;
+    };
+
+export function updateTrackMetadata(
+  userId: string,
+  trackId: string,
+  fields: TrackMetadataFields,
+  exec: DbExecutor = db
+): Promise<UpdateTrackMetadataResult> {
+  return exec.transaction(async (tx) => {
+    const owned = await loadOwnedLibraryTrack(userId, trackId, tx);
+    if (owned.status !== "ok") return owned;
+    const { track } = owned;
+    // Empty strings clear artist/album to null.
+    const updates = { ...fields };
+    if (updates.artist === "") updates.artist = null;
+    if (updates.album === "") updates.album = null;
+    const [updated] = await tx
+      .update(tracks)
+      .set(updates)
+      .where(eq(tracks.id, trackId))
+      .returning();
+    return {
+      status: "ok",
+      before: {
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        isPrivate: track.isPrivate,
+      },
+      track: updated,
+    };
+  });
+}
+
+export type DeleteOwnedTrackResult =
+  | Exclude<OwnedTrackResult, { status: "ok" }>
+  | { status: "ok"; objectKeys: string[] };
+
+/**
+ * Delete one of the user's library tracks. Its S3 objects are returned, not
+ * deleted: the caller removes them with deleteObjectsBestEffort only after its
+ * transaction commits, so a rollback never leaves a row pointing at deleted
+ * audio.
+ */
+export function deleteOwnedTrack(
+  userId: string,
+  trackId: string,
+  exec: DbExecutor = db
+): Promise<DeleteOwnedTrackResult> {
+  return exec.transaction(async (tx) => {
+    const owned = await loadOwnedLibraryTrack(userId, trackId, tx);
+    if (owned.status !== "ok") return owned;
+    const { track } = owned;
+    // Deleting a track cascades rows out of playlists (the owner's and
+    // friends'); bump those playlists' updatedAt first, per the convention that
+    // content changes touch it.
+    await tx.execute(sql`
+      update ${playlists} set updated_at = now()
+      where ${playlists.id} in (
+        select ${playlistTracks.playlistId} from ${playlistTracks}
+        where ${playlistTracks.trackId} = ${trackId}
+      )
+    `);
+    await tx.delete(tracks).where(eq(tracks.id, trackId));
+    return {
+      status: "ok",
+      objectKeys: [track.s3Key, track.artS3Key, track.artThumbS3Key].filter(
+        (key): key is string => Boolean(key)
+      ),
+    };
+  });
 }
 
 export type BulkTrackMetadataUpdates = {

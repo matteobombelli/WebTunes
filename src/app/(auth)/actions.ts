@@ -4,6 +4,7 @@ import { AuthError, CredentialsSignin } from "next-auth";
 import { headers } from "next/headers";
 import { signIn, signOut } from "@/lib/auth";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { BASE_PATH } from "@/lib/base-path";
 import { getClientIp } from "@/lib/client-ip";
 import { registerInvitedUser } from "@/lib/invites";
 import { registerRateLimit } from "@/lib/rate-limit";
@@ -19,6 +20,16 @@ export type AuthFormState = {
   unverifiedEmail?: string;
 };
 
+// Only same-app relative paths. Browsers read "//host", "/\host" and paths
+// with stripped control characters as protocol-relative; the basePath is
+// re-added by Auth.js's redirect callback, so a prefixed path is refused.
+function safeNextPath(raw: FormDataEntryValue | null): string | null {
+  if (typeof raw !== "string" || !raw.startsWith("/")) return null;
+  if (raw.startsWith("//") || /[\\\u0000-\u001f]/.test(raw)) return null;
+  if (raw === BASE_PATH || raw.startsWith(`${BASE_PATH}/`)) return null;
+  return raw;
+}
+
 export async function loginAction(
   _prev: AuthFormState,
   formData: FormData
@@ -28,7 +39,7 @@ export async function loginAction(
     await signIn("credentials", {
       email,
       password: formData.get("password"),
-      redirectTo: "/discover",
+      redirectTo: safeNextPath(formData.get("next")) ?? "/discover",
     });
     return { error: null };
   } catch (err) {

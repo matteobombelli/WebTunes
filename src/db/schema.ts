@@ -11,6 +11,7 @@ import {
   boolean,
   doublePrecision,
   vector,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -439,6 +440,114 @@ export const playlistCollaborators = pgTable(
     // playlistId already covers the forward "collaborators of this playlist").
     index("playlist_collaborators_user_idx").on(pc.userId),
   ]
+);
+
+// OAuth 2.1 clients for the MCP endpoint. `id` is the client_id: a random id
+// for Dynamic Client Registration, or the https URL of a Client ID Metadata
+// Document, whose fetched metadata is cached here and refreshed when stale.
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  kind: text("kind", { enum: ["dcr", "cimd"] }).notNull(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").array().notNull(),
+  clientUri: text("client_uri"),
+  metadataFetchedAt: timestamp("metadata_fetched_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+// One grant per (user, client). Re-authorizing replaces its scopes; deleting
+// it (revoke, password reset) cascades every token issued under it.
+export const oauthGrants = pgTable(
+  "oauth_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    scopes: text("scopes").array().notNull(),
+    // RFC 8707 audience: tokens are only accepted by this resource.
+    resource: text("resource").notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
+  },
+  (g) => [uniqueIndex("oauth_grants_user_client_idx").on(g.userId, g.clientId)]
+);
+
+// Single-use authorization codes (PKCE S256). Hashed like every bearer secret.
+export const oauthCodes = pgTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  grantId: uuid("grant_id")
+    .notNull()
+    .references(() => oauthGrants.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  usedAt: timestamp("used_at", { mode: "date" }),
+});
+
+// Access and refresh tokens, stored only as sha256 hashes. A refresh token is
+// single-use: redeeming sets used_at, and presenting a used one again revokes
+// the whole grant (OAuth 2.1 refresh-token reuse detection).
+export const oauthTokens = pgTable(
+  "oauth_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    grantId: uuid("grant_id")
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["access", "refresh"] }).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("oauth_tokens_grant_idx").on(t.grantId),
+    index("oauth_tokens_expires_at_idx").on(t.expiresAt),
+  ]
+);
+
+// Undo log for every mutation made through MCP. Rows are recorded in the same
+// transaction as the mutation, undoable for 30 days, then purged daily by
+// scripts/purge-mcp-state.mjs. grant_id is SET NULL so a disconnected app's
+// actions stay undoable from Settings. See lib/mcp/actions.ts.
+export const mcpActions = pgTable(
+  "mcp_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    grantId: uuid("grant_id").references(() => oauthGrants.id, {
+      onDelete: "set null",
+    }),
+    clientName: text("client_name").notNull(),
+    kind: text("kind", {
+      enum: [
+        "playlist.create",
+        "playlist.update",
+        "playlist.add_tracks",
+        "playlist.remove_tracks",
+        "playlist.reorder",
+        "track.update_metadata",
+        "import.start",
+        "suggestion.accept",
+        "suggestion.reject",
+        "share.create",
+      ],
+    }).notNull(),
+    summary: text("summary").notNull(),
+    payload: jsonb("payload").notNull(),
+    status: text("status", { enum: ["applied", "undone"] })
+      .notNull()
+      .default("applied"),
+    undoReport: jsonb("undo_report"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    undoneAt: timestamp("undone_at", { mode: "date" }),
+  },
+  (a) => [index("mcp_actions_user_created_idx").on(a.userId, a.createdAt)]
 );
 
 export type Track = typeof tracks.$inferSelect;

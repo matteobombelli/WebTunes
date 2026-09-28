@@ -23,6 +23,57 @@ export type TrackDTO = {
   isSuggested?: boolean;
 };
 
+/** A search hit with a plain-text lyric excerpt; the matched words are wrapped
+ *  in « ». Null when the query did not match the lyrics. */
+export type TrackSearchResultDTO = TrackDTO & { lyricSnippet: string | null };
+
+export type TrackDetailDTO = {
+  track: TrackDTO;
+  lyrics: string | null;
+  lyricsSource: "embedded" | "lrclib" | "none";
+};
+
+export type ListenHistoryDTO = {
+  items: { track: TrackDTO; playedAt: string; listenedSeconds: number | null }[];
+  /** Opaque cursor for the next (older) page; null when exhausted. */
+  nextBefore: string | null;
+};
+
+export type FriendActivityDTO = {
+  recentlyAdded: TrackDTO[];
+  /** Aggregate play counts only; individual listen times are never exposed. */
+  topPlayed: {
+    friend: { id: string; name: string };
+    tracks: { track: TrackDTO; plays: number }[];
+  }[];
+};
+
+export type LibraryIssueKind =
+  | "missing_artist"
+  | "missing_album"
+  | "missing_art"
+  | "low_bitrate"
+  | "possible_duplicates";
+
+export type LibraryIssueTrackDTO = {
+  track: TrackDTO;
+  estimatedKbps: number | null;
+  playlistCount: number;
+};
+
+export type LibraryIssuesDTO =
+  | {
+      kind: Exclude<LibraryIssueKind, "possible_duplicates">;
+      total: number;
+      items: LibraryIssueTrackDTO[];
+    }
+  | {
+      kind: "possible_duplicates";
+      /** Number of duplicate groups. */
+      total: number;
+      items: { tracks: LibraryIssueTrackDTO[] }[];
+    };
+
 /** One keyset-paginated slice of a newest-first track listing. */
 export type TrackPageDTO = {
   tracks: TrackDTO[];
@@ -235,4 +286,52 @@ export type ImportSearchResultDTO = {
   uploader: string;
   duration: number | null;
   thumbnail: string | null;
+};
+
+// --- MCP connected apps and undo log (lib/mcp/actions.ts, lib/oauth/grants.ts)
+
+export type McpActionKind =
+  | "playlist.create"
+  | "playlist.update"
+  | "playlist.add_tracks"
+  | "playlist.remove_tracks"
+  | "playlist.reorder"
+  | "track.update_metadata"
+  | "import.start"
+  | "suggestion.accept"
+  | "suggestion.reject"
+  | "share.create";
+
+export type UndoReportDTO = {
+  restored: string[];
+  skipped: { item: string; reason: string }[];
+};
+
+export type McpActionDTO = {
+  id: string;
+  kind: McpActionKind;
+  summary: string;
+  clientName: string;
+  createdAt: string;
+  undoableUntil: string;
+  status: "applied" | "undone";
+  undoneAt: string | null;
+  undoReport: UndoReportDTO | null;
+  canUndo: boolean;
+};
+
+export type McpActionPageDTO = {
+  actions: McpActionDTO[];
+  /** Pass as `before` for the next (older) page; null on the last page. */
+  nextCursor: string | null;
+};
+
+export type OAuthGrantDTO = {
+  id: string;
+  clientName: string;
+  /** Host of the client's client_uri, or of its CIMD client id; else null. */
+  clientHost: string | null;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
 };

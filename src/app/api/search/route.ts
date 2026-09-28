@@ -1,87 +1,14 @@
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { tracks, users } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { friendIdsOf } from "@/lib/friends";
-import {
-  canonicalFriendCopy,
-  isLibraryTrack,
-  notDuplicateOfOwn,
-  toTrackDTO,
-  trackDtoColumns,
-} from "@/lib/tracks";
-import { escapeLike, getUserSettings } from "@/lib/users";
+import { searchTracks } from "@/lib/search";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
-  const scope = req.nextUrl.searchParams.get("scope") ?? "all";
-  if (!q) return NextResponse.json([]);
-
-  let ownerIds: string[];
-  let friendIds: string[] = [];
-  if (scope === "own") {
-    ownerIds = [user.id];
-  } else if (scope === "friends") {
-    friendIds = await friendIdsOf(user.id);
-    ownerIds = friendIds;
-  } else {
-    friendIds = await friendIdsOf(user.id);
-    ownerIds = [user.id, ...friendIds];
-  }
-  if (ownerIds.length === 0) return NextResponse.json([]);
-
-  // Escape %/_ so searching for them matches literally (the tsquery branch
-  // already treats the input as plain words).
-  const pattern = `%${escapeLike(q)}%`;
-  // tsquery covers lyrics (and ranked word matches); ILIKE covers substring
-  // matches on the short fields that FTS cannot do.
-  const matches = or(
-    sql`${tracks}."search_vector" @@ websearch_to_tsquery('simple', ${q})`,
-    sql`${tracks.title} ilike ${pattern}`,
-    sql`${tracks.artist} ilike ${pattern}`,
-    sql`${tracks.album} ilike ${pattern}`
-  );
-
-  // Friends' private tracks are invisible; own private tracks still match.
-  const visible = or(eq(tracks.ownerId, user.id), eq(tracks.isPrivate, false));
-
-  // Hide friends' copies of songs the user already owns (own rows untouched).
-  const { hideFriendDuplicates } = await getUserSettings(user.id);
-  const noFriendDupes =
-    scope !== "own" && hideFriendDuplicates
-      ? or(
-          eq(tracks.ownerId, user.id),
-          and(notDuplicateOfOwn(user.id), canonicalFriendCopy(friendIds))
-        )
-      : undefined;
-
-  const rows = await db
-    .select({
-      track: trackDtoColumns,
-      ownerName: users.name,
-      rank: sql<number>`ts_rank(${tracks}."search_vector", websearch_to_tsquery('simple', ${q}))`,
-    })
-    .from(tracks)
-    .innerJoin(users, eq(tracks.ownerId, users.id))
-    .where(
-      and(
-        isLibraryTrack(),
-        inArray(tracks.ownerId, ownerIds),
-        visible,
-        matches,
-        noFriendDupes
-      )
-    )
-    .orderBy(({ rank }) => [desc(rank), desc(tracks.createdAt)])
-    .limit(100);
-
-  return NextResponse.json(
-    rows.map((r) =>
-      toTrackDTO(r.track, r.track.ownerId === user.id ? null : r.ownerName)
-    )
-  );
+  const q = req.nextUrl.searchParams.get("q") ?? "";
+  const scopeParam = req.nextUrl.searchParams.get("scope");
+  const scope =
+    scopeParam === "own" || scopeParam === "friends" ? scopeParam : "all";
+  return NextResponse.json(await searchTracks(user.id, q, scope));
 }

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { acceptSuggestedImport } from "@/lib/suggested-imports";
+import {
+  acceptSuggestedImport,
+  wakeSuggestedImportWorker,
+} from "@/lib/suggested-imports";
 import { isUuid } from "@/lib/validate";
 
 export async function POST(
@@ -23,5 +26,6 @@ export async function POST(
       { status: 409 }
     );
   }
+  wakeSuggestedImportWorker();
   return NextResponse.json(result.track);
 }

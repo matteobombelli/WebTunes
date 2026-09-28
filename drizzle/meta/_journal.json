@@ -204,6 +204,13 @@
       "when": 1786030925925,
       "tag": "0028_broken_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790618911249,
+      "tag": "0029_mcp_oauth_undo",
+      "breakpoints": true
     }
   ]
 }

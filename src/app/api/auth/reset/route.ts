@@ -4,7 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/db";
-import { passwordResetTokens, sessions, users } from "@/db/schema";
+import {
+  oauthGrants,
+  passwordResetTokens,
+  sessions,
+  users,
+} from "@/db/schema";
 
 const schema = z.object({
   token: z.string().min(1),
@@ -86,6 +91,8 @@ export async function POST(req: NextRequest) {
       .where(eq(users.id, claim.userId));
     // Log out every existing session for the account.
     await tx.delete(sessions).where(eq(sessions.userId, claim.userId));
+    // Connected apps too; their tokens and codes cascade.
+    await tx.delete(oauthGrants).where(eq(oauthGrants.userId, claim.userId));
     return true;
   });
   if (!consumed) {

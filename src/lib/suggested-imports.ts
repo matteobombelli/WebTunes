@@ -2,10 +2,12 @@ import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { db } from "@/db";
+import { db, type DbExecutor } from "@/db";
 import {
+  playlistTracks,
   suggestedImports,
   trackIdentities,
+  trackShares,
   tracks,
   users,
   type SuggestedImport,
@@ -25,7 +27,6 @@ import { withYtDlpRetry } from "@/lib/import/retry";
 import { listTopTracks } from "@/lib/discover";
 import { log } from "@/lib/log";
 import { enqueueRecognition } from "@/lib/recognize-queue";
-import { deleteObject } from "@/lib/s3";
 import {
   listAccessibleTracks,
   isLibraryTrack,
@@ -123,16 +124,32 @@ export async function getSuggestedImportPool(
   };
 }
 
-type SuggestionMutationResult =
-  | { status: "ok"; track?: TrackDTO }
-  | { status: "not_found" }
-  | { status: "conflict" };
+type SuggestionMutationError = { status: "not_found" } | { status: "conflict" };
 
-export async function acceptSuggestedImport(
+export type AcceptSuggestedImportResult =
+  | SuggestionMutationError
+  | {
+      status: "ok";
+      track: TrackDTO;
+      trackId: string;
+      previousCreatedAt: Date;
+    };
+
+export type RejectSuggestedImportResult =
+  | SuggestionMutationError
+  | { status: "ok"; objectKeys: string[]; title: string; artist: string };
+
+/**
+ * The caller must call wakeSuggestedImportWorker after an ok result commits
+ * (the freed slot is refilled); waking inside an uncommitted outer transaction
+ * would let the worker see the suggestion as still ready and sleep again.
+ */
+export function acceptSuggestedImport(
   userId: string,
-  suggestionId: string
-): Promise<SuggestionMutationResult> {
-  const result = await db.transaction(async (tx) => {
+  suggestionId: string,
+  exec: DbExecutor = db
+): Promise<AcceptSuggestedImportResult> {
+  return exec.transaction(async (tx) => {
     const [row] = await tx
       .select({ suggestion: suggestedImports, track: tracks })
       .from(suggestedImports)
@@ -168,17 +185,26 @@ export async function acceptSuggestedImport(
       .update(suggestedImports)
       .set({ status: "accepted", updatedAt: acceptedAt, progress: 100 })
       .where(eq(suggestedImports.id, suggestionId));
-    return { status: "ok", track: toTrackDTO(promoted) } as const;
+    return {
+      status: "ok",
+      track: toTrackDTO(promoted),
+      trackId: promoted.id,
+      previousCreatedAt: row.track.createdAt,
+    } as const;
   });
-  if (result.status === "ok") wakeSuggestedImportWorker();
-  return result;
 }
 
-export async function rejectSuggestedImport(
+/**
+ * The staged track's S3 objects are returned, not deleted: the caller deletes
+ * them with deleteObjectsBestEffort after its transaction commits, then calls
+ * wakeSuggestedImportWorker (see acceptSuggestedImport).
+ */
+export function rejectSuggestedImport(
   userId: string,
-  suggestionId: string
-): Promise<SuggestionMutationResult> {
-  const result = await db.transaction(async (tx) => {
+  suggestionId: string,
+  exec: DbExecutor = db
+): Promise<RejectSuggestedImportResult> {
+  return exec.transaction(async (tx) => {
     const [row] = await tx
       .select({ suggestion: suggestedImports, track: tracks })
       .from(suggestedImports)
@@ -190,10 +216,8 @@ export async function rejectSuggestedImport(
         )
       )
       .limit(1);
-    if (!row) return { result: { status: "not_found" } as const, keys: [] };
-    if (row.suggestion.status !== "ready") {
-      return { result: { status: "conflict" } as const, keys: [] };
-    }
+    if (!row) return { status: "not_found" } as const;
+    if (row.suggestion.status !== "ready") return { status: "conflict" } as const;
     await tx.delete(tracks).where(eq(tracks.id, row.track.id));
     await tx
       .update(suggestedImports)
@@ -206,15 +230,139 @@ export async function rejectSuggestedImport(
       })
       .where(eq(suggestedImports.id, suggestionId));
     return {
-      result: { status: "ok" } as const,
-      keys: [row.track.s3Key, row.track.artS3Key, row.track.artThumbS3Key].filter(
-        (key): key is string => Boolean(key)
-      ),
-    };
+      status: "ok",
+      objectKeys: [
+        row.track.s3Key,
+        row.track.artS3Key,
+        row.track.artThumbS3Key,
+      ].filter((key): key is string => Boolean(key)),
+      title: row.suggestion.title,
+      artist: row.suggestion.artist,
+    } as const;
   });
-  for (const key of result.keys) await deleteObject(key).catch(() => {});
-  if (result.result.status === "ok") wakeSuggestedImportWorker();
-  return result.result;
+}
+
+export type SuggestionUndoResult =
+  | { status: "ok"; title: string }
+  | { status: "skipped"; title: string | null; reason: string };
+
+/**
+ * Undo an accept: put the promoted track back into staging. Refused once the
+ * track has been used as a library track (in any playlist or shared), since
+ * staging hides it from every one of those surfaces.
+ */
+export function revertAcceptedSuggestion(
+  userId: string,
+  suggestionId: string,
+  trackId: string,
+  previousCreatedAt: Date,
+  exec: DbExecutor = db
+): Promise<SuggestionUndoResult> {
+  return exec.transaction(async (tx) => {
+    const [suggestion] = await tx
+      .select()
+      .from(suggestedImports)
+      .where(
+        and(
+          eq(suggestedImports.id, suggestionId),
+          eq(suggestedImports.userId, userId)
+        )
+      )
+      .for("update");
+    if (!suggestion) {
+      return { status: "skipped", title: null, reason: "Suggestion no longer exists" };
+    }
+    const title = `${suggestion.artist} - ${suggestion.title}`;
+    if (suggestion.status !== "accepted") {
+      return { status: "skipped", title, reason: "Suggestion changed since" };
+    }
+    // Locking the track first makes a concurrent playlist add or share mint
+    // (both take a key-share lock through their foreign key) wait for us.
+    const [track] = await tx
+      .select({
+        ownerId: tracks.ownerId,
+        suggestedImportId: tracks.suggestedImportId,
+      })
+      .from(tracks)
+      .where(eq(tracks.id, trackId))
+      .for("update");
+    if (!track || track.ownerId !== userId || track.suggestedImportId !== null) {
+      return { status: "skipped", title, reason: "Track was deleted" };
+    }
+    const [inPlaylist] = await tx
+      .select({ playlistId: playlistTracks.playlistId })
+      .from(playlistTracks)
+      .where(eq(playlistTracks.trackId, trackId))
+      .limit(1);
+    if (inPlaylist) {
+      return { status: "skipped", title, reason: "Track is in a playlist" };
+    }
+    const [share] = await tx
+      .select({ id: trackShares.id })
+      .from(trackShares)
+      .where(eq(trackShares.trackId, trackId))
+      .limit(1);
+    if (share) {
+      return { status: "skipped", title, reason: "Track has a share link" };
+    }
+    await tx
+      .update(tracks)
+      .set({
+        suggestedImportId: suggestionId,
+        isPrivate: true,
+        createdAt: previousCreatedAt,
+      })
+      .where(eq(tracks.id, trackId));
+    await tx
+      .update(suggestedImports)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(eq(suggestedImports.id, suggestionId));
+    return { status: "ok", title };
+  });
+}
+
+/**
+ * Undo a reject. The staged audio was deleted on reject, so the suggestion is
+ * queued for a fresh download; the caller must call wakeSuggestedImportWorker
+ * after commit.
+ */
+export function requeueRejectedSuggestion(
+  userId: string,
+  suggestionId: string,
+  exec: DbExecutor = db
+): Promise<SuggestionUndoResult> {
+  return exec.transaction(async (tx) => {
+    const [suggestion] = await tx
+      .select()
+      .from(suggestedImports)
+      .where(
+        and(
+          eq(suggestedImports.id, suggestionId),
+          eq(suggestedImports.userId, userId)
+        )
+      )
+      .for("update");
+    if (!suggestion) {
+      return { status: "skipped", title: null, reason: "Suggestion no longer exists" };
+    }
+    const title = `${suggestion.artist} - ${suggestion.title}`;
+    if (suggestion.status !== "rejected") {
+      return { status: "skipped", title, reason: "Suggestion changed since" };
+    }
+    await tx
+      .update(suggestedImports)
+      .set({
+        status: "queued",
+        rejectedUntil: null,
+        leaseExpiresAt: null,
+        progress: 0,
+        error: null,
+        attemptCount: 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(suggestedImports.id, suggestionId));
+    return { status: "ok", title };
+  });
 }
 
 let wake: (() => void) | null = null;

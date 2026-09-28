@@ -1,8 +1,16 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { listens, tracks } from "@/db/schema";
-import { canAccessTrack } from "@/lib/friends";
+import { listens, tracks, users } from "@/db/schema";
+import { canAccessTrack, friendIdsOf } from "@/lib/friends";
 import { listenQualificationSeconds } from "@/lib/listen-telemetry";
+import {
+  encodeTrackCursor,
+  isLibraryTrack,
+  parseTrackCursor,
+  toTrackDTO,
+  trackDtoColumns,
+} from "@/lib/tracks";
+import type { ListenHistoryDTO } from "@/lib/types";
 
 type ListenTelemetry = {
   sessionId: string;
@@ -96,4 +104,80 @@ export async function recordListen(
   });
 
   return "ok";
+}
+
+export type ListenCursor = { playedAt: string; id: string };
+
+/** Validate a `nextBefore` value from listListenHistory; null if malformed. */
+export function parseListenCursor(value: string): ListenCursor | null {
+  const cursor = parseTrackCursor(value);
+  return cursor && { playedAt: cursor.createdAt, id: cursor.id };
+}
+
+function beforeListenCursor(cursor?: ListenCursor) {
+  if (!cursor) return undefined;
+  const time = sql`cast(${cursor.playedAt} as timestamp)`;
+  return or(
+    lt(listens.playedAt, time),
+    and(eq(listens.playedAt, time), lt(listens.id, cursor.id))
+  );
+}
+
+/**
+ * The viewer's own listens, newest first, limited to tracks they can still
+ * access. `from` is inclusive, `to` exclusive. Keyset-paged on
+ * (playedAt, id) at microsecond precision, so listens sharing a timestamp are
+ * never skipped at a page boundary. Stats-excluded legacy rows are included.
+ */
+export async function listListenHistory(
+  userId: string,
+  opts: { from?: Date; to?: Date; limit: number; before?: ListenCursor }
+): Promise<ListenHistoryDTO> {
+  const friendIds = await friendIdsOf(userId);
+  const rows = await db
+    .select({
+      id: listens.id,
+      playedAt: listens.playedAt,
+      cursorPlayedAt: sql<string>`${listens.playedAt}::text`,
+      listenedSeconds: listens.listenedSeconds,
+      track: trackDtoColumns,
+      ownerName: users.name,
+    })
+    .from(listens)
+    .innerJoin(tracks, eq(tracks.id, listens.trackId))
+    .innerJoin(users, eq(users.id, tracks.ownerId))
+    .where(
+      and(
+        eq(listens.userId, userId),
+        opts.from ? gte(listens.playedAt, opts.from) : undefined,
+        opts.to ? lt(listens.playedAt, opts.to) : undefined,
+        beforeListenCursor(opts.before),
+        isLibraryTrack(),
+        or(
+          eq(tracks.ownerId, userId),
+          friendIds.length
+            ? and(
+                inArray(tracks.ownerId, friendIds),
+                eq(tracks.isPrivate, false)
+              )
+            : sql`false`
+        )
+      )
+    )
+    .orderBy(desc(listens.playedAt), desc(listens.id))
+    .limit(opts.limit + 1);
+
+  const page = rows.slice(0, opts.limit);
+  const last = page.at(-1);
+  return {
+    items: page.map((r) => ({
+      track: toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName),
+      playedAt: r.playedAt.toISOString(),
+      listenedSeconds: r.listenedSeconds,
+    })),
+    nextBefore:
+      rows.length > opts.limit && last
+        ? encodeTrackCursor({ createdAt: last.cursorPlayedAt, id: last.id })
+        : null,
+  };
 }

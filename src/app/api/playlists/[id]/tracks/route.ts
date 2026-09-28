@@ -1,11 +1,11 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db, isUniqueViolation } from "@/db";
-import { playlists, playlistTracks, tracks } from "@/db/schema";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
-import { canAccessTrackWithFriends, friendIdsOf } from "@/lib/friends";
-import { getEditablePlaylist } from "@/lib/playlists";
+import {
+  addPlaylistTracks,
+  getEditablePlaylist,
+  reorderPlaylistTracks,
+} from "@/lib/playlists";
 
 type Params = RouteContext<"/api/playlists/[id]/tracks">;
 
@@ -14,91 +14,38 @@ const addSchema = z.union([
   z.object({ trackIds: z.array(z.string().uuid()).min(1).max(500) }),
 ]);
 
+// A missing/uneditable playlist is a 404 even when the body is also invalid.
+async function invalidBody(id: string, userId: string, error: string) {
+  if (!(await getEditablePlaylist(id, userId))) {
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  return NextResponse.json({ error }, { status: 400 });
+}
+
 export async function POST(req: NextRequest, { params }: Params) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getEditablePlaylist(id, user.id);
-  if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-  }
-
   const parsed = addSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "trackId or trackIds is required" },
-      { status: 400 }
-    );
+    return invalidBody(id, user.id, "trackId or trackIds is required");
   }
   const requestedIds =
     "trackId" in parsed.data ? [parsed.data.trackId] : parsed.data.trackIds;
 
-  const candidates = await db
-    .select({
-      id: tracks.id,
-      ownerId: tracks.ownerId,
-      isPrivate: tracks.isPrivate,
-      suggestedImportId: tracks.suggestedImportId,
-    })
-    .from(tracks)
-    .where(inArray(tracks.id, requestedIds));
-  if (candidates.length !== requestedIds.length) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
-  }
-  const friendIds = await friendIdsOf(user.id);
-  for (const track of candidates) {
-    if (!canAccessTrackWithFriends(user.id, track, friendIds)) {
+  const result = await addPlaylistTracks(id, user.id, requestedIds);
+  switch (result.status) {
+    case "not_found":
+      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+    case "track_not_found":
+      return NextResponse.json({ error: "Track not found" }, { status: 404 });
+    case "forbidden":
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-  }
-
-  const existing = await db
-    .select({ trackId: playlistTracks.trackId })
-    .from(playlistTracks)
-    .where(
-      and(
-        eq(playlistTracks.playlistId, id),
-        inArray(playlistTracks.trackId, requestedIds)
-      )
-    );
-  const existingIds = new Set(existing.map((e) => e.trackId));
-  // Preserve request order; skip tracks already in the playlist (when nothing
-  // is left to add, that's the 409 below).
-  const toAdd = requestedIds.filter((tid) => !existingIds.has(tid));
-  if (toAdd.length === 0) {
-    return NextResponse.json({ error: "Already in playlist" }, { status: 409 });
-  }
-
-  try {
-    await db.transaction(async (tx) => {
-      const [{ base }] = await tx
-        .select({
-          base: sql<number>`coalesce(max(${playlistTracks.position}) + 1, 0)::int`,
-        })
-        .from(playlistTracks)
-        .where(eq(playlistTracks.playlistId, id));
-      await tx.insert(playlistTracks).values(
-        toAdd.map((trackId, i) => ({
-          playlistId: id,
-          trackId,
-          position: base + i,
-        }))
-      );
-      await tx
-        .update(playlists)
-        .set({ updatedAt: new Date() })
-        .where(eq(playlists.id, id));
-    });
-  } catch (err) {
-    // Two concurrent adds can both pass the membership check above; the
-    // (playlist_id, track_id) PK catches the loser.
-    if (isUniqueViolation(err)) {
+    case "already_present":
       return NextResponse.json({ error: "Already in playlist" }, { status: 409 });
-    }
-    throw err;
   }
-  return NextResponse.json({ added: toAdd.length }, { status: 200 });
+  return NextResponse.json({ added: result.added.length }, { status: 200 });
 }
 
 const reorderSchema = z.object({
@@ -111,53 +58,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!user) return unauthorized();
 
   const { id } = await params;
-  const playlist = await getEditablePlaylist(id, user.id);
-  if (!playlist) {
-    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-  }
-
   const parsed = reorderSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "trackIds array is required" }, { status: 400 });
+    return invalidBody(id, user.id, "trackIds array is required");
   }
 
-  // A reorder must be a permutation of the playlist's CURRENT members - reject a
-  // partial / padded / duplicated list so positions can't end up colliding or
-  // non-contiguous (the web client always sends the full ordered list).
-  const members = await db
-    .select({ trackId: playlistTracks.trackId })
-    .from(playlistTracks)
-    .where(eq(playlistTracks.playlistId, id));
-  const submitted = parsed.data.trackIds;
-  const submittedSet = new Set(submitted);
-  const memberSet = new Set(members.map((m) => m.trackId));
-  const isPermutation =
-    submitted.length === submittedSet.size && // no duplicates
-    submittedSet.size === memberSet.size &&
-    [...submittedSet].every((tid) => memberSet.has(tid));
-  if (!isPermutation) {
+  const result = await reorderPlaylistTracks(id, user.id, parsed.data.trackIds);
+  if (result.status === "not_found") {
+    return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  if (result.status === "invalid") {
     return NextResponse.json(
       { error: "trackIds must be exactly the playlist's current tracks" },
       { status: 400 }
     );
   }
-
-  await db.transaction(async (tx) => {
-    // One set-based statement instead of one UPDATE per track: a drag-drop in a
-    // large playlist would otherwise hold the transaction (and row locks) across
-    // hundreds of sequential round-trips. sql.param keeps the id array a single
-    // $1::uuid[] parameter - plain ${array} interpolation expands to ($1, $2, …),
-    // which Postgres can't cast to uuid[].
-    await tx.execute(sql`
-      update ${playlistTracks} set "position" = v.ord - 1
-      from unnest(${sql.param(parsed.data.trackIds)}::uuid[]) with ordinality as v(track_id, ord)
-      where ${playlistTracks.playlistId} = ${id}
-        and ${playlistTracks.trackId} = v.track_id
-    `);
-    await tx
-      .update(playlists)
-      .set({ updatedAt: new Date() })
-      .where(eq(playlists.id, id));
-  });
   return new NextResponse(null, { status: 204 });
 }

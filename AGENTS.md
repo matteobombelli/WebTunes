@@ -62,6 +62,19 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 - `/share/[token]` and its stream/art routes are public and exempt from the page auth gate.
 - Incoming friend-request dots are server-rendered from cached `pendingRequestsFor`; refresh through navigation, not polling.
 
+## MCP and OAuth
+
+- `/api/mcp` (`src/lib/mcp/server.ts`) is a stateless MCP server. Tools stay thin: validate, call `src/lib`, map. It accepts only bearer tokens from the in-app OAuth 2.1 server in `src/lib/oauth/`, whose audience (`resource`) must equal the MCP URL.
+- Discovery lives under the base path (`/projects/webtunes/.well-known/*`), because Caddy owns root-level paths. Clients reach it through the 401 `WWW-Authenticate` `resource_metadata` and the OIDC path-append fallback. The OIDC-only metadata fields exist solely for client schema validation; no ID tokens are issued.
+- OAuth codes, access tokens and refresh tokens are bearer secrets. Store only sha256 hashes and never log them. Refresh tokens rotate, and reusing one revokes the grant. Password reset deletes grants.
+- The consent page never redirects to the client before user interaction: every request error is shown on the page, and only the consent action (after Allow or Deny, re-validating the request) returns a `redirect_uri` navigation. It navigates to the client client-side, because CSP `form-action 'self'` blocks redirects that follow a form submission. It sends `frame-ancestors 'none'`.
+- Scopes are `library:read` and `library:write`. Write tools are registered only for write grants. Demo accounts can grant read only.
+- Every MCP mutation calls `recordAction` in the same transaction as the change, and only when something changed. Payloads follow `McpActionPayloads` in `src/lib/mcp/actions.ts`. Undo is compare-and-restore per item for 30 days; items that changed since are skipped with a reason, never overwritten.
+- MCP must not perform anything it cannot undo. Track/playlist deletion and art replacement are deliberately not exposed. A new write tool needs an undo kind first.
+- Undoing a Suggested Import rejection re-queues the suggestion (the staged audio was already deleted); it does not restore bytes.
+- Lib write functions take an optional `DbExecutor` and return S3 `objectKeys`, never deleting objects themselves, so callers delete after their own transaction commits. The same rule applies to `wakeSuggestedImportWorker`.
+- A daily timer (`scripts/purge-mcp-state.mjs`) purges the expired undo log, codes, tokens, dead grants and unused client registrations.
+
 ## Storage and media
 
 - Streaming routes return presigned S3 redirects; the app server never proxies audio.
@@ -107,7 +120,7 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 - PostgreSQL hot-path concurrent indexes are out-of-band in `drizzle/0015_perf_indexes.sql` and `drizzle/0019_audit_indexes_and_share_fk.sql`. Apply them separately and verify with `node scripts/check-perf-indexes.mjs`.
 - Case-insensitive username uniqueness is out-of-band in `drizzle/0020_username_unique.sql`; registration and rename must still pre-check and catch its 23505 race.
 - Production R2 CORS may require an Admin Read & Write token; the normal object-scoped token cannot apply bucket CORS.
-- Daily timers purge expired share links and expired unused invite links, back up Postgres to R2, and self-update yt-dlp (unit definitions in `deploy/`).
+- Daily timers purge expired share links, expired unused invite links and expired MCP/OAuth state, back up Postgres to R2, and self-update yt-dlp (unit definitions in `deploy/`).
 
 ## Comments and maintenance
 
