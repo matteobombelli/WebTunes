@@ -330,9 +330,16 @@ export async function undoAction(
       restored: out.restored,
       skipped: out.skipped,
     };
+    // An undo that restored nothing leaves the action applied, so it can be
+    // retried once the blockers its skip reasons name (often later actions on
+    // the same object) are undone.
     await tx
       .update(mcpActions)
-      .set({ status: "undone", undoneAt: new Date(), undoReport: report })
+      .set(
+        report.restored.length > 0
+          ? { status: "undone", undoneAt: new Date(), undoReport: report }
+          : { undoReport: report }
+      )
       .where(eq(mcpActions.id, actionId));
     return { status: "ok", report, out } as const;
   });

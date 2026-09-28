@@ -153,39 +153,43 @@ export async function refreshAccessToken(p: {
 }): Promise<TokenResponse | TokenError> {
   const tokenHash = sha256Hex(p.refreshToken);
   const now = new Date();
-  const [token] = await db
+  const [found] = await db
+    .select({ grantId: oauthTokens.grantId, usedAt: oauthTokens.usedAt })
+    .from(oauthTokens)
+    .where(
+      and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, "refresh"))
+    );
+  const grant = found ? await loadGrant(found.grantId) : null;
+  if (!found || !grant) {
+    return invalidGrant("The refresh token is invalid, expired or already used");
+  }
+  // Checked before the token is spent, so a mismatched request cannot burn a
+  // valid refresh token.
+  if (grant.clientId !== p.clientId) {
+    return invalidGrant("The refresh token was issued to another client");
+  }
+  if (p.resource !== undefined && p.resource !== grant.resource) {
+    return { error: "invalid_target", error_description: "Unknown resource" };
+  }
+
+  const [claimed] = await db
     .update(oauthTokens)
     .set({ usedAt: now })
     .where(
       and(
         eq(oauthTokens.tokenHash, tokenHash),
-        eq(oauthTokens.kind, "refresh"),
         isNull(oauthTokens.usedAt),
         gt(oauthTokens.expiresAt, now)
       )
     )
-    .returning();
-  if (!token) {
-    const [spent] = await db
-      .select({ grantId: oauthTokens.grantId, usedAt: oauthTokens.usedAt })
-      .from(oauthTokens)
-      .where(
-        and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, "refresh"))
-      );
+    .returning({ grantId: oauthTokens.grantId });
+  if (!claimed) {
     // Rotated refresh tokens are single-use: a second presentation means one
     // copy leaked, so the whole grant is revoked (OAuth 2.1 §4.3.1).
-    if (spent?.usedAt) {
-      await db.delete(oauthGrants).where(eq(oauthGrants.id, spent.grantId));
+    if (found.usedAt) {
+      await db.delete(oauthGrants).where(eq(oauthGrants.id, grant.id));
     }
     return invalidGrant("The refresh token is invalid, expired or already used");
-  }
-
-  const grant = await loadGrant(token.grantId);
-  if (!grant || grant.clientId !== p.clientId) {
-    return invalidGrant("The refresh token was issued to another client");
-  }
-  if (p.resource !== undefined && p.resource !== grant.resource) {
-    return { error: "invalid_target", error_description: "Unknown resource" };
   }
   return issueTokenPair(grant);
 }

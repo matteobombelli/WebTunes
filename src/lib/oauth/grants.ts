@@ -1,6 +1,6 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { oauthClients, oauthGrants } from "@/db/schema";
+import { oauthClients, oauthGrants, oauthTokens } from "@/db/schema";
 import { isCimdClientId } from "@/lib/oauth/clients";
 import type { OAuthGrantDTO } from "@/lib/types";
 import { isUuid } from "@/lib/validate";
@@ -26,7 +26,14 @@ export async function listGrants(userId: string): Promise<OAuthGrantDTO[]> {
     })
     .from(oauthGrants)
     .innerJoin(oauthClients, eq(oauthClients.id, oauthGrants.clientId))
-    .where(eq(oauthGrants.userId, userId))
+    .where(
+      and(
+        eq(oauthGrants.userId, userId),
+        // Grants whose tokens all expired or were revoked (code replay) are
+        // dead until the daily purge deletes them; don't show them as connected.
+        sql`exists (select 1 from ${oauthTokens} where ${oauthTokens.grantId} = ${oauthGrants.id} and ${oauthTokens.expiresAt} > now() and ${oauthTokens.usedAt} is null)`
+      )
+    )
     .orderBy(desc(oauthGrants.createdAt));
   return rows.map((r) => ({
     id: r.id,
