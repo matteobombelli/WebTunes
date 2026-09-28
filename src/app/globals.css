@@ -69,10 +69,14 @@ button:not(:disabled):active {
 /* Touch screens do not have hover feedback. Keep taps crisp and visible while
    avoiding iOS's delayed/highlight flash on the app's custom controls. */
 @media (hover: none) and (pointer: coarse) {
-  button,
-  a {
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
+  /* Layered so utilities win: drag grips rely on `touch-none` to stop the
+     browser panning (and cancelling the pointer) mid-drag. */
+  @layer base {
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
   }
   a:active {
     opacity: 0.84;
