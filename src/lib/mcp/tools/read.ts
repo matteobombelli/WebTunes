@@ -379,6 +379,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
   const issueTrack = (i: LibraryIssueTrackDTO) => ({
     track: ctx.track(i.track),
     estimatedKbps: i.estimatedKbps,
+    format: i.track.mimeType,
     playlistCount: i.playlistCount,
   });
 
@@ -388,7 +389,7 @@ export function registerReadTools(server: McpServer, ctx: ToolContext): void {
     {
       title: "Find library issues",
       description:
-        "Find problems in the user's own library: tracks missing an artist, album or cover art, tracks with an estimated bitrate below minKbps (default 128; the estimate includes embedded art, so it runs high), or possible duplicates (same title and artist; results are groups, and playlistCount helps pick the copy to keep). Metadata can be fixed with update_tracks_metadata. This tool cannot delete tracks: the user deletes duplicates in the WebTunes web app, using each result's link. Page with offset.",
+        "Find problems in the user's own library: tracks missing an artist, album or cover art, tracks with an estimated bitrate below minKbps (default 128 for MP3 and 64 for Opus/AAC and other formats, which sound fine at lower rates; the estimate includes embedded art, so it runs high), or possible duplicates (same title and artist; results are groups, and playlistCount helps pick the copy to keep). Metadata can be fixed with update_tracks_metadata. This tool cannot delete tracks: the user deletes duplicates in the WebTunes web app, using each result's link. Page with offset.",
       inputSchema: z.object({
         kind: z.enum([
           "missing_artist",

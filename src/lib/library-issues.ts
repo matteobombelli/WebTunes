@@ -26,7 +26,9 @@ function isBlank(column: typeof tracks.artist | typeof tracks.album) {
 /**
  * Metadata and quality problems in the user's own library. `low_bitrate`
  * uses an estimate from fileSize and durationSec (embedded art inflates it),
- * skipping tracks missing either; `minKbps` defaults to 128.
+ * skipping tracks missing either. Without `minKbps` the threshold is 128 kbps
+ * for MP3 and 64 for everything else: imports are Opus/AAC, which sound fine
+ * well below MP3 rates, and the importer itself accepts ~100 kbps sources.
  * `possible_duplicates` pages over groups of 2+ own tracks sharing a
  * normalised title + artist; `total` then counts groups. Each track carries
  * its playlist count so the caller can tell which copy to keep.
@@ -83,7 +85,10 @@ export async function findLibraryIssues(
     missing_artist: isBlank(tracks.artist),
     missing_album: isBlank(tracks.album),
     missing_art: sql`${tracks.artS3Key} is null`,
-    low_bitrate: sql`${estimatedKbps} < ${opts.minKbps ?? 128}`,
+    low_bitrate:
+      opts.minKbps === undefined
+        ? sql`${estimatedKbps} < case when ${tracks.mimeType} = 'audio/mpeg' then 128 else 64 end`
+        : sql`${estimatedKbps} < ${opts.minKbps}`,
   }[kind];
   const where = and(own, condition);
   const order =
