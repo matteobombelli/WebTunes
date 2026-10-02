@@ -50,7 +50,10 @@ export const useImportsStore = create<ImportsState>((set, get) => {
 
   function startPolling(): void {
     if (pollTimer) return;
-    pollTimer = setInterval(() => void refresh(), POLL_MS);
+    // Skipped while hidden to spare the battery; the next visible tick catches up.
+    pollTimer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, POLL_MS);
   }
 
   function stopPolling(): void {

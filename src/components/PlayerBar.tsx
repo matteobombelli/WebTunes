@@ -67,15 +67,20 @@ export default function PlayerBar({
   initialNormalizeVolume,
   initialSimilarDrift,
   initialHideFriendDuplicates,
+  initialPauseKeepAliveMinutes,
 }: {
   initialNormalizeVolume: boolean;
   initialSimilarDrift: boolean;
   initialHideFriendDuplicates: boolean;
+  initialPauseKeepAliveMinutes: number;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   // Installed iOS PWAs need a playing media element to retain their audio
   // session while paused; AudioContext is suspended in the background.
   const silenceRef = useRef<HTMLAudioElement>(null);
+  // Stops the silence loop after the user's pause limit; an endless loop keeps
+  // the audio hardware and process awake and drains the battery.
+  const silenceCapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Frozen track position shown while the silence element owns Now Playing.
   const pausedPosRef = useRef<number | null>(null);
   // Telemetry is per queue slot and counts media-clock progress, not seeks.
@@ -127,6 +132,7 @@ export default function PlayerBar({
     initialNormalizeVolume,
     initialSimilarDrift,
     initialHideFriendDuplicates,
+    initialPauseKeepAliveMinutes,
     volume,
     playSimilarPref,
   });
@@ -416,6 +422,11 @@ export default function PlayerBar({
     navigator.mediaSession.playbackState = state;
   };
 
+  const clearSilenceCap = () => {
+    if (silenceCapRef.current) clearTimeout(silenceCapRef.current);
+    silenceCapRef.current = null;
+  };
+
   // Hold the installed iOS PWA's audio session while paused or loading the next
   // track. onPlaying stops the loop once the track owns the session again.
   const startSilenceLoop = (onStarted?: () => void) => {
@@ -427,6 +438,12 @@ export default function PlayerBar({
     s.play()
       .then(() => {
         logAudio("silence:play");
+        clearSilenceCap();
+        silenceCapRef.current = setTimeout(() => {
+          silenceCapRef.current = null;
+          logAudio("silence:cap");
+          s.pause();
+        }, usePlayerStore.getState().pauseKeepAliveMinutes * 60_000);
         onStarted?.();
       })
       .catch((e) => logAudio("silence:reject", (e as { name?: string })?.name));
@@ -603,6 +620,7 @@ export default function PlayerBar({
   // Release the keep-alive context when the player unmounts.
   useEffect(() => {
     return () => {
+      clearSilenceCap();
       keepAliveRef.current?.close().catch(() => {});
       keepAliveRef.current = null;
     };
@@ -613,6 +631,12 @@ export default function PlayerBar({
     const onVisible = () => {
       logAudio("vis", document.visibilityState);
       if (document.visibilityState !== "visible") return;
+      // Progress is written only ~1 Hz while hidden; catch the UI up now.
+      const audio = audioRef.current;
+      if (audio && audio.readyState > 0) {
+        lastProgressRef.current = audio.currentTime;
+        _setProgress(audio.currentTime, audio.duration || 0);
+      }
       recoverAttemptsRef.current = 0;
       retryPendingPlay();
     };
@@ -894,6 +918,7 @@ export default function PlayerBar({
           setPlayingUid(currentUid);
           pausedPosRef.current = null; // resumed: stop pinning the frozen scrubber
           silenceRef.current?.pause(); // the track holds the session again
+          clearSilenceCap();
           setPlaybackState("playing");
           updatePositionState();
           // WebKit may have re-enabled ±seek actions once media became seekable.
@@ -919,9 +944,11 @@ export default function PlayerBar({
           sampleListen(e.currentTarget);
           const listenSession = listenSessionRef.current;
           if (listenSession) reportListen(listenSession);
-          // Push progress at ~4 Hz, plus seeks and duration corrections.
+          // Push progress at ~4 Hz (~1 Hz while hidden, where nothing paints),
+          // plus seeks and duration corrections.
           if (
-            Math.abs(ct - lastProgressRef.current) >= 0.25 ||
+            Math.abs(ct - lastProgressRef.current) >=
+              (document.hidden ? 1 : 0.25) ||
             dur !== usePlayerStore.getState().duration
           ) {
             lastProgressRef.current = ct;

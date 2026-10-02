@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "pause_keep_alive_minutes" integer DEFAULT 10 NOT NULL;

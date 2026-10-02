@@ -84,7 +84,10 @@ export default function SuggestedImportsSection({
         // The normal API logger captures this; keep the last playable pool.
       }
     };
-    const timer = window.setInterval(() => void poll(), 2000);
+    // Skipped while hidden to spare the battery; the next visible tick catches up.
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void poll();
+    }, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

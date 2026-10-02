@@ -38,6 +38,11 @@ export const users = pgTable("users", {
   // When true, "play similar" refills track the currently-playing song (the
   // radio drifts); when false it stays anchored to the original seed track.
   similarDrift: boolean("similar_drift").notNull().default(true),
+  // Minutes (1..60) an installed iOS PWA keeps its audio session alive while
+  // paused; the silence loop stops after this to save battery.
+  pauseKeepAliveMinutes: integer("pause_keep_alive_minutes")
+    .notNull()
+    .default(10),
   // Whether the first-open tutorial tour has been shown (completed or skipped).
   // Deliberately not backfilled, so pre-feature accounts get the tour once too.
   tutorialSeen: boolean("tutorial_seen").notNull().default(false),

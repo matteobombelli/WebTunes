@@ -10,12 +10,14 @@ export function usePlayerPreferences({
   initialNormalizeVolume,
   initialSimilarDrift,
   initialHideFriendDuplicates,
+  initialPauseKeepAliveMinutes,
   volume,
   playSimilarPref,
 }: {
   initialNormalizeVolume: boolean;
   initialSimilarDrift: boolean;
   initialHideFriendDuplicates: boolean;
+  initialPauseKeepAliveMinutes: number;
   volume: number;
   playSimilarPref: boolean;
 }): void {
@@ -35,6 +37,12 @@ export function usePlayerPreferences({
       .getState()
       .setHideFriendDuplicates(initialHideFriendDuplicates);
   }, [initialHideFriendDuplicates]);
+
+  useEffect(() => {
+    usePlayerStore
+      .getState()
+      .setPauseKeepAliveMinutes(initialPauseKeepAliveMinutes);
+  }, [initialPauseKeepAliveMinutes]);
 
   useEffect(() => {
     const saved = Number.parseFloat(localStorage.getItem(VOLUME_KEY) ?? "");

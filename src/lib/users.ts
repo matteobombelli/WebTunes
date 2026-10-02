@@ -111,6 +111,7 @@ type UserSettings = {
   normalizeVolume: boolean;
   similarVariation: number;
   similarDrift: boolean;
+  pauseKeepAliveMinutes: number;
   tutorialSeen: boolean;
 };
 
@@ -126,6 +127,7 @@ export const getUserSettings = cache(async function getUserSettings(
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
       similarDrift: users.similarDrift,
+      pauseKeepAliveMinutes: users.pauseKeepAliveMinutes,
       tutorialSeen: users.tutorialSeen,
     })
     .from(users)
@@ -136,6 +138,7 @@ export const getUserSettings = cache(async function getUserSettings(
       normalizeVolume: true,
       similarVariation: 3,
       similarDrift: true,
+      pauseKeepAliveMinutes: 10,
       tutorialSeen: true,
     }
   );
@@ -154,6 +157,7 @@ export async function updateUserSettings(
       normalizeVolume: users.normalizeVolume,
       similarVariation: users.similarVariation,
       similarDrift: users.similarDrift,
+      pauseKeepAliveMinutes: users.pauseKeepAliveMinutes,
       tutorialSeen: users.tutorialSeen,
     });
   return row;

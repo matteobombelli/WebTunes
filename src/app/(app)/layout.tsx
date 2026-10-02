@@ -26,6 +26,7 @@ export default async function AppLayout({
       normalizeVolume,
       similarVariation,
       similarDrift,
+      pauseKeepAliveMinutes,
       hideFriendDuplicates,
       tutorialSeen,
     },
@@ -70,12 +71,14 @@ export default async function AppLayout({
         initialNormalizeVolume={normalizeVolume}
         initialSimilarDrift={similarDrift}
         initialHideFriendDuplicates={hideFriendDuplicates}
+        initialPauseKeepAliveMinutes={pauseKeepAliveMinutes}
       />
       <MobileNav hasIncomingRequests={hasIncomingRequests} />
       <Toast />
       <ConfirmDialog />
       <SettingsModal
         initialSimilarVariation={similarVariation}
+        initialPauseKeepAliveMinutes={pauseKeepAliveMinutes}
         userEmail={user.email}
         userName={user.name}
       />

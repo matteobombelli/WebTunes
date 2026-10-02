@@ -96,6 +96,8 @@ type PlayerState = {
   /** When true, "play similar" refills seed from the currently-playing track
    *  (the radio drifts); when false they stay anchored to similarSeedId. */
   similarDrift: boolean;
+  /** Minutes an installed iOS PWA holds its audio session while paused. */
+  pauseKeepAliveMinutes: number;
   /** Hide friends' tracks that duplicate one of the viewer's own (scope=all/
    *  friends + search). Shared with LibraryBrowser so the Settings toggle
    *  re-filters the visible list. */
@@ -164,6 +166,7 @@ type PlayerState = {
   setVolume: (volume: number) => void;
   setNormalizeVolume: (normalizeVolume: boolean) => void;
   setSimilarDrift: (similarDrift: boolean) => void;
+  setPauseKeepAliveMinutes: (pauseKeepAliveMinutes: number) => void;
   setHideFriendDuplicates: (hideFriendDuplicates: boolean) => void;
   /** Restore a persisted session after an iOS page discard (always paused). */
   hydrateSession: (
@@ -198,6 +201,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 1,
   normalizeVolume: true,
   similarDrift: true,
+  pauseKeepAliveMinutes: 10,
   hideFriendDuplicates: true,
   currentTime: 0,
   duration: 0,
@@ -799,6 +803,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: (volume) => set({ volume }),
   setNormalizeVolume: (normalizeVolume) => set({ normalizeVolume }),
   setSimilarDrift: (similarDrift) => set({ similarDrift }),
+  setPauseKeepAliveMinutes: (pauseKeepAliveMinutes) =>
+    set({ pauseKeepAliveMinutes }),
   setHideFriendDuplicates: (hideFriendDuplicates) =>
     set({ hideFriendDuplicates }),
 

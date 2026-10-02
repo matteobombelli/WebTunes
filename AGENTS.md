@@ -104,7 +104,7 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 - `usePlayerStore.isPlaying` is intent; the media element's `paused` state is reality. `pendingPlayRef` and `retryPendingPlay` are the recovery bridge—do not introduce another.
 - `expectedPauseRef` marks deliberate pauses/source swaps. Unmarked DOM pauses reconcile intent to paused so Bluetooth disconnects or audio-focus loss never resume through speakers. Marks expire after 2 s, because a source swap flips `paused` without firing `pause` and a surviving mark would swallow a later genuine system pause.
 - A low-level Web Audio tone holds Bluetooth output awake while playing, preventing buffered audio bleed between tracks. Suspend it while idle.
-- Installed iOS PWAs also play `public/silence.m4a` through pauses and track-end loading gaps. A real media element is required because iOS suspends AudioContext in the background.
+- Installed iOS PWAs also play `public/silence.m4a` through pauses and track-end loading gaps. A real media element is required because iOS suspends AudioContext in the background. The loop stops after the user's `pauseKeepAliveMinutes` (1–60, default 10) to save battery; after that iOS may drop the lock-screen session.
 - Player sessions persist queue/index/position to `wt-player-session` on hide/pagehide and rehydrate paused after an iOS discard. Restoring paused is required by autoplay and battery constraints.
 - MediaSession `seekto` is supported. Keep `seekbackward` / `seekforward` unset so iOS displays previous/next track controls.
 - On-device audio diagnostics are opt-in via `localStorage.setItem("wt-audio-debug", "1")`; logs persist under `wt-audio-log`.

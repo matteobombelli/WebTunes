@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOutAction } from "@/app/(auth)/actions";
 import { api } from "@/lib/api";
@@ -32,10 +32,12 @@ const VARIATION_LABELS = [
  */
 export default function SettingsModal({
   initialSimilarVariation,
+  initialPauseKeepAliveMinutes,
   userEmail,
   userName,
 }: {
   initialSimilarVariation: number;
+  initialPauseKeepAliveMinutes: number;
   userEmail: string;
   userName: string | null;
 }) {
@@ -46,6 +48,8 @@ export default function SettingsModal({
   const hideFriendDuplicates = usePlayerStore((s) => s.hideFriendDuplicates);
   const excludedCount = useExclusionsStore((s) => s.ids.size);
   const [variation, setVariation] = useState(initialSimilarVariation);
+  const [pauseMinutes, setPauseMinutes] = useState(initialPauseKeepAliveMinutes);
+  const savedPauseMinutesRef = useRef(initialPauseKeepAliveMinutes);
   // 'excluded' swaps the modal to the Play Similar exclusion list sub-view.
   const [view, setView] = useState<"main" | "excluded">("main");
   const [name, setName] = useState(userName ?? "");
@@ -121,6 +125,26 @@ export default function SettingsModal({
       });
     } catch {
       setVariation(prev);
+      revertToast();
+    }
+  };
+
+  // Saved on release rather than per step so a drag sends one request.
+  const commitPauseMinutes = async (value: number) => {
+    const prev = savedPauseMinutesRef.current;
+    if (value === prev) return;
+    savedPauseMinutesRef.current = value;
+    usePlayerStore.getState().setPauseKeepAliveMinutes(value);
+    try {
+      await api("/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pauseKeepAliveMinutes: value }),
+      });
+    } catch {
+      savedPauseMinutesRef.current = prev;
+      setPauseMinutes(prev);
+      usePlayerStore.getState().setPauseKeepAliveMinutes(prev);
       revertToast();
     }
   };
@@ -305,6 +329,29 @@ export default function SettingsModal({
             Hides friends&apos; tracks that match one already in your library when
             browsing everything or friends.
           </p>
+
+          <div className="mt-5">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm text-fg">Lock-screen controls when paused</span>
+              <span className="text-xs text-accent-bright">{pauseMinutes} min</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={60}
+              step={1}
+              value={pauseMinutes}
+              onChange={(e) => setPauseMinutes(Number(e.target.value))}
+              onPointerUp={(e) => commitPauseMinutes(Number(e.currentTarget.value))}
+              onKeyUp={(e) => commitPauseMinutes(Number(e.currentTarget.value))}
+              className="w-full accent-accent"
+              aria-label="Lock-screen controls when paused, in minutes"
+            />
+            <p className="mt-2 text-xs text-fg-muted">
+              In the installed iPhone app, how long playback controls stay on
+              the lock screen after you pause. Shorter saves battery.
+            </p>
+          </div>
 
           <button
             onClick={() => {
