@@ -110,7 +110,7 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 - On-device audio diagnostics are opt-in via `localStorage.setItem("wt-audio-debug", "1")`; logs persist under `wt-audio-log`.
 - Offline audio is served from `wt-audio` with Range-aware 206 responses. Downloads persist until manually deleted; downloaded playlists sync on online app load.
 - `/downloads` is the offline entry point: its client UI lives in `downloads/layout.tsx` above an empty `loading.tsx` so the tab paints from Next's partial prefetch, and the SW serves it cache-first (redirecting other uncached navigations there after a 1 s grace).
-- `PlayerQueueWarmers` preloads nearby art and the next three tracks once the current track actually starts playing (2.5 s fallback), so warming never competes with the tapped track's first bytes. The iOS silence loop keeps background auto-advance/refill alive beyond that window.
+- `PlayerQueueWarmers` preloads nearby art and, on touch devices (`pointer: coarse`) only, the next three tracks once the current track actually starts playing (2.5 s fallback), so warming never competes with the tapped track's first bytes. The iOS silence loop keeps background auto-advance/refill alive beyond that window.
 
 ## Operational constraints
 

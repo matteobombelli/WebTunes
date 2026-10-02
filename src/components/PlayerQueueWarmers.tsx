@@ -53,6 +53,9 @@ export default memo(function PlayerQueueWarmers({
   useEffect(() => {
     if (!armed) return;
     if (index < 0) return;
+    // Audio pre-caching works around mobile background network throttling;
+    // desktop browsers don't throttle, so skip the downloads and disk writes.
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
     const nextIds = queue
       .slice(index + 1, index + 1 + PREFETCH_AHEAD)
       .map(({ track }) => track.id);
