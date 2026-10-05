@@ -312,6 +312,7 @@ export async function listUserTopTracks(
 
 /**
  * "New tracks": accessible uploads from the last 7 days, newest first (≤100).
+ * Private tracks are excluded, including the viewer's own.
  * When nobody (you or your friends) has uploaded recently, falls back to the
  * newest 100 accessible tracks so the section is never empty in a quiet library.
  */
@@ -320,7 +321,10 @@ export async function listNewTracks(
   hideFriendDuplicates: boolean
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(userId);
-  const where = accessWhere(userId, friendIds, hideFriendDuplicates);
+  const where = and(
+    accessWhere(userId, friendIds, hideFriendDuplicates),
+    eq(tracks.isPrivate, false)
+  );
 
   const base = () =>
     db
