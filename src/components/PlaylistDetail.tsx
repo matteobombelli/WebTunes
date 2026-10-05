@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { api, playlistCoverSrc } from "@/lib/api";
 import { evictRuntimeArt } from "@/lib/offline/art-cache";
 import type { FriendDTO, PlaylistDTO, TrackDTO } from "@/lib/types";
@@ -163,10 +163,17 @@ export default function PlaylistDetail({
     router.refresh();
   };
 
-  const removeTrack = async (track: TrackDTO) => {
-    // Failures surface via TrackList's remove/bulkRemove toasts.
-    await api(`/playlists/${playlist.id}/tracks/${track.id}`, { method: "DELETE" });
-  };
+  // Stable callbacks: TrackList hands them to every row, so a new identity per
+  // render (e.g. each rename keystroke) would re-render the whole list.
+  const removeTrack = useCallback(
+    async (track: TrackDTO) => {
+      // Failures surface via TrackList's remove/bulkRemove toasts.
+      await api(`/playlists/${playlist.id}/tracks/${track.id}`, {
+        method: "DELETE",
+      });
+    },
+    [playlist.id]
+  );
 
   const duplicate = async () => {
     if (copying) return;
@@ -188,18 +195,22 @@ export default function PlaylistDetail({
     }
   };
 
-  const reorderTracks = async (trackIds: string[]) => {
-    try {
-      await api(`/playlists/${playlist.id}/tracks`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackIds }),
-      });
-    } finally {
-      // Resync even on failure so a rejected reorder reverts the optimistic order.
-      router.refresh();
-    }
-  };
+  const reorderTracks = useCallback(
+    async (trackIds: string[]) => {
+      try {
+        await api(`/playlists/${playlist.id}/tracks`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trackIds }),
+        });
+      } finally {
+        // Resync even on failure so a rejected reorder reverts the optimistic order.
+        router.refresh();
+      }
+    },
+    [playlist.id, router]
+  );
+  const trackIds = useMemo(() => tracks.map((t) => t.id), [tracks]);
 
   const cover = (
     <PlaylistCover
@@ -498,7 +509,7 @@ export default function PlaylistDetail({
       {canEdit && (
         <AddTracksDialog
           playlistId={playlist.id}
-          existingTrackIds={tracks.map((t) => t.id)}
+          existingTrackIds={trackIds}
           open={adding}
           onClose={() => setAdding(false)}
         />

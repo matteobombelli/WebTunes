@@ -210,7 +210,7 @@ export async function removeAll(): Promise<void> {
  * downloads persist until the user removes them.
  */
 export async function syncPlaylists(): Promise<TrackDTO[]> {
-  const toDownload = new Map<string, TrackDTO>();
+  const remoteTracks = new Map<string, TrackDTO>();
   for (const local of await getDownloadedPlaylists()) {
     let remote: PlaylistWithTracks;
     try {
@@ -229,10 +229,9 @@ export async function syncPlaylists(): Promise<TrackDTO[]> {
       local.trackIds.filter((id) => !remoteIds.has(id)),
       local.id
     );
-    const present = await hasManyAudio(tracks.map((t) => t.id));
-    for (const track of tracks) {
-      if (!present.has(track.id)) toDownload.set(track.id, track);
-    }
+    for (const track of tracks) remoteTracks.set(track.id, track);
   }
-  return [...toDownload.values()];
+  // One cache scan after every collectRemoved, rather than one per playlist.
+  const present = await hasManyAudio([...remoteTracks.keys()]);
+  return [...remoteTracks.values()].filter((track) => !present.has(track.id));
 }

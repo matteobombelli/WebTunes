@@ -25,10 +25,12 @@ export async function getFriendActivity(
   userId: string,
   { days, limit }: { days: number; limit: number }
 ): Promise<FriendActivityDTO> {
-  const friendIds = await friendIdsOf(userId);
+  const [friendIds, { hideFriendDuplicates }] = await Promise.all([
+    friendIdsOf(userId),
+    getUserSettings(userId),
+  ]);
   if (friendIds.length === 0) return { recentlyAdded: [], topPlayed: [] };
 
-  const { hideFriendDuplicates } = await getUserSettings(userId);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const friendTrackAccess = and(
     inArray(tracks.ownerId, friendIds),

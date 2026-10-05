@@ -19,15 +19,14 @@ import DiscoverBrowser from "@/components/DiscoverBrowser";
 
 export default async function DiscoverPage() {
   const user = await requirePageUser();
-  const { hideFriendDuplicates } = await getUserSettings(user.id);
 
-  // Top-100 resolves first: its ids both seed "Recommended" and are excluded
-  // from it. The rest are independent, so they run together. friendIdsOf and
+  // Only "Recommended" waits for Top-100: its ids both seed it and are excluded
+  // from it. Everything else starts immediately. friendIdsOf and
   // getUserSettings are cache()d, so the sections share one round-trip each.
-  const top = await listTopTracks(user.id);
-  const topIds = top.map((t) => t.id);
-
+  const topPromise = listTopTracks(user.id);
+  const settingsPromise = getUserSettings(user.id);
   const [
+    top,
     recommended,
     random,
     friendsTop,
@@ -38,10 +37,17 @@ export default async function DiscoverPage() {
     ownFriendListens,
     suggestedImports,
   ] = await Promise.all([
-    findRecommendedClusters(user.id, topIds, { limit: 100, excludeIds: topIds }),
-    randomSeedTracks(user.id, hideFriendDuplicates),
-    listFriendsTop(user.id, hideFriendDuplicates),
-    listNewTracks(user.id, hideFriendDuplicates),
+    topPromise,
+    topPromise.then((top) => {
+      const topIds = top.map((t) => t.id);
+      return findRecommendedClusters(user.id, topIds, {
+        limit: 100,
+        excludeIds: topIds,
+      });
+    }),
+    settingsPromise.then((s) => randomSeedTracks(user.id, s.hideFriendDuplicates)),
+    settingsPromise.then((s) => listFriendsTop(user.id, s.hideFriendDuplicates)),
+    settingsPromise.then((s) => listNewTracks(user.id, s.hideFriendDuplicates)),
     friendsOf(user.id),
     pendingRequestsFor(user.id),
     suggestedFriendsFor(user.id),

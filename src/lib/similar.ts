@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   and,
   cosineDistance,
@@ -39,6 +40,35 @@ const SIGMA_BY_VARIATION = [1.2, 0.45, 0.2, 0.07, 0];
 // random picks related. Far larger than any `limit`, and cheap (no vectors are
 // transferred - pgvector ranks in-DB and returns only these rows).
 const POOL_SIZE = 200;
+
+// Playlist recommendations seed from at most this many members (by position):
+// clustering is O(n²) on the event loop and larger seed sets add little.
+const MAX_PLAYLIST_SEEDS = 200;
+
+// Clustering is pure CPU over immutable embeddings, so identical seed sets
+// reuse their centroids briefly (repeat playlist opens / Discover reloads).
+const CENTROID_CACHE_MS = 10 * 60 * 1000;
+const CENTROID_CACHE_MAX = 64;
+const centroidCache = new Map<
+  string,
+  { at: number; centroids: number[][] | null }
+>();
+
+function cachedClusterCentroids(
+  vectors: number[][],
+  ids: string[]
+): number[][] | null {
+  const key = createHash("sha1").update(ids.join(",")).digest("base64");
+  const hit = centroidCache.get(key);
+  if (hit && Date.now() - hit.at < CENTROID_CACHE_MS) return hit.centroids;
+  const centroids = autoClusterCentroids(vectors, ids);
+  centroidCache.delete(key);
+  centroidCache.set(key, { at: Date.now(), centroids });
+  if (centroidCache.size > CENTROID_CACHE_MAX) {
+    centroidCache.delete(centroidCache.keys().next().value!);
+  }
+  return centroids;
+}
 
 /**
  * Tracks acoustically similar to a seed track, ranked by CLAP-embedding cosine
@@ -120,7 +150,10 @@ export async function findRecommendedClusters(
   const [seedRows, { hideFriendDuplicates, similarVariation }, friendIds] =
     await Promise.all([
       db
-        .select({ embedding: trackEmbeddings.embedding })
+        .select({
+          trackId: trackEmbeddings.trackId,
+          embedding: trackEmbeddings.embedding,
+        })
         .from(trackEmbeddings)
         .where(
           and(
@@ -149,7 +182,12 @@ export async function findRecommendedClusters(
     hideFriendDuplicates,
   };
 
-  const centroids = autoClusterCentroids(embeddings, seedTrackIds);
+  // Keyed by the rows actually returned (in returned order), so a newly
+  // embedded or newly excluded seed is a different key, never a stale hit.
+  const centroids = cachedClusterCentroids(
+    embeddings,
+    seedRows.map((r) => r.trackId)
+  );
 
   // No usable cluster structure (too few seeds / homogeneous library) → fall
   // back to the single mean centroid, the prior "Recommended" behavior.
@@ -182,7 +220,8 @@ export async function findRecommendedClusters(
  * playlist's current members plus any `excludeIds` (already-shown ids, for
  * "refresh / show more"). Returns [] when no member has an embedding yet.
  *
- * Seeds are every member track id - the seed embeddings never leave the DB, so
+ * Seeds are the first MAX_PLAYLIST_SEEDS member ids by position, regardless of
+ * the viewer's access - the seed embeddings never leave the DB, so
  * seeding from members the viewer can't personally stream is safe and gives
  * better centroids; only the access-filtered results are returned.
  */
@@ -194,10 +233,12 @@ export async function findPlaylistRecommendations(
   const members = await db
     .select({ trackId: playlistTracks.trackId })
     .from(playlistTracks)
-    .where(eq(playlistTracks.playlistId, playlistId));
+    .where(eq(playlistTracks.playlistId, playlistId))
+    .orderBy(playlistTracks.position);
   const memberIds = members.map((m) => m.trackId);
   if (memberIds.length === 0) return [];
-  return findRecommendedClusters(userId, memberIds, {
+  // Seeds are capped, but every member stays excluded from the results.
+  return findRecommendedClusters(userId, memberIds.slice(0, MAX_PLAYLIST_SEEDS), {
     limit,
     excludeIds: [...memberIds, ...excludeIds],
   });
@@ -270,7 +311,10 @@ async function rankAccessibleByVector(
         withinIds && withinIds.length
           ? inArray(tracks.id, withinIds)
           : undefined,
-        excludeIds.length ? notInArray(tracks.id, excludeIds) : undefined,
+        // One array parameter: exclusion lists can hold thousands of ids.
+        excludeIds.length
+          ? sql`${tracks.id} <> all(${sql.param(excludeIds)}::uuid[])`
+          : undefined,
         // Drop tracks the viewer has excluded from their Play Similar feed. A
         // subselect (unlike an empty array) is always safe - no length guard -
         // and trackId is NOT NULL so NOT IN can't collapse to "no rows pass".

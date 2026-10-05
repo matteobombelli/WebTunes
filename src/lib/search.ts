@@ -44,14 +44,16 @@ export async function searchTracks(
 
   let ownerIds: string[];
   let friendIds: string[] = [];
+  // Only friend scopes need the duplicate setting; fetch it alongside friends.
+  let hideFriendDuplicates = false;
   if (scope === "own") {
     ownerIds = [userId];
-  } else if (scope === "friends") {
-    friendIds = await friendIdsOf(userId);
-    ownerIds = friendIds;
   } else {
-    friendIds = await friendIdsOf(userId);
-    ownerIds = [userId, ...friendIds];
+    [friendIds, { hideFriendDuplicates }] = await Promise.all([
+      friendIdsOf(userId),
+      getUserSettings(userId),
+    ]);
+    ownerIds = scope === "friends" ? friendIds : [userId, ...friendIds];
   }
   if (ownerIds.length === 0) return [];
 
@@ -72,7 +74,6 @@ export async function searchTracks(
   const visible = or(eq(tracks.ownerId, userId), eq(tracks.isPrivate, false));
 
   // Hide friends' copies of songs the user already owns (own rows untouched).
-  const { hideFriendDuplicates } = await getUserSettings(userId);
   const noFriendDupes =
     scope !== "own" && hideFriendDuplicates
       ? or(

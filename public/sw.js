@@ -109,6 +109,8 @@ self.addEventListener("fetch", (event) => {
  * responses from a SW, so 206 slicing is mandatory. Cache miss → network
  * (the route 302s to a presigned S3 URL, which the media request follows).
  */
+let lastStream = null;
+
 async function serveStream(request) {
   // Match on the URL, not the request: Cache API matching is confused by Range
   // headers on the request. Check user downloads (wt-audio) first, then the
@@ -119,7 +121,14 @@ async function serveStream(request) {
     (await caches.match(request.url, { cacheName: PREFETCH_CACHE }));
   if (!cached) return fetch(request);
 
-  const blob = await cached.blob();
+  // iOS issues many Range requests per track; reuse the last body rather than
+  // re-materializing the whole file for each one. Safe because a track's
+  // cached audio is never rewritten in place (the lookups above still run, so
+  // a deleted download stops being served).
+  if (lastStream?.url !== request.url) {
+    lastStream = { url: request.url, blob: await cached.blob() };
+  }
+  const { blob } = lastStream;
   const type = safeAudioType(cached.headers.get("Content-Type"));
   const range = parseRange(request.headers.get("Range"), blob.size);
 
@@ -193,11 +202,24 @@ async function serveArt(event) {
   if (hit) {
     const cachedAt = Number(hit.headers.get("x-wt-cached-at"));
     if (!(Date.now() - cachedAt < ART_RUNTIME_TTL_MS)) {
-      event.waitUntil(refreshArt(runtime, request.url).catch(() => {}));
+      event.waitUntil(refreshArtOnce(runtime, request.url).catch(() => {}));
     }
     return hit;
   }
-  return refreshArt(runtime, request.url).catch(() => fetch(request));
+  return refreshArtOnce(runtime, request.url).catch(() => fetch(request));
+}
+
+// Concurrent misses for the same image (e.g. one cover in several rows) share
+// one fetch; each caller gets its own clone of the body.
+const inflightArt = new Map();
+
+function refreshArtOnce(cache, url) {
+  let pending = inflightArt.get(url);
+  if (!pending) {
+    pending = refreshArt(cache, url).finally(() => inflightArt.delete(url));
+    inflightArt.set(url, pending);
+  }
+  return pending.then((res) => res.clone());
 }
 
 async function refreshArt(cache, url) {
@@ -214,7 +236,9 @@ async function refreshArt(cache, url) {
     },
   });
   await cache.put(url, stored.clone());
-  if (++runtimeArtPuts % 50 === 0) await pruneRuntimeArt(cache);
+  // Also prunes on the first put of each worker lifetime: the counter resets
+  // whenever the browser stops an idle worker, so short sessions never hit 50.
+  if (runtimeArtPuts++ % 50 === 0) await pruneRuntimeArt(cache);
   return stored;
 }
 

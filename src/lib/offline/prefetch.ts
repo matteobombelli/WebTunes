@@ -24,6 +24,9 @@ let warmChain: Promise<void> = Promise.resolve();
 // Aborting the superseded run's download frees the chain immediately; without
 // it a new queue would wait for a whole stale file on a throttled link.
 let warmAbort: AbortController | null = null;
+// Ids of the in-flight run; an identical request joins it instead of aborting
+// a half-finished download only to restart it from byte 0.
+let warmKey: string | null = null;
 
 /**
  * Warm the next few tracks' audio for cache-served background advances, keeping
@@ -42,13 +45,21 @@ export async function prefetchUpcoming(
   currentId: string | undefined,
   nextIds: (string | undefined)[]
 ): Promise<void> {
+  const key = [currentId, ...nextIds].join(",");
+  if (key === warmKey) return warmChain;
   const run = ++warmSeq;
+  warmKey = key;
   warmAbort?.abort();
   const abort = new AbortController();
   warmAbort = abort;
-  warmChain = warmChain.then(() =>
-    run === warmSeq ? warm(currentId, nextIds, run, abort.signal) : undefined
-  );
+  warmChain = warmChain
+    .then(() =>
+      run === warmSeq ? warm(currentId, nextIds, run, abort.signal) : undefined
+    )
+    .finally(() => {
+      // Finished runs may be retried (e.g. after coming back online).
+      if (run === warmSeq) warmKey = null;
+    });
   return warmChain;
 }
 

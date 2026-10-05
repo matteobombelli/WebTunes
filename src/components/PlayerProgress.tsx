@@ -85,28 +85,6 @@ export default function PlayerProgress({
     return () => cancelAnimationFrame(animationFrame);
   }, [isPlaying, playedSeconds, smooth, totalDuration]);
 
-  // Report the reliable duration + live position to the OS Now Playing UI.
-  // Without this, iOS reads the <audio> element's own (sometimes wildly
-  // misreported) duration and shows ±10s skip buttons instead of the
-  // previous/next-track arrows; the server-measured duration keeps it correct.
-  useEffect(() => {
-    if (
-      !("mediaSession" in navigator) ||
-      !navigator.mediaSession.setPositionState
-    )
-      return;
-    if (!totalDuration || !Number.isFinite(totalDuration)) return;
-    try {
-      navigator.mediaSession.setPositionState({
-        duration: totalDuration,
-        playbackRate: 1,
-        position: Math.min(Math.max(0, playedSeconds), totalDuration),
-      });
-    } catch {
-      // Invalid state (e.g. a transient position > duration mid-transition).
-    }
-  }, [totalDuration, playedSeconds]);
-
   if (barOnly) {
     const pct =
       totalDuration > 0

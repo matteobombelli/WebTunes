@@ -222,18 +222,11 @@ export async function ingestTrack({
     meta.artBuffer
       ? { body: meta.artBuffer, ...imageKindFromMime(meta.artMime) }
       : null;
-  if (!cover && overrides?.artUrl) {
-    const fetched = await fetchCoverArt(overrides.artUrl, {
-      cropSquare: overrides.artCropSquare,
-    });
-    if (fetched) {
-      cover = {
-        body: fetched.body,
-        contentType: fetched.kind.contentType,
-        ext: fetched.kind.ext,
-      };
-    }
-  }
+  // Started now so the network fetch overlaps the duration probe below.
+  const fetchedCover =
+    !cover && overrides?.artUrl
+      ? fetchCoverArt(overrides.artUrl, { cropSquare: overrides.artCropSquare })
+      : Promise.resolve(null);
 
   const trackId = randomUUID();
   // Store the lossless MP4 re-mux for Opus, otherwise the original bytes. The
@@ -249,7 +242,18 @@ export async function ingestTrack({
   // always matches what actually plays; music-metadata measured the original
   // upload buffer, which diverges from the remuxed MP4 for Opus. Best-effort -
   // fall back to the music-metadata value when ffprobe can't measure it.
-  const durationSec = (await probeDurationSec(audioBody, audioExt)) ?? meta.durationSec;
+  const [probedDuration, fetched] = await Promise.all([
+    probeDurationSec(audioBody, audioExt),
+    fetchedCover,
+  ]);
+  const durationSec = probedDuration ?? meta.durationSec;
+  if (fetched) {
+    cover = {
+      body: fetched.body,
+      contentType: fetched.kind.contentType,
+      ext: fetched.kind.ext,
+    };
+  }
 
   // Upload audio and cover art together. Art is best-effort and must never fail
   // the track - swallow its errors and drop the key so the row isn't orphaned.

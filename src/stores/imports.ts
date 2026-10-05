@@ -33,18 +33,28 @@ export function isImportJobActive(job: ImportJobDTO): boolean {
 // One poll loop serves all subscribers; dismissed ids stay hidden until the
 // server's one-hour retention expires.
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+// Slow responses must not stack overlapping polls.
+let refreshing = false;
 const dismissed = new Set<string>();
 const POLL_MS = 2000;
 
 export const useImportsStore = create<ImportsState>((set, get) => {
   async function refresh(): Promise<void> {
+    if (refreshing) return;
+    refreshing = true;
     let jobs: ImportJobDTO[];
     try {
       jobs = await api<ImportJobDTO[]>("/import");
     } catch {
       return; // transient poll failure - keep the last snapshot
+    } finally {
+      refreshing = false;
     }
-    set({ jobs: jobs.filter((j) => !dismissed.has(j.id)) });
+    const visible = jobs.filter((j) => !dismissed.has(j.id));
+    // Identical polls skip the store update and the progress bar re-render.
+    if (JSON.stringify(visible) !== JSON.stringify(get().jobs)) {
+      set({ jobs: visible });
+    }
     if (!jobs.some(isImportJobActive)) stopPolling();
   }
 

@@ -20,8 +20,8 @@ import type { TrackDTO } from "@/lib/types";
 // Library access predicate, mirroring listAccessibleTracks: own tracks OR
 // friends' non-private tracks, with the same duplicate-hiding applied to
 // friend-owned rows when the viewer has it on. Shared by every discovery section.
-// The play-history sections ("Your top 100", a friend's top, friends' combined
-// top) pass it through topTracksByRecency; pass hideFriendDuplicates=false there
+// The play-history sections ("Your top 100", a friend's top) pass it through
+// topTracksByRecency (friends' combined top inlines the same ranking); pass hideFriendDuplicates=false there
 // to get the access half only (no dedup) - e.g. "Your top 100" must not collapse
 // friend-copies out of your own play history.
 function accessWhere(
@@ -223,18 +223,54 @@ export async function listFriendsTop(
     ...friendIds.filter((id) => !ranked.includes(id)),
   ];
 
-  // Each friend's own top tracks, ranked + access-filtered the same way a single
-  // friend's profile top is.
+  // Each friend's own top 100, ranked + access-filtered the same way a single
+  // friend's profile top is, in one query rather than ~3 per friend. The order
+  // key encodes topTracksByRecency's rule: tracks with 7-day plays first by
+  // recent count, then the backfill (no recent plays) by all-time count.
   const accessClause = accessWhere(userId, friendIds, hideFriendDuplicates);
-  const perFriend = await Promise.all(
-    orderedFriends.map((fid) =>
-      topTracksByRecency({
-        listenerIds: [fid],
-        viewerId: userId,
-        accessClause,
-      })
-    )
+  const recent = sql`count(*) filter (where ${listens.playedAt} > now() - interval '7 days')`;
+  const friendTop = db
+    .select({
+      listenerId: listens.userId,
+      trackId: listens.trackId,
+      rn: sql<number>`row_number() over (
+        partition by ${listens.userId}
+        order by ${recent} > 0 desc,
+          case when ${recent} > 0 then ${recent} else count(*) end desc
+      )`.as("rn"),
+    })
+    .from(listens)
+    .innerJoin(tracks, eq(tracks.id, listens.trackId))
+    .where(and(inArray(listens.userId, friendIds), accessClause))
+    .groupBy(listens.userId, listens.trackId)
+    .as("friend_top");
+  const top = await db
+    .select({ listenerId: friendTop.listenerId, trackId: friendTop.trackId })
+    .from(friendTop)
+    .where(sql`${friendTop.rn} <= 100`)
+    .orderBy(friendTop.listenerId, friendTop.rn);
+  const rows = top.length
+    ? await db
+        .select({ track: trackDtoColumns, ownerName: users.name })
+        .from(tracks)
+        .innerJoin(users, eq(tracks.ownerId, users.id))
+        .where(inArray(tracks.id, [...new Set(top.map((r) => r.trackId))]))
+    : [];
+  const byId = new Map(
+    rows.map((r) => [
+      r.track.id,
+      toTrackDTO(r.track, r.track.ownerId === userId ? null : r.ownerName),
+    ])
   );
+  const byFriend = new Map<string, TrackDTO[]>();
+  for (const { listenerId, trackId } of top) {
+    const track = byId.get(trackId);
+    if (!track) continue;
+    const list = byFriend.get(listenerId) ?? [];
+    list.push(track);
+    byFriend.set(listenerId, list);
+  }
+  const perFriend = orderedFriends.map((fid) => byFriend.get(fid) ?? []);
 
   // Column-major round-robin, keeping each track at its first slot, capped at 100.
   const out: TrackDTO[] = [];

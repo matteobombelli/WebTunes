@@ -692,7 +692,14 @@ export default memo(function QueuePanel({
             >
               <ul
                 ref={scrollRef}
-                onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+                onScroll={(e) => {
+                  // Only a new first row changes the window; skipping the
+                  // rest avoids re-rendering the panel on every scroll pixel.
+                  const next = e.currentTarget.scrollTop;
+                  if (Math.floor(next / rowH) !== Math.floor(scrollTop / rowH)) {
+                    setScrollTop(next);
+                  }
+                }}
                 className={
                   "min-h-0 flex-1 overflow-y-auto py-1"
                 }

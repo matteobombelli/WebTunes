@@ -91,21 +91,6 @@ async function isCollaborator(
   return !!row;
 }
 
-/** The viewer's edit relationship to a playlist: owner, collaborator, or null. */
-export async function getPlaylistRole(
-  playlistId: string,
-  userId: string
-): Promise<PlaylistRole> {
-  if (!isUuid(playlistId)) return null;
-  const [playlist] = await db
-    .select({ ownerId: playlists.ownerId })
-    .from(playlists)
-    .where(eq(playlists.id, playlistId));
-  if (!playlist) return null;
-  if (playlist.ownerId === userId) return "owner";
-  return (await isCollaborator(playlistId, userId)) ? "collaborator" : null;
-}
-
 /**
  * Loads a playlist the user may EDIT (add/remove/reorder tracks, rename, change
  * cover): their own, or one a friend added them to as a collaborator. Returns
@@ -570,18 +555,25 @@ export async function getOwnPlaylist(playlistId: string, userId: string) {
  * this is read access only.
  */
 export async function getAccessiblePlaylist(playlistId: string, userId: string) {
+  return (await loadAccessiblePlaylist(playlistId, userId))?.playlist ?? null;
+}
+
+/** getAccessiblePlaylist plus the viewer's role, which the checks already find. */
+async function loadAccessiblePlaylist(playlistId: string, userId: string) {
   if (!isUuid(playlistId)) return null;
   const [playlist] = await db
     .select()
     .from(playlists)
     .where(eq(playlists.id, playlistId));
   if (!playlist) return null;
-  if (playlist.ownerId === userId) return playlist;
+  if (playlist.ownerId === userId) return { playlist, role: "owner" as const };
   // A collaborator can view (and edit) the playlist even when it's private.
-  if (await isCollaborator(playlistId, userId)) return playlist;
+  if (await isCollaborator(playlistId, userId)) {
+    return { playlist, role: "collaborator" as const };
+  }
   if (playlist.isPrivate) return null;
   if (!(await areFriends(userId, playlist.ownerId))) return null;
-  return playlist;
+  return { playlist, role: null };
 }
 
 // Track counts for all playlists in one pre-aggregated pass, LEFT JOINed below
@@ -722,17 +714,19 @@ export async function listPlaylistsWithCount(
 export async function listAccessiblePlaylists(
   userId: string
 ): Promise<PlaylistDTO[]> {
-  const friendIds = await friendIdsOf(userId);
   const counts = playlistTrackCounts();
-  const collabRows = await db
-    .selectDistinct({ id: playlistCollaborators.playlistId })
-    .from(playlistCollaborators)
-    .innerJoin(
-      playlists,
-      eq(playlistCollaborators.playlistId, playlists.id)
-    )
-    .innerJoin(friendships, acceptedCollaboratorFriendship())
-    .where(eq(playlistCollaborators.userId, userId));
+  const [friendIds, collabRows] = await Promise.all([
+    friendIdsOf(userId),
+    db
+      .selectDistinct({ id: playlistCollaborators.playlistId })
+      .from(playlistCollaborators)
+      .innerJoin(
+        playlists,
+        eq(playlistCollaborators.playlistId, playlists.id)
+      )
+      .innerJoin(friendships, acceptedCollaboratorFriendship())
+      .where(eq(playlistCollaborators.userId, userId)),
+  ]);
   const collabSet = new Set(collabRows.map((r) => r.id));
   const rows = await db
     .select({
@@ -819,14 +813,14 @@ export async function getPlaylistWithTracks(
   playlistId: string,
   userId: string
 ): Promise<(PlaylistDTO & { tracks: TrackDTO[] }) | null> {
-  const playlist = await getAccessiblePlaylist(playlistId, userId);
-  if (!playlist) return null;
+  const access = await loadAccessiblePlaylist(playlistId, userId);
+  if (!access) return null;
+  const { playlist, role } = access;
 
   const isOwner = playlist.ownerId === userId;
-  const [trackDTOs, ownerName, role] = await Promise.all([
+  const [trackDTOs, ownerName] = await Promise.all([
     getPlaylistTracks(playlistId, userId),
     isOwner ? Promise.resolve(null) : getDisplayName(playlist.ownerId),
-    getPlaylistRole(playlistId, userId),
   ]);
   return {
     ...(await toPlaylistDTO(playlist, trackDTOs.length, ownerName, role)),

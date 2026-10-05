@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { sortTracks } from "@/lib/sort-tracks";
 import type { TrackDTO, TrackPageDTO } from "@/lib/types";
@@ -308,12 +308,14 @@ function AddTracksBody({
     }
   };
 
-  const previewTrack = (track: TrackDTO) => {
-    usePlayerStore.getState().playQueue([track], 0, {
-      noAutoSimilar: true,
-      startAtFraction: 0.4,
-    });
-  };
+  // Stable for the memoized rows; addTrack itself closes over fresh props.
+  const addTrackRef = useRef(addTrack);
+  useEffect(() => {
+    addTrackRef.current = addTrack;
+  });
+  const onAdd = useCallback((track: TrackDTO) => {
+    void addTrackRef.current(track);
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -345,86 +347,16 @@ function AddTracksBody({
         )}
         {candidates?.map((t) => {
           const isCurrent = currentTrackId === t.id;
-          const adding = addingIds.has(t.id);
-          const added = addedIds.has(t.id);
           return (
-            <div
+            <AddTrackRow
               key={t.id}
-              className={`overflow-hidden border-b border-border-subtle/60 last:border-b-0 ${
-                added ? "animate-add-track-out" : ""
-              }`}
-            >
-              <MobileSwipeTrack
-                track={t}
-                contentClassName="hover:bg-surface-2/40"
-                surfaceClassName="bg-surface-1"
-              >
-                <div className="relative flex items-center gap-3 px-3 py-2 text-sm">
-                  <button
-                    type="button"
-                    onClick={() => previewTrack(t)}
-                    aria-label={`Preview ${t.title} from 40%`}
-                    title={`Preview ${t.title} from 40%`}
-                    className="absolute inset-0 z-0 rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
-                  />
-                  <div
-                    aria-hidden
-                    className="pointer-events-none relative z-[1] flex min-w-0 flex-1 items-center gap-3"
-                  >
-                    <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span
-                        className={`flex min-w-0 items-center gap-1.5 font-medium ${
-                          isCurrent ? "text-accent-bright" : ""
-                        }`}
-                      >
-                        {isCurrent && (
-                          <NowPlayingBars
-                            playing={isPlaying}
-                            className="h-3 w-3 shrink-0"
-                          />
-                        )}
-                        <span className="truncate">{t.title}</span>
-                      </span>
-                      <span className="block truncate text-xs text-fg-muted sm:hidden">
-                        {t.artist ?? "-"}
-                      </span>
-                    </span>
-                    <span className="hidden max-w-32 truncate text-fg-muted sm:block">
-                      {t.artist ?? "-"}
-                    </span>
-                    <span className="shrink-0 text-xs text-fg-subtle">
-                      {t.ownerName ?? "You"}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    data-swipe-ignore
-                    onClick={() => void addTrack(t)}
-                    disabled={adding || added}
-                    aria-label={
-                      added
-                        ? `${t.title} added to playlist`
-                        : `Add ${t.title} to playlist`
-                    }
-                    title={added ? "Added" : "Add to this playlist"}
-                    className={`relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition disabled:pointer-events-none ${
-                      added
-                        ? "bg-green-500/15 text-green-400"
-                        : "text-fg-muted hover:bg-surface-2 hover:text-accent-bright disabled:opacity-50"
-                    }`}
-                  >
-                    {added ? (
-                      <CheckIcon size={18} />
-                    ) : adding ? (
-                      <LoaderIcon size={18} className="animate-spin" />
-                    ) : (
-                      <PlusIcon size={18} />
-                    )}
-                  </button>
-                </div>
-              </MobileSwipeTrack>
-            </div>
+              track={t}
+              isCurrent={isCurrent}
+              isPlaying={isCurrent && isPlaying}
+              adding={addingIds.has(t.id)}
+              added={addedIds.has(t.id)}
+              onAdd={onAdd}
+            />
           );
         })}
         {!query && allScope === scope && all?.nextCursor && (
@@ -445,3 +377,107 @@ function AddTracksBody({
     </div>
   );
 }
+
+function previewTrack(track: TrackDTO) {
+  usePlayerStore.getState().playQueue([track], 0, {
+    noAutoSimilar: true,
+    startAtFraction: 0.4,
+  });
+}
+
+// Memoized so typing in the filter or a play/pause doesn't re-render every row.
+const AddTrackRow = memo(function AddTrackRow({
+  track: t,
+  isCurrent,
+  isPlaying,
+  adding,
+  added,
+  onAdd,
+}: {
+  track: TrackDTO;
+  isCurrent: boolean;
+  /** Only true for the current row, so other rows skip play/pause renders. */
+  isPlaying: boolean;
+  adding: boolean;
+  added: boolean;
+  onAdd: (track: TrackDTO) => void;
+}) {
+  return (
+    <div
+      className={`overflow-hidden border-b border-border-subtle/60 last:border-b-0 ${
+        added ? "animate-add-track-out" : ""
+      }`}
+    >
+      <MobileSwipeTrack
+        track={t}
+        contentClassName="hover:bg-surface-2/40"
+        surfaceClassName="bg-surface-1"
+      >
+        <div className="relative flex items-center gap-3 px-3 py-2 text-sm">
+          <button
+            type="button"
+            onClick={() => previewTrack(t)}
+            aria-label={`Preview ${t.title} from 40%`}
+            title={`Preview ${t.title} from 40%`}
+            className="absolute inset-0 z-0 rounded-sm focus-visible:outline-2 focus-visible:outline-accent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none relative z-[1] flex min-w-0 flex-1 items-center gap-3"
+          >
+            <TrackArt track={t} size="h-9 w-9" iconSize={16} thumb />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span
+                className={`flex min-w-0 items-center gap-1.5 font-medium ${
+                  isCurrent ? "text-accent-bright" : ""
+                }`}
+              >
+                {isCurrent && (
+                  <NowPlayingBars
+                    playing={isPlaying}
+                    className="h-3 w-3 shrink-0"
+                  />
+                )}
+                <span className="truncate">{t.title}</span>
+              </span>
+              <span className="block truncate text-xs text-fg-muted sm:hidden">
+                {t.artist ?? "-"}
+              </span>
+            </span>
+            <span className="hidden max-w-32 truncate text-fg-muted sm:block">
+              {t.artist ?? "-"}
+            </span>
+            <span className="shrink-0 text-xs text-fg-subtle">
+              {t.ownerName ?? "You"}
+            </span>
+          </div>
+          <button
+            type="button"
+            data-swipe-ignore
+            onClick={() => onAdd(t)}
+            disabled={adding || added}
+            aria-label={
+              added
+                ? `${t.title} added to playlist`
+                : `Add ${t.title} to playlist`
+            }
+            title={added ? "Added" : "Add to this playlist"}
+            className={`relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition disabled:pointer-events-none ${
+              added
+                ? "bg-green-500/15 text-green-400"
+                : "text-fg-muted hover:bg-surface-2 hover:text-accent-bright disabled:opacity-50"
+            }`}
+          >
+            {added ? (
+              <CheckIcon size={18} />
+            ) : adding ? (
+              <LoaderIcon size={18} className="animate-spin" />
+            ) : (
+              <PlusIcon size={18} />
+            )}
+          </button>
+        </div>
+      </MobileSwipeTrack>
+    </div>
+  );
+});

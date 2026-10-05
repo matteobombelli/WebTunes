@@ -84,13 +84,22 @@ export default function SuggestedImportsSection({
         // The normal API logger captures this; keep the last playable pool.
       }
     };
-    // Skipped while hidden to spare the battery; the next visible tick catches up.
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void poll();
-    }, 2000);
+    // Any change to the pool's counts restarts this effect at 2s. With nothing
+    // processing, an unchanged pool can only change slowly (or never), so
+    // back off up to a minute instead of polling every 2s indefinitely.
+    let delay = 2000;
+    let timer = 0;
+    const tick = async () => {
+      // Skipped while hidden to spare the battery; the next visible tick catches up.
+      if (!document.hidden) await poll();
+      if (cancelled) return;
+      if (pool.processing === 0) delay = Math.min(delay * 2, 60_000);
+      timer = window.setTimeout(tick, delay);
+    };
+    timer = window.setTimeout(tick, delay);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [pool.blockedReason, pool.items.length, pool.processing, pool.target]);
 

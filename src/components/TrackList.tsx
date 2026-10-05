@@ -1,27 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { api } from "@/lib/api";
 import { sortTracks, type SortKey, type SortState } from "@/lib/sort-tracks";
 import type { TrackDTO } from "@/lib/types";
@@ -50,6 +32,13 @@ import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import { useConfirmStore } from "@/stores/confirm";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useToastStore } from "@/stores/toast";
+
+// Reorder mode exists only on editable playlists; keep @dnd-kit out of every
+// other track-list page's bundle.
+const ReorderableTrackList = dynamic(
+  () => import("@/components/ReorderableTrackList"),
+  { ssr: false }
+);
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "–:––";
@@ -80,7 +69,6 @@ const ROW_HOVER_BTN =
 type TrackRowProps = {
   track: TrackDTO;
   index: number;
-  view: TrackDTO[];
   isCurrent: boolean;
   /** Only meaningful when isCurrent; false otherwise so non-current rows stay
    *  referentially stable and skip re-render on play/pause. */
@@ -90,7 +78,8 @@ type TrackRowProps = {
   selected: boolean;
   showOwner: boolean;
   canDelete: boolean;
-  playQueue: (tracks: TrackDTO[], startIndex: number) => number;
+  /** Stable across view changes, so appends don't re-render every row. */
+  onPlay: (index: number) => void;
   onToggleSelect: (id: string, shiftKey: boolean) => void;
   onRemove?: (track: TrackDTO) => Promise<void>;
   onEdit: (track: TrackDTO) => void;
@@ -102,14 +91,13 @@ type TrackRowProps = {
 const TrackRow = memo(function TrackRow({
   track,
   index,
-  view,
   isCurrent,
   isPlaying,
   selectMode,
   selected,
   showOwner,
   canDelete,
-  playQueue,
+  onPlay,
   onToggleSelect,
   onRemove,
   onEdit,
@@ -188,7 +176,7 @@ const TrackRow = memo(function TrackRow({
           </span>
         </span>
         <button
-          onClick={() => playQueue(view, index)}
+          onClick={() => onPlay(index)}
           title={`Play ${track.title}`}
           className="flex w-full items-center gap-2 text-left font-medium hover:text-accent-bright"
         >
@@ -284,105 +272,6 @@ const TrackRow = memo(function TrackRow({
     </tr>
   );
 });
-
-// A stripped sortable row for reorder mode (grip + art + title/artist only),
-// mirroring the player queue's QueueRow. The whole table's row chrome (play,
-// checkbox, kebab) is intentionally dropped here - reordering is the one job.
-const ReorderRow = memo(function ReorderRow({ track }: { track: TrackDTO }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: track.id });
-  return (
-    <li
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0 : undefined,
-      }}
-      className="flex items-center gap-3 border-b border-border-subtle/60 py-2 pr-1"
-    >
-      <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-medium sm:text-sm">{track.title}</p>
-        <p className="truncate text-xs text-fg-muted">{track.artist ?? "-"}</p>
-      </div>
-      <button
-        {...attributes}
-        {...listeners}
-        aria-label={`Reorder ${track.title}`}
-        title="Drag to reorder"
-        className="shrink-0 cursor-grab touch-none rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg active:cursor-grabbing"
-      >
-        <GripIcon size={18} />
-      </button>
-    </li>
-  );
-});
-
-// The drag-and-drop list shown in reorder mode. Self-contained @dnd-kit context
-// (like QueuePanel) so the normal table stays untouched; all rows are mounted
-// (no windowing - playlists are small) so SortableContext can measure them.
-function ReorderableTrackList({
-  tracks,
-  onDragEnd,
-}: {
-  tracks: TrackDTO[];
-  onDragEnd: (e: DragEndEvent) => void;
-}) {
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const sensors = useSensors(
-    // A small activation distance keeps a tap distinct from a drag (and lets the
-    // page still scroll from a touch that starts on the grip).
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-  const items = useMemo(() => tracks.map((t) => t.id), [tracks]);
-  const active = activeId ? tracks.find((t) => t.id === activeId) ?? null : null;
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      modifiers={[restrictToVerticalAxis]}
-      onDragStart={(e) => setActiveId(String(e.active.id))}
-      onDragCancel={() => setActiveId(null)}
-      onDragEnd={(e) => {
-        setActiveId(null);
-        onDragEnd(e);
-      }}
-    >
-      <SortableContext items={items} strategy={verticalListSortingStrategy}>
-        <ul>
-          {tracks.map((t) => (
-            <ReorderRow key={t.id} track={t} />
-          ))}
-        </ul>
-      </SortableContext>
-      <DragOverlay>
-        {active ? (
-          <div className="flex items-center gap-3 rounded-md border border-border bg-surface-2 py-2 pl-1 pr-1 shadow-lg">
-            <TrackArt
-              track={active}
-              size="h-11 w-11 sm:h-9 sm:w-9"
-              iconSize={18}
-              thumb
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-medium sm:text-sm">
-                {active.title}
-              </p>
-              <p className="truncate text-xs text-fg-muted">
-                {active.artist ?? "-"}
-              </p>
-            </div>
-            <span className="shrink-0 p-1 text-fg-subtle">
-              <GripIcon size={18} />
-            </span>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
-  );
-}
 
 export default function TrackList({
   tracks,
@@ -480,6 +369,18 @@ export default function TrackList({
   const view = useMemo(
     () => (sortable ? sortTracks(tracks, sort) : tracks),
     [tracks, sortable, sort]
+  );
+  // Row callbacks read these refs so they stay stable when `view` grows (page
+  // appends, the full-library swap); otherwise every mounted row re-renders.
+  const viewRef = useRef(view);
+  const playQueueRef = useRef(playQueue);
+  useEffect(() => {
+    viewRef.current = view;
+    playQueueRef.current = playQueue;
+  });
+  const playRow = useCallback(
+    (index: number) => playQueueRef.current(viewRef.current, index),
+    []
   );
 
   // Render rows incrementally so a 1000+ track library doesn't mount every
@@ -598,6 +499,7 @@ export default function TrackList({
       // (inclusive), in display order - no anchor yet falls through to a plain
       // toggle. The anchor stays put so the range can be re-extended.
       if (shiftKey && anchor && anchor !== id) {
+        const view = viewRef.current;
         const from = view.findIndex((t) => t.id === anchor);
         const to = view.findIndex((t) => t.id === id);
         if (from !== -1 && to !== -1) {
@@ -618,7 +520,7 @@ export default function TrackList({
       });
       rangeAnchorRef.current = id;
     },
-    [view]
+    []
   );
   // Selection can hold ids of tracks that were since deleted (router.refresh
   // keeps client state) - only count ids present in the current list.
@@ -639,13 +541,12 @@ export default function TrackList({
   // Apply a drag reorder optimistically, then persist; the parent's
   // router.refresh reconciles (and reverts the order on a rejected PUT).
   const handleReorder = useCallback(
-    (e: DragEndEvent) => {
-      const { active, over } = e;
-      if (!over || active.id === over.id) return;
-      const from = order.findIndex((t) => t.id === active.id);
-      const to = order.findIndex((t) => t.id === over.id);
+    (activeId: string, overId: string) => {
+      const from = order.findIndex((t) => t.id === activeId);
+      const to = order.findIndex((t) => t.id === overId);
       if (from === -1 || to === -1) return;
-      const next = arrayMove(order, from, to);
+      const next = [...order];
+      next.splice(to, 0, ...next.splice(from, 1));
       setOrder(next);
       onReorder?.(next.map((t) => t.id));
     },
@@ -895,7 +796,7 @@ export default function TrackList({
         </div>
     </div>
     {reorderMode ? (
-      <ReorderableTrackList tracks={order} onDragEnd={handleReorder} />
+      <ReorderableTrackList tracks={order} onMove={handleReorder} />
     ) : (
       <>
     {/* Fixed layout: column widths come from the <th>s, so long values
@@ -984,14 +885,13 @@ export default function TrackList({
             key={track.id}
             track={track}
             index={i}
-            view={view}
             isCurrent={current?.id === track.id}
             isPlaying={current?.id === track.id ? isPlaying : false}
             selectMode={selectMode}
             selected={validSelected.has(track.id)}
             showOwner={showOwner}
             canDelete={!inPlaylist}
-            playQueue={playQueue}
+            onPlay={playRow}
             onToggleSelect={toggleSelected}
             onRemove={onRemove}
             onEdit={setEditing}

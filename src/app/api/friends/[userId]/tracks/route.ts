@@ -13,10 +13,16 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { userId } = await params;
-  if (!isUuid(userId) || !(await areFriends(user.id, userId))) {
+  if (!isUuid(userId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  const ownerName = await getDisplayName(userId);
+  // The name lookup is harmless, so it runs alongside the friendship check.
+  const [friends, ownerName] = await Promise.all([
+    areFriends(user.id, userId),
+    getDisplayName(userId),
+  ]);
+  if (!friends) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   return NextResponse.json(await listTracksOfFriend(userId, ownerName));
 }

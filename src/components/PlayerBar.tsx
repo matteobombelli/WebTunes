@@ -83,6 +83,8 @@ export default function PlayerBar({
   const silenceCapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Frozen track position shown while the silence element owns Now Playing.
   const pausedPosRef = useRef<number | null>(null);
+  // Last silence-loop MediaSession re-assert; capped at 1 Hz to save battery.
+  const lastSilenceSyncRef = useRef(0);
   // Telemetry is per queue slot and counts media-clock progress, not seeks.
   const listenSessionRef = useRef<ListenSession | null>(null);
   // Guards against cold streams whose clock drifts before audible playback.
@@ -394,12 +396,18 @@ export default function PlayerBar({
   };
 
   // Override the silence loop's 0–3s timeline with the real track position.
+  // The sole MediaSession position owner. Prefer the server-measured duration:
+  // iOS can misreport the element's, and then shows ±10s buttons instead of
+  // previous/next-track arrows.
   const updatePositionState = (positionOverride?: number) => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     if (!("setPositionState" in navigator.mediaSession)) return;
     const audio = audioRef.current;
     if (!audio) return;
-    const duration = audio.duration;
+    const duration =
+      track?.durationSec != null && track.durationSec > 0
+        ? track.durationSec
+        : audio.duration;
     if (!Number.isFinite(duration) || duration <= 0) return;
     const raw = positionOverride ?? audio.currentTime;
     const position = Math.min(Math.max(0, raw), duration);
@@ -593,7 +601,12 @@ export default function PlayerBar({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !track) return;
+    if (!audio || !track) {
+      // Emptying the queue unmounts the element; the tone must still stop so
+      // it cannot hold the output awake while idle.
+      if (!isPlaying) keepAliveRef.current?.suspend().catch(() => {});
+      return;
+    }
     if (isPlaying) {
       // MediaSession may already have resumed in-gesture before intent updates.
       if (audio.paused) attemptPlay(false);
@@ -1057,6 +1070,9 @@ export default function PlayerBar({
         onTimeUpdate={() => {
           // Continuously override the silence loop's own timeline/state.
           if (pausedPosRef.current == null) return;
+          const now = performance.now();
+          if (now - lastSilenceSyncRef.current < 1000) return;
+          lastSilenceSyncRef.current = now;
           updatePositionState(pausedPosRef.current);
           setPlaybackState("paused");
         }}

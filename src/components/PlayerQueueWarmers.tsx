@@ -34,33 +34,44 @@ export default memo(function PlayerQueueWarmers({
   // Derived, so a new tap un-arms instantly without an extra render.
   const armed = armedUid !== null && armedUid === currentUid;
 
+  // Keyed by id strings, not the queue array: refills and metadata edits
+  // replace the array, and re-running would abort an in-flight prefetch.
+  const seen = new Set<string>();
+  for (const { track } of [
+    ...queue.slice(0, 10),
+    ...queue.slice(-10),
+    ...queue.slice(Math.max(0, index - 3), index + 4),
+  ]) {
+    if (track.artS3Key) seen.add(track.id);
+  }
+  const artKey = [...seen].join(",");
+  const audioKey =
+    index < 0
+      ? ""
+      : [
+          queue[index]?.track.id ?? "",
+          ...queue
+            .slice(index + 1, index + 1 + PREFETCH_AHEAD)
+            .map(({ track }) => track.id),
+        ].join(",");
+
   useEffect(() => {
-    if (!armed) return;
-    const seen = new Set<string>();
-    const nearby = [
-      ...queue.slice(0, 10),
-      ...queue.slice(-10),
-      ...queue.slice(Math.max(0, index - 3), index + 4),
-    ];
-    for (const { track } of nearby) {
-      if (!track.artS3Key || seen.has(track.id)) continue;
-      seen.add(track.id);
+    if (!armed || !artKey) return;
+    for (const id of artKey.split(",")) {
       const image = new Image();
-      image.src = artSrc(track.id, { thumb: true });
+      image.src = artSrc(id, { thumb: true });
     }
-  }, [armed, index, queue]);
+  }, [armed, artKey]);
 
   useEffect(() => {
     if (!armed) return;
-    if (index < 0) return;
+    if (!audioKey) return;
     // Audio pre-caching works around mobile background network throttling;
     // desktop browsers don't throttle, so skip the downloads and disk writes.
     if (!window.matchMedia("(pointer: coarse)").matches) return;
-    const nextIds = queue
-      .slice(index + 1, index + 1 + PREFETCH_AHEAD)
-      .map(({ track }) => track.id);
-    prefetchUpcoming(queue[index]?.track.id, nextIds);
-  }, [armed, index, queue]);
+    const [currentId, ...nextIds] = audioKey.split(",");
+    prefetchUpcoming(currentId || undefined, nextIds);
+  }, [armed, audioKey]);
 
   return null;
 });

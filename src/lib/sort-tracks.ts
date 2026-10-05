@@ -12,6 +12,10 @@ export type SortState = { key: SortKey; dir: 1 | -1 } | null;
 // U+FFFF sentinel sorts null fields after real values (ascending).
 const NULL_SENTINEL = "￿";
 
+// Same ordering as localeCompare(b, undefined, { sensitivity: "base" }), but
+// built once: passing options to localeCompare constructs a collator per call.
+const collator = new Intl.Collator(undefined, { sensitivity: "base" });
+
 // "owner" maps to ownerName (own tracks show as "You"), not a direct field.
 function sortText(
   t: TrackDTO,
@@ -32,9 +36,7 @@ export function sortTracks(tracks: TrackDTO[], sort: SortState): TrackDTO[] {
       return (a.friendPlayCount - b.friendPlayCount) * sort.dir;
     }
     return (
-      sortText(a, sort.key).localeCompare(sortText(b, sort.key), undefined, {
-        sensitivity: "base",
-      }) * sort.dir
+      collator.compare(sortText(a, sort.key), sortText(b, sort.key)) * sort.dir
     );
   });
   return copy;

@@ -248,13 +248,31 @@ async function metadataFor(
   return new Map(Object.entries(body));
 }
 
+// Popularity is recomputed by ListenBrainz in periodic batches, while the
+// suggestion worker re-asks for the same seed artists every pass. (LB Radio is
+// randomized per call, so it is deliberately not cached.)
+const POPULARITY_CACHE_MS = 6 * 60 * 60 * 1000;
+const popularityCache = new Map<
+  string,
+  { at: number; recordings: PopularRecording[] }
+>();
+
 async function popularForArtist(artistMbid: string): Promise<PopularRecording[]> {
+  const cached = popularityCache.get(artistMbid);
+  if (cached && Date.now() - cached.at < POPULARITY_CACHE_MS) {
+    return cached.recordings;
+  }
   if (Date.now() < popularityRetryAt) return [];
   try {
     const response = await politeFetch(
       `/popularity/top-recordings-for-artist/${artistMbid}`
     );
-    return (await response.json()) as PopularRecording[];
+    const recordings = (await response.json()) as PopularRecording[];
+    for (const [mbid, entry] of popularityCache) {
+      if (Date.now() - entry.at >= POPULARITY_CACHE_MS) popularityCache.delete(mbid);
+    }
+    popularityCache.set(artistMbid, { at: Date.now(), recordings });
+    return recordings;
   } catch (error) {
     // ListenBrainz periodically disables this endpoint under high load. It is
     // an optional familiar-track source, so open a short process-wide circuit

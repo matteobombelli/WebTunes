@@ -63,29 +63,31 @@ function normalizeSuggestedText(value: string): string {
 export async function getSuggestedImportPool(
   userId: string
 ): Promise<SuggestedImportPoolDTO> {
-  const rows = await db
-    .select({ suggestion: suggestedImports, track: trackDtoColumns })
-    .from(suggestedImports)
-    .innerJoin(tracks, eq(tracks.suggestedImportId, suggestedImports.id))
-    .where(
-      and(
-        eq(suggestedImports.userId, userId),
-        eq(suggestedImports.status, "ready")
+  const [rows, [processingRow]] = await Promise.all([
+    db
+      .select({ suggestion: suggestedImports, track: trackDtoColumns })
+      .from(suggestedImports)
+      .innerJoin(tracks, eq(tracks.suggestedImportId, suggestedImports.id))
+      .where(
+        and(
+          eq(suggestedImports.userId, userId),
+          eq(suggestedImports.status, "ready")
+        )
       )
-    )
-    // updatedAt becomes the ready time on the final import transition and then
-    // stays unchanged. Sorting by it appends newly-ready cards instead of
-    // inserting them among older cards based on when they were first queued.
-    .orderBy(asc(suggestedImports.updatedAt), asc(suggestedImports.id));
-  const [processingRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(suggestedImports)
-    .where(
-      and(
-        eq(suggestedImports.userId, userId),
-        inArray(suggestedImports.status, ["queued", "importing"])
-      )
-    );
+      // updatedAt becomes the ready time on the final import transition and then
+      // stays unchanged. Sorting by it appends newly-ready cards instead of
+      // inserting them among older cards based on when they were first queued.
+      .orderBy(asc(suggestedImports.updatedAt), asc(suggestedImports.id)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(suggestedImports)
+      .where(
+        and(
+          eq(suggestedImports.userId, userId),
+          inArray(suggestedImports.status, ["queued", "importing"])
+        )
+      ),
+  ]);
   let blockedReason: SuggestedImportPoolDTO["blockedReason"] = null;
   if (!rows.length && !processingRow?.count) {
     const [identity] = await db
@@ -573,7 +575,12 @@ async function ensureCandidateQueue(userId: string): Promise<void> {
     ? await db
         .select({ recordingMbid: trackIdentities.recordingMbid })
         .from(trackIdentities)
-        .where(inArray(trackIdentities.trackId, accessible.map((track) => track.id)))
+        // One array parameter: a large library would exceed the bind limit.
+        .where(
+          sql`${trackIdentities.trackId} = any(${sql.param(
+            accessible.map((track) => track.id)
+          )}::uuid[])`
+        )
     : [];
   const unavailableRecordings = new Set(
     accessibleIdentities.flatMap((identity) =>
@@ -809,6 +816,10 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
     dir = await mkdtemp(
       join(/* turbopackIgnore: true */ tmpdir(), "webtunes-suggested-")
     );
+    // yt-dlp reports progress per chunk; persist (and renew the lease) only on
+    // a changed percent, at most once a second, so it cannot flood the pool.
+    let lastProgress = -1;
+    let lastProgressAt = 0;
     const file = await withSuggestedRetry(candidate.id, abort.signal, () =>
       downloadAudio({
         url: match.url,
@@ -817,6 +828,10 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
         signal: abort.signal,
         priority: "suggested",
         onProgress: (progress) => {
+          const now = Date.now();
+          if (progress === lastProgress || now - lastProgressAt < 1000) return;
+          lastProgress = progress;
+          lastProgressAt = now;
           void db
             .update(suggestedImports)
             .set({
