@@ -8,6 +8,8 @@ import type { TrackDTO } from "@/lib/types";
 import { BASE_PATH } from "@/lib/base-path";
 import { logAudio } from "@/lib/audio-debug";
 import { listenQualificationSeconds } from "@/lib/listen-telemetry";
+import { getAudio } from "@/lib/offline/audio-cache";
+import { useDownloadsStore } from "@/stores/downloads";
 import { useToastStore } from "@/stores/toast";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
 import { usePlaySimilarRefill } from "@/components/usePlaySimilarRefill";
@@ -115,6 +117,8 @@ export default function PlayerBar({
   const loadedTrackIdRef = useRef<string | null>(null);
   // Rejects outgoing-slot events during the render-to-source-swap gap.
   const loadedUidRef = useRef<string | null>(null);
+  // Object URL of a downloaded track played without the service worker.
+  const blobUrlRef = useRef<string | null>(null);
   const track = useCurrentTrack();
   // Slot uid, rather than track id, distinguishes adjacent duplicates.
   const currentUid = usePlayerStore((s) =>
@@ -183,7 +187,7 @@ export default function PlayerBar({
   usePlaySimilarAutoStart();
 
   // Toggle "play similar": off → seed from the current track and fetch the
-  // first batch; on → stop refilling (leaving the queue as-is).
+  // first batch; on → stop refilling (see stopSimilar for the queue).
   const handlePlaySimilar = async () => {
     const store = usePlayerStore.getState();
     if (store.playSimilar || store.playSimilarPref) {
@@ -579,8 +583,39 @@ export default function PlayerBar({
       restoreTarget && restoreTarget.trackId === track.id
         ? restoreTarget.position
         : 0;
-    audio.src =
-      startAt > 0 ? `${streamSrc(track.id)}#t=${startAt}` : streamSrc(track.id);
+    const fragment = startAt > 0 ? `#t=${startAt}` : "";
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    // The SW serves downloads from wt-audio, but a page it doesn't control
+    // (hard reload, SW unavailable) would stream them instead - play the
+    // cached blob directly there. Resolves false when superseded.
+    let sourceReady: Promise<boolean> | null = null;
+    if (
+      !navigator.serviceWorker?.controller &&
+      useDownloadsStore.getState().tracks[track.id]
+    ) {
+      // Stop the previous track while the blob is read.
+      audio.removeAttribute("src");
+      audio.load();
+      const uid = currentUid;
+      const trackId = track.id;
+      sourceReady = getAudio(trackId)
+        .catch(() => null)
+        .then((blob) => {
+          if (loadedUidRef.current !== uid) return false;
+          if (blob) {
+            blobUrlRef.current = URL.createObjectURL(blob);
+            audio.src = blobUrlRef.current + fragment;
+          } else {
+            audio.src = streamSrc(trackId) + fragment;
+          }
+          return true;
+        });
+    } else {
+      audio.src = streamSrc(track.id) + fragment;
+    }
     loadedUidRef.current = currentUid;
     startListenSession(track.id, startAt, track.durationSec);
     // Restored offsets bypass the cold-stream drift reset.
@@ -596,7 +631,12 @@ export default function PlayerBar({
       restoredPositionRef.current = null;
     const autoAdvance = autoAdvanceRef.current;
     autoAdvanceRef.current = false; // consume the flag
-    if (usePlayerStore.getState().isPlaying) attemptPlay(autoAdvance);
+    if (sourceReady) {
+      void sourceReady.then((ready) => {
+        if (ready && usePlayerStore.getState().isPlaying)
+          attemptPlay(autoAdvance);
+      });
+    } else if (usePlayerStore.getState().isPlaying) attemptPlay(autoAdvance);
   }, [currentUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -54,6 +54,13 @@ export async function putAudio(trackId: string, blob: Blob, mimeType: string | n
   );
 }
 
+/** The downloaded audio, or null when the track isn't downloaded. */
+export async function getAudio(trackId: string): Promise<Blob | null> {
+  const cache = await caches.open(AUDIO_CACHE);
+  const res = await cache.match(streamSrc(trackId));
+  return res ? res.blob() : null;
+}
+
 export async function hasAudio(trackId: string): Promise<boolean> {
   const cache = await caches.open(AUDIO_CACHE);
   return (await cache.match(streamSrc(trackId))) !== undefined;

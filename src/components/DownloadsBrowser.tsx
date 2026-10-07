@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import type { DownloadedPlaylist, DownloadedTrack } from "@/lib/offline/db";
+import type { DownloadedTrack } from "@/lib/offline/db";
 import { useConfirmStore } from "@/stores/confirm";
 import { useDownloadsStore } from "@/stores/downloads";
 import { useCurrentTrack, usePlayerStore } from "@/stores/player";
@@ -10,11 +10,18 @@ import {
   DownloadIcon,
   LockIcon,
   MusicIcon,
+  PlayIcon,
+  SearchIcon,
+  ShuffleIcon,
+  TrashIcon,
   XIcon,
 } from "@/components/icons";
 import PlaylistCover from "@/components/PlaylistCover";
 import MobileSwipeTrack from "@/components/MobileSwipeAction";
 import TrackArt from "@/components/TrackArt";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { NowPlayingBars } from "@/components/ui/NowPlayingBars";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TrackRowsSkeleton } from "@/components/ui/Skeleton";
 
@@ -31,6 +38,31 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+// Same formats as TrackList / PlaylistDetail, so an opened card reads like a
+// playlist page.
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return "–:––";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatListenTime(tracks: DownloadedTrack[]): string | null {
+  const totalMinutes = Math.round(
+    tracks.reduce((sum, t) => sum + (t.durationSec ?? 0), 0) / 60
+  );
+  if (totalMinutes <= 0) return null;
+  return totalMinutes >= 60
+    ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}min`
+    : `${totalMinutes} min`;
+}
+
+function matchesQuery(track: DownloadedTrack, query: string): boolean {
+  return [track.title, track.artist, track.album].some((field) =>
+    field?.toLocaleLowerCase().includes(query)
+  );
+}
+
 const TrackRows = memo(function TrackRows({
   tracks,
   onRemove,
@@ -39,15 +71,16 @@ const TrackRows = memo(function TrackRows({
   onRemove?: (track: DownloadedTrack) => void;
 }) {
   const playQueue = usePlayerStore((s) => s.playQueue);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = useCurrentTrack();
   return (
-    <ul className="divide-y divide-border-subtle/60">
+    <ul className="border-t border-border-subtle/60">
       {tracks.map((track, i) => (
         <MobileSwipeTrack
           key={track.id}
           as="li"
           track={track}
-          contentClassName={`group flex items-center gap-3 py-2 ${
+          contentClassName={`group flex items-center gap-3 border-b border-border-subtle/60 py-2.5 transition-colors hover:bg-surface-2/40 sm:py-2 ${
             current?.id === track.id ? "text-accent-bright" : "text-fg"
           }`}
         >
@@ -56,9 +89,18 @@ const TrackRows = memo(function TrackRows({
             title={`Play ${track.title}`}
             className="flex min-w-0 flex-1 items-center gap-3 text-left hover:text-accent-bright"
           >
-            <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
+            <span className="relative shrink-0">
+              <TrackArt track={track} size="h-11 w-11 sm:h-9 sm:w-9" iconSize={18} thumb />
+              {current?.id === track.id && (
+                <span className="absolute inset-0 flex items-center justify-center rounded bg-black/45 text-accent-bright">
+                  <NowPlayingBars playing={isPlaying} />
+                </span>
+              )}
+            </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{track.title}</span>
+              <span className="block truncate text-base font-medium sm:text-sm">
+                {track.title}
+              </span>
               <span className="block truncate text-xs text-fg-muted">
                 {track.artist ?? "Unknown artist"}
                 {track.ownerName ? ` · from ${track.ownerName}` : ""}
@@ -66,10 +108,13 @@ const TrackRows = memo(function TrackRows({
             </span>
           </button>
           {track.fileSize !== null && (
-            <span className="shrink-0 text-xs tabular-nums text-fg-subtle">
+            <span className="hidden shrink-0 text-xs tabular-nums text-fg-subtle sm:inline">
               {formatBytes(track.fileSize)}
             </span>
           )}
+          <span className="w-12 shrink-0 text-center text-sm tabular-nums text-fg-muted">
+            {formatDuration(track.durationSec)}
+          </span>
           {onRemove && (
             <button
               onClick={() => onRemove(track)}
@@ -115,48 +160,91 @@ function DownloadCard({
   );
 }
 
-const PlaylistDetail = memo(function PlaylistDetail({
-  playlist,
-  onBack,
+const actionIconClass = "h-6 w-6 sm:h-4 sm:w-4";
+
+/** An opened card, laid out like the playlist page (PlaylistDetail.tsx). */
+function CollectionDetail({
+  cover,
+  label,
+  title,
+  meta,
+  tracks,
+  controls,
+  onRemove,
+  children,
 }: {
-  playlist: DownloadedPlaylist;
-  onBack: () => void;
+  cover: React.ReactNode;
+  label: string;
+  title: string;
+  meta: string;
+  /** The visible (sorted/filtered) tracks Play all / Shuffle all start. */
+  tracks: DownloadedTrack[];
+  controls?: React.ReactNode;
+  onRemove?: () => void;
+  children: React.ReactNode;
 }) {
-  const tracksById = useDownloadsStore((s) => s.tracks);
-  const removePlaylist = useDownloadsStore((s) => s.removePlaylist);
-  // Only members whose audio is on the device; the rest are still queued or
-  // failed and will arrive on a later online sync.
-  const tracks = playlist.trackIds
-    .map((id) => tracksById[id])
-    .filter((t): t is DownloadedTrack => t !== undefined);
+  const playQueue = usePlayerStore((s) => s.playQueue);
   return (
     <section>
-      <div className="mb-1 flex items-center gap-3">
-        <h2 className="truncate font-display text-lg font-semibold">{playlist.name}</h2>
-        <span className="text-xs text-fg-subtle">
-          {tracks.length}/{playlist.trackIds.length} downloaded
-        </span>
-        <button
-          onClick={async () => {
-            const ok = await useConfirmStore
-              .getState()
-              .ask(`Remove “${playlist.name}” from downloads?`, {
-                confirmLabel: "Remove",
-              });
-            if (ok) {
-              void removePlaylist(playlist.id);
-              onBack();
-            }
-          }}
-          className="ml-auto shrink-0 text-xs text-fg-muted hover:text-red-400"
-        >
-          Remove
-        </button>
+      <div className="mb-6 flex flex-wrap items-end gap-5">
+        <div className="shrink-0">{cover}</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs uppercase text-fg-subtle">{label}</p>
+          <h2 className="truncate font-display text-3xl font-bold tracking-tight">
+            {title}
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">{meta}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button
+              pill
+              iconOnlyOnMobile
+              aria-label="Play all"
+              title="Play all"
+              onClick={() =>
+                tracks.length && playQueue(tracks, 0, { collection: true })
+              }
+              disabled={tracks.length === 0}
+            >
+              <PlayIcon className={actionIconClass} />
+              <span className="hidden sm:inline">Play all</span>
+            </Button>
+            <Button
+              variant="secondary"
+              pill
+              iconOnlyOnMobile
+              aria-label="Shuffle all"
+              title="Shuffle all"
+              onClick={() => {
+                if (!tracks.length) return;
+                usePlayerStore.setState({ shuffled: true });
+                playQueue(tracks, Math.floor(Math.random() * tracks.length), {
+                  collection: true,
+                });
+              }}
+              disabled={tracks.length === 0}
+            >
+              <ShuffleIcon className={actionIconClass} />
+              <span className="hidden sm:inline">Shuffle all</span>
+            </Button>
+            {onRemove && (
+              <button
+                onClick={onRemove}
+                aria-label="Remove download"
+                title="Remove download"
+                className="flex h-10 w-10 items-center justify-center gap-1.5 rounded-full text-sm text-fg-muted hover:bg-red-500/10 hover:text-red-400 sm:h-auto sm:w-auto sm:rounded-none sm:hover:bg-transparent"
+              >
+                <TrashIcon className={actionIconClass} />
+                <span className="hidden sm:inline">Remove download</span>
+              </button>
+            )}
+            {controls && <div className="ml-auto">{controls}</div>}
+          </div>
+        </div>
       </div>
-      <TrackRows tracks={tracks} />
+      {children}
     </section>
   );
-});
+}
 
 // Sentinel id for the directly-downloaded songs card ("library"); playlist
 // cards use their uuid, so no collision is possible.
@@ -178,10 +266,13 @@ export default function DownloadsBrowser() {
   const current = useDownloadsStore((s) => s.current);
   const storage = useDownloadsStore((s) => s.storage);
   const removeTrack = useDownloadsStore((s) => s.removeTrack);
+  const removePlaylist = useDownloadsStore((s) => s.removePlaylist);
   const removeAll = useDownloadsStore((s) => s.removeAll);
   // Which card is open: null = card grid, LIBRARY, or a playlist id.
   const [open, setOpen] = useState<string | null>(null);
   const [librarySort, setLibrarySort] = useState<LibrarySortKey>("title");
+  const [q, setQ] = useState("");
+  const query = q.trim().toLocaleLowerCase();
 
   // Idempotent; the layout's registrar normally beat us to it, but this page
   // may be the first (or only) thing that loads offline.
@@ -216,7 +307,58 @@ export default function DownloadsBrowser() {
     (t: DownloadedTrack) => void removeTrack(t.id),
     [removeTrack]
   );
-  const onBack = useCallback(() => setOpen(null), []);
+  // Search is per view, so moving between the grid and a card starts clean.
+  const openCard = useCallback((id: string | null) => {
+    setOpen(id);
+    setQ("");
+  }, []);
+  const onBack = useCallback(() => openCard(null), [openCard]);
+
+  // Derived, not synced: a playlist removed elsewhere simply falls back to
+  // the grid on the next render.
+  const openPlaylist =
+    open && open !== LIBRARY ? playlistsById[open] : undefined;
+  // Only members whose audio is on the device; the rest are still queued or
+  // failed and will arrive on a later online sync.
+  const openPlaylistTracks = useMemo(
+    () =>
+      openPlaylist
+        ? openPlaylist.trackIds
+            .map((id) => tracksById[id])
+            .filter((t): t is DownloadedTrack => t !== undefined)
+        : [],
+    [openPlaylist, tracksById]
+  );
+  const visiblePlaylistTracks = useMemo(
+    () =>
+      query
+        ? openPlaylistTracks.filter((t) => matchesQuery(t, query))
+        : openPlaylistTracks,
+    [openPlaylistTracks, query]
+  );
+  const visiblePinned = useMemo(
+    () => (query ? pinned.filter((t) => matchesQuery(t, query)) : pinned),
+    [pinned, query]
+  );
+  // Grid-level search spans every downloaded song, pinned or playlist-only.
+  const songResults = useMemo(
+    () =>
+      query && open === null
+        ? Object.values(tracksById)
+            .filter((t) => matchesQuery(t, query))
+            .sort((a, b) =>
+              a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+            )
+        : [],
+    [tracksById, query, open]
+  );
+  const visiblePlaylists = useMemo(
+    () =>
+      query
+        ? playlists.filter((p) => p.name.toLocaleLowerCase().includes(query))
+        : playlists,
+    [playlists, query]
+  );
 
   // Page-shell skeleton while IndexedDB hydrates - usually one frame, but this
   // page is the landing surface on the slow-connection fallback path.
@@ -234,10 +376,10 @@ export default function DownloadsBrowser() {
     ? (tracksById[current.trackId]?.title ?? "track")
     : null;
 
-  // Derived, not synced: a playlist removed elsewhere simply falls back to
-  // the grid on the next render.
-  const openPlaylist =
-    open && open !== LIBRARY ? playlistsById[open] : undefined;
+  const coverClass = "h-28 w-28 rounded-lg bg-surface-2 sm:h-36 sm:w-36";
+  const noMatches = (
+    <p className="py-8 text-center text-sm text-fg-muted">No matching songs.</p>
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -272,6 +414,35 @@ export default function DownloadsBrowser() {
         </p>
       )}
 
+      {(playlists.length > 0 || pinned.length > 0) && (
+        <div className="relative mb-6">
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+          />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={
+              open === null
+                ? "Search downloads…"
+                : "Search title, artist, or album…"
+            }
+            className="w-full pl-9 pr-9"
+          />
+          {q && (
+            <button
+              onClick={() => setQ("")}
+              aria-label="Clear search"
+              title="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-fg-subtle hover:bg-surface-3 hover:text-fg"
+            >
+              <XIcon size={16} />
+            </button>
+          )}
+        </div>
+      )}
+
       {open === LIBRARY || openPlaylist ? (
         <>
           <button
@@ -282,32 +453,85 @@ export default function DownloadsBrowser() {
             Back
           </button>
           {openPlaylist ? (
-            <PlaylistDetail playlist={openPlaylist} onBack={onBack} />
+            <CollectionDetail
+              cover={
+                <PlaylistCover
+                  playlistId={openPlaylist.id}
+                  coverS3Key={null}
+                  artTrackIds={openPlaylistTracks
+                    .filter((t) => t.artS3Key)
+                    .slice(0, 4)
+                    .map((t) => t.id)}
+                  iconSize={56}
+                  className={coverClass}
+                />
+              }
+              label="Playlist"
+              title={openPlaylist.name}
+              meta={[
+                openPlaylist.ownerName ? `by ${openPlaylist.ownerName}` : null,
+                `${openPlaylistTracks.length}/${openPlaylist.trackIds.length} downloaded`,
+                formatListenTime(openPlaylistTracks),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              tracks={visiblePlaylistTracks}
+              onRemove={async () => {
+                const ok = await useConfirmStore
+                  .getState()
+                  .ask(`Remove “${openPlaylist.name}” from downloads?`, {
+                    confirmLabel: "Remove",
+                  });
+                if (ok) {
+                  void removePlaylist(openPlaylist.id);
+                  onBack();
+                }
+              }}
+            >
+              {visiblePlaylistTracks.length === 0 && query ? (
+                noMatches
+              ) : (
+                <TrackRows tracks={visiblePlaylistTracks} />
+              )}
+            </CollectionDetail>
           ) : (
-            <section>
-              <div className="mb-1 flex items-center gap-3">
-                <h2 className="font-display text-lg font-semibold">Library</h2>
-                <span className="text-xs text-fg-subtle">
-                  {pinned.length} song{pinned.length === 1 ? "" : "s"}
-                </span>
-                {pinned.length > 1 && (
-                  <div className="ml-auto">
-                    <SegmentedControl
-                      options={LIBRARY_SORTS}
-                      value={librarySort}
-                      onChange={setLibrarySort}
-                    />
-                  </div>
-                )}
-              </div>
+            <CollectionDetail
+              cover={
+                <div
+                  className={`flex items-center justify-center text-fg-subtle ${coverClass}`}
+                >
+                  <MusicIcon size={56} />
+                </div>
+              }
+              label="Downloads"
+              title="Library"
+              meta={[
+                `${pinned.length} song${pinned.length === 1 ? "" : "s"}`,
+                formatListenTime(pinned),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              tracks={visiblePinned}
+              controls={
+                pinned.length > 1 && (
+                  <SegmentedControl
+                    options={LIBRARY_SORTS}
+                    value={librarySort}
+                    onChange={setLibrarySort}
+                  />
+                )
+              }
+            >
               {pinned.length === 0 ? (
                 <p className="py-8 text-center text-sm text-fg-muted">
                   No downloaded songs.
                 </p>
+              ) : visiblePinned.length === 0 ? (
+                noMatches
               ) : (
-                <TrackRows tracks={pinned} onRemove={onRemovePinned} />
+                <TrackRows tracks={visiblePinned} onRemove={onRemovePinned} />
               )}
-            </section>
+            </CollectionDetail>
           )}
         </>
       ) : playlists.length === 0 && pinned.length === 0 ? (
@@ -317,52 +541,64 @@ export default function DownloadsBrowser() {
           stays playable offline.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          <div className="animate-fade-in-up">
-            <DownloadCard
-              cover={
-                <div className="flex aspect-square w-full items-center justify-center rounded-md bg-surface-2 text-fg-subtle">
-                  <MusicIcon size={48} />
-                </div>
-              }
-              title="Library"
-              subtitle={`${pinned.length} song${pinned.length === 1 ? "" : "s"}`}
-              onOpen={() => setOpen(LIBRARY)}
-            />
-          </div>
-          {playlists.map((p, i) => {
-            const downloaded = p.trackIds.filter((id) => tracksById[id]);
-            // Mosaic from downloaded art-bearing members: their art is what
-            // the download manager put in wt-art, so covers render offline
-            // (an uploaded playlist cover would not - it is never cached).
-            const artIds = downloaded
-              .filter((id) => tracksById[id].artS3Key)
-              .slice(0, 4);
-            return (
-              <div
-                key={p.id}
-                className="animate-fade-in-up"
-                style={{ animationDelay: `${Math.min(i + 1, 8) * 0.03}s` }}
-              >
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {!query && (
+              <div className="animate-fade-in-up">
                 <DownloadCard
                   cover={
-                    <PlaylistCover
-                      playlistId={p.id}
-                      coverS3Key={null}
-                      artTrackIds={artIds}
-                      iconSize={48}
-                      className="aspect-square w-full bg-surface-2"
-                    />
+                    <div className="flex aspect-square w-full items-center justify-center rounded-md bg-surface-2 text-fg-subtle">
+                      <MusicIcon size={48} />
+                    </div>
                   }
-                  title={p.name}
-                  subtitle={`${p.ownerName ? `${p.ownerName} · ` : ""}${downloaded.length}/${p.trackIds.length} downloaded`}
-                  locked={!p.ownerName && p.isPrivate}
-                  onOpen={() => setOpen(p.id)}
+                  title="Library"
+                  subtitle={`${pinned.length} song${pinned.length === 1 ? "" : "s"}`}
+                  onOpen={() => openCard(LIBRARY)}
                 />
               </div>
-            );
-          })}
-        </div>
+            )}
+            {visiblePlaylists.map((p, i) => {
+              const downloaded = p.trackIds.filter((id) => tracksById[id]);
+              // Mosaic from downloaded art-bearing members: their art is what
+              // the download manager put in wt-art, so covers render offline
+              // (an uploaded playlist cover would not - it is never cached).
+              const artIds = downloaded
+                .filter((id) => tracksById[id].artS3Key)
+                .slice(0, 4);
+              return (
+                <div
+                  key={p.id}
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${Math.min(i + 1, 8) * 0.03}s` }}
+                >
+                  <DownloadCard
+                    cover={
+                      <PlaylistCover
+                        playlistId={p.id}
+                        coverS3Key={null}
+                        artTrackIds={artIds}
+                        iconSize={48}
+                        className="aspect-square w-full bg-surface-2"
+                      />
+                    }
+                    title={p.name}
+                    subtitle={`${p.ownerName ? `${p.ownerName} · ` : ""}${downloaded.length}/${p.trackIds.length} downloaded`}
+                    locked={!p.ownerName && p.isPrivate}
+                    onOpen={() => openCard(p.id)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {query &&
+            (songResults.length > 0 ? (
+              <div className={visiblePlaylists.length > 0 ? "mt-6" : ""}>
+                <TrackRows tracks={songResults} />
+              </div>
+            ) : (
+              visiblePlaylists.length === 0 && noMatches
+            ))}
+        </>
       )}
     </div>
   );

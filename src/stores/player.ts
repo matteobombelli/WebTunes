@@ -68,8 +68,8 @@ type PlayerState = {
   /**
    * The collection `context` that was live when startSimilar replaced the
    * queue, plus the uid of the then-current item (one of `items` - `queue` and
-   * `context` share QueueItem objects). Consumed by stopSimilar to append the
-   * collection's in-order remainder after `afterUid`. Enabling shuffle restores
+   * `context` share QueueItem objects). Consumed by stopSimilar to resume the
+   * collection in order after `afterUid`. Enabling shuffle restores
    * these items as the shuffle context instead of shuffling the radio results;
    * starting a new queue drops them. `null` when the radio started from an
    * ad-hoc queue.
@@ -149,9 +149,9 @@ type PlayerState = {
   startSimilar: (seedId: string, tracks: TrackDTO[]) => void;
   /** Append the next refill batch and advance the pagination offset. */
   advanceSimilar: (tracks: TrackDTO[]) => void;
-  /** Disable "play similar". Removes nothing from the queue; when the radio
-   *  replaced a collection queue, the collection's in-order remainder (after
-   *  the track the radio took over from) is appended to the end. */
+  /** Disable "play similar". When the radio replaced a collection queue, the
+   *  unplayed radio tracks are dropped and the collection resumes in order
+   *  after the track the radio took over from; otherwise the queue is kept. */
   stopSimilar: () => void;
   /** Set the remembered "play similar" preference (PlayerBar persists it). */
   setPlaySimilarPref: (on: boolean) => void;
@@ -743,16 +743,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       similarSeen: [],
       similarContext: null,
     };
-    if (!s.playSimilar || !s.similarContext) {
+    if (!s.playSimilar || !s.similarContext || s.index < 0) {
       set(off);
       return;
     }
-    // Remove nothing: the served similar tracks (and any manual inserts) stay;
-    // the collection's remainder after the takeover point resumes at the end.
+    // Mirror of shuffle-off: keep actual history + current, discard unplayed
+    // radio results, and continue the collection in order from the takeover
+    // point. If radio already advanced to a generated track, slot it in at the
+    // takeover point of the restored context so a later shuffle/unshuffle
+    // still continues from there.
     const { items, afterUid } = s.similarContext;
+    const history = s.queue.slice(0, s.index);
+    const current = s.queue[s.index];
     const pos = items.findIndex((it) => it.uid === afterUid);
-    const remainder = pos >= 0 ? items.slice(pos + 1) : [];
-    set({ ...off, queue: [...s.queue, ...remainder] });
+    const context = items.some((it) => it.uid === current.uid)
+      ? items
+      : [...items.slice(0, pos + 1), current, ...items.slice(pos + 1)];
+    const playedUids = new Set(history.map((it) => it.uid));
+    const upcoming = (pos >= 0 ? items.slice(pos + 1) : []).filter(
+      (it) => !playedUids.has(it.uid) && it.uid !== current.uid
+    );
+    set({
+      ...off,
+      queue: [...history, current, ...upcoming],
+      index: s.index,
+      context,
+      collectionSession: null,
+      unshuffledQueue: null,
+    });
   },
 
   setPlaySimilarPref: (on) => set({ playSimilarPref: on }),
