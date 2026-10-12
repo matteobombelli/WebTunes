@@ -13,7 +13,6 @@ import {
 import {
   addPlaylistTracks,
   createPlaylist,
-  getPlaylistTrackIds,
   lockEditablePlaylist,
   removePlaylistTracks,
   reorderPlaylistTracks,
@@ -254,7 +253,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
     "reorder_playlist",
     {
       title: "Reorder playlist",
-      description: `Set the order of a playlist the user can edit. trackIds must list every track currently in the playlist exactly once, in the new order (get them with get_playlist). ${UNDO_NOTE}`,
+      description: `Set the order of a playlist the user can edit. trackIds must list every track get_playlist shows exactly once, in the new order; tracks hidden from the user keep their places. ${UNDO_NOTE}`,
       inputSchema: z.object({ playlistId: uuid, trackIds: trackIdList(10_000) }),
       annotations: { ...WRITE, idempotentHint: true },
     },
@@ -263,17 +262,13 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
         const playlist = await lockEditablePlaylist(tx, playlistId, userId);
         if (!playlist) return fail("Playlist not found");
         const link = ctx.playlistLink(playlistId);
-        const current = await getPlaylistTrackIds(playlistId, tx);
-        if (
-          current.length === trackIds.length &&
-          current.every((id, i) => id === trackIds[i])
-        ) {
-          return ok({ changed: false, link });
-        }
         const result = await reorderPlaylistTracks(playlistId, userId, trackIds, tx);
         if (result.status === "not_found") return fail("Playlist not found");
         if (result.status === "invalid") {
           return fail("trackIds must be exactly the playlist's current tracks");
+        }
+        if (result.after.every((id, i) => id === result.before[i])) {
+          return ok({ changed: false, link });
         }
         const recorded = await recordAction(tx, {
           ...actor,
@@ -283,7 +278,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
             playlistId,
             playlistName: playlist.name,
             before: result.before,
-            after: trackIds,
+            after: result.after,
           },
         });
         return ok({ changed: true, link, ...undoInfo(recorded) });
@@ -580,7 +575,7 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
     "create_share_link",
     {
       title: "Create share link",
-      description: `Create a public link to one track. Anyone with the link can play the track for 7 days without an account, even if the track is later made private, so confirm with the user before calling this. If the track already has an active link, that link is returned unchanged. ${UNDO_NOTE}`,
+      description: `Create a public link to one of the user's own tracks. Anyone with the link can play the track for 7 days without an account, even if the track is later made private, so confirm with the user before calling this. If the track already has an active link, that link is returned unchanged. ${UNDO_NOTE}`,
       inputSchema: z.object({ trackId: uuid }),
       annotations: { ...WRITE, idempotentHint: true },
     },
@@ -588,6 +583,11 @@ export function registerWriteTools(server: McpServer, ctx: ToolContext): void {
       const access = await loadAccessibleTrack(userId, trackId);
       if (access.status !== "ok") return fail("Track not found");
       const { track } = access;
+      // Only the owner can revoke a link, so undo could not remove one minted
+      // here for a friend's track.
+      if (track.ownerId !== userId) {
+        return fail("Only the track's owner can share it from a connected app");
+      }
       const result = await db.transaction(async (tx) => {
         const link = await createOrGetShare(trackId, userId, tx);
         const recorded = link.created

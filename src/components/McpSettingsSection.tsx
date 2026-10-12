@@ -139,6 +139,11 @@ export default function McpSettingsSection() {
         `/mcp/actions/${action.id}/undo`,
         { method: "POST" }
       );
+      // Nothing restored leaves the action applied server-side for a retry.
+      if (report.restored.length === 0) {
+        toast(report.skipped[0]?.reason ?? "Nothing to undo");
+        return;
+      }
       setActions(
         (prev) =>
           prev?.map((a) =>

@@ -159,7 +159,10 @@ function EditTrackForm({
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => uploadArt(e.target.files?.[0])}
+        onChange={(e) => {
+          void uploadArt(e.target.files?.[0]);
+          e.target.value = ""; // allow re-selecting the same file
+        }}
       />
       <label className="flex flex-col gap-1 text-xs text-fg-muted">
         Title

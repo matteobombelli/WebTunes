@@ -40,7 +40,8 @@ export default function PlaylistRecommendations({
     const next = await api<TrackDTO[]>(`/playlists/${playlistId}/recommend`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ limit: LIMIT, excludeIds: [...shownIds.current] }),
+      // The route caps excludeIds at 500; keep the most recently shown.
+      body: JSON.stringify({ limit: LIMIT, excludeIds: [...shownIds.current].slice(-500) }),
     });
     for (const t of next) shownIds.current.add(t.id);
     return next;

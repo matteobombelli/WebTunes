@@ -17,9 +17,9 @@ const MAX_LYRICS_CHARS = 100_000;
 
 /** Trim, NFC-normalize (macOS taggers emit NFD, which breaks the
  *  title+artist duplicate detection against NFC copies), and cap a tag
- *  value. Empty/missing → null. */
+ *  value. Empty/missing → null. NUL is stripped: Postgres text rejects it. */
 export function cleanTag(value: string | null | undefined): string | null {
-  const trimmed = value?.trim().normalize("NFC");
+  const trimmed = value?.replaceAll("\u0000", "").trim().normalize("NFC");
   if (!trimmed) return null;
   return trimmed.length > MAX_TAG_CHARS ? trimmed.slice(0, MAX_TAG_CHARS) : trimmed;
 }
@@ -117,7 +117,7 @@ export async function extractTrackMetadata(
     ? Math.round(meta.format.duration)
     : null;
 
-  let lyrics = meta ? embeddedLyrics(meta) : null;
+  let lyrics = meta ? embeddedLyrics(meta)?.replaceAll("\u0000", "") || null : null;
   let lyricsSource: TrackMetadata["lyricsSource"] = lyrics
     ? "embedded"
     : "none";

@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 import { BASE_PATH } from "./src/lib/base-path";
 
 const isDev = process.env.NODE_ENV !== "production";
+// Dev MinIO serves presigned URLs over plain http, which `https:` excludes.
+const devStorage =
+  isDev && process.env.S3_ENDPOINT?.startsWith("http://")
+    ? ` ${new URL(process.env.S3_ENDPOINT).origin}`
+    : "";
 
 // Next/Tailwind require inline bootstrap/styles; dev HMR also needs unsafe-eval.
 // HTTPS media/connect sources permit rotating presigned storage hosts.
@@ -9,10 +14,10 @@ const cspBase = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "media-src 'self' blob: https:",
+  `img-src 'self' data: blob: https:${devStorage}`,
+  `media-src 'self' blob: https:${devStorage}`,
   "font-src 'self'",
-  "connect-src 'self' https:",
+  `connect-src 'self' https:${devStorage}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -227,9 +227,11 @@ export async function getUserStats(
       .select({ count: sql<number>`count(*)::int` })
       .from(firstListens)
       .where(
+        // An aliased min() has no column encoder, so a raw Date would bind in
+        // the host's local time; stored timestamps are UTC wall-clock.
         and(
-          gte(firstListens.firstPlayedAt, start),
-          lte(firstListens.firstPlayedAt, end)
+          gte(firstListens.firstPlayedAt, sql`${start.toISOString()}`),
+          lte(firstListens.firstPlayedAt, sql`${end.toISOString()}`)
         )
       ),
     db

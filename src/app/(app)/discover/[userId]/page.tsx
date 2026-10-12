@@ -3,7 +3,7 @@ import { requirePageUser } from "@/lib/auth-helpers";
 import { listUserTopTracks } from "@/lib/discover";
 import { areFriends } from "@/lib/friends";
 import { listTracksOfFriend } from "@/lib/tracks";
-import { getDisplayName, getUserSettings } from "@/lib/users";
+import { getDisplayName } from "@/lib/users";
 import { isUuid } from "@/lib/validate";
 import DiscoverSection, { sectionHeadingClass } from "@/components/DiscoverSection";
 import TrackList from "@/components/TrackList";
@@ -18,15 +18,14 @@ export default async function FriendLibraryPage({
   const { userId } = await params;
   if (!isUuid(userId)) notFound();
 
-  const [friends, displayName, { hideFriendDuplicates }] = await Promise.all([
+  const [friends, displayName] = await Promise.all([
     areFriends(user.id, userId),
     getDisplayName(userId),
-    getUserSettings(user.id),
   ]);
   if (!friends) notFound();
   if (!displayName) notFound();
   const [topTracks, trackDTOs] = await Promise.all([
-    listUserTopTracks(userId, user.id, hideFriendDuplicates),
+    listUserTopTracks(userId, user.id),
     listTracksOfFriend(userId, displayName),
   ]);
 

@@ -58,7 +58,7 @@ export async function remuxOpusToMp4(
 
     // Only Opus can be copied into MP4 here; Vorbis-in-Ogg (or anything else)
     // can't, so bail and keep the original.
-    if ((await audioCodec(inPath)) !== "opus") return null;
+    if ((await withFfmpeg(() => audioCodec(inPath))) !== "opus") return null;
 
     await withFfmpeg(() =>
       runFfmpeg([
@@ -67,10 +67,8 @@ export async function remuxOpusToMp4(
       ])
     );
 
-    const [srcHash, outHash] = await Promise.all([
-      streamHash(inPath),
-      streamHash(outPath),
-    ]);
+    const srcHash = await withFfmpeg(() => streamHash(inPath));
+    const outHash = await withFfmpeg(() => streamHash(outPath));
     if (!srcHash || srcHash !== outHash) return null;
 
     return {

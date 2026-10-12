@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { isForeignKeyViolation } from "@/db";
 import { requireUser, unauthorized } from "@/lib/auth-helpers";
 import { addExclusion, removeExclusion } from "@/lib/exclusions";
+import { loadAccessibleTrack } from "@/lib/tracks";
 import { isUuid } from "@/lib/validate";
 
 // Per-listener "exclude from Play Similar" toggle: POST excludes the track from
-// the caller's radio, DELETE re-includes it. Self-scoped - it only filters the
-// caller's own feed - so no access check is needed (an inaccessible track never
-// surfaces in the feed anyway). Also intentional public surface for a future
-// mobile client.
+// the caller's radio, DELETE re-includes it. Self-scoped, but adding requires
+// access: the exclusion list returns full track metadata, so an unchecked add
+// would disclose any track whose id is known. Also intentional public surface
+// for a future mobile client.
 export async function POST(
   _req: NextRequest,
   { params }: RouteContext<"/api/tracks/[id]/similar-exclusion">
@@ -17,7 +18,8 @@ export async function POST(
   if (!user) return unauthorized();
 
   const { id } = await params;
-  if (!isUuid(id)) {
+  const access = await loadAccessibleTrack(user.id, id);
+  if (access.status !== "ok") {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
 

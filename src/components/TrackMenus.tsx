@@ -114,13 +114,15 @@ export function AddToPlaylistMenu({
     }
     show();
     setMessage(null);
-    if (!playlists) {
-      try {
-        setPlaylists(await api<PlaylistDTO[]>("/playlists"));
-        setLoadFailed(false);
-      } catch {
-        // Distinguish "couldn't load" from "no playlists" so a network failure
-        // doesn't masquerade as an empty library.
+    // Refetch on every open (showing any cached list meanwhile): the player
+    // bar's picker lives for the whole session and would otherwise go stale.
+    try {
+      setPlaylists(await api<PlaylistDTO[]>("/playlists"));
+      setLoadFailed(false);
+    } catch {
+      // Distinguish "couldn't load" from "no playlists" so a network failure
+      // doesn't masquerade as an empty library.
+      if (!playlists) {
         setPlaylists([]);
         setLoadFailed(true);
       }
@@ -129,12 +131,23 @@ export function AddToPlaylistMenu({
 
   const add = async (playlistId: string) => {
     try {
-      const res = await api<{ added: number }>(`/playlists/${playlistId}/tracks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackIds }),
-      });
-      setMessage(bulk ? `Added ${res.added}` : "Added");
+      // The route accepts at most 500 ids per request (a Library "select all"
+      // can exceed that); a batch already fully present just adds nothing.
+      let added = 0;
+      for (let i = 0; i < trackIds.length; i += 500) {
+        try {
+          const res = await api<{ added: number }>(`/playlists/${playlistId}/tracks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackIds: trackIds.slice(i, i + 500) }),
+          });
+          added += res.added;
+        } catch (err) {
+          if (!(err instanceof Error && err.message === "Already in playlist")) throw err;
+        }
+      }
+      if (added === 0) throw new Error("Already in playlist");
+      setMessage(bulk ? `Added ${added}` : "Added");
       if (onAdded) setTimeout(onAdded, 600);
       // Portalled menus dismiss once the feedback has shown.
       if (portalled) setTimeout(close, 600);

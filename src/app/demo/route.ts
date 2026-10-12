@@ -5,6 +5,8 @@ import { auth, SESSION_MAX_AGE_SEC } from "@/lib/auth";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { getClientIp } from "@/lib/client-ip";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Entry point for the portfolio's desktop view (matteob.dev), which embeds the
 // app in an iframe and points it here so visitors get a browsable session
@@ -14,7 +16,8 @@ import { getAppBaseUrl } from "@/lib/app-url";
 // account is the read-only demo user, so this mints nothing an anonymous
 // visitor couldn't already reach with the published credentials; the session
 // row is inserted directly (the same shape jwt.encode mints) so embedded
-// visitors behind one egress IP don't drain the login rate limits.
+// visitors behind one egress IP don't drain the login rate limits. A generous
+// per-IP limit of its own still stops a scripted loop from flooding sessions.
 const DEMO_LOGIN_EMAIL = "demo1@demo.demo";
 
 export async function GET(request: NextRequest) {
@@ -22,7 +25,10 @@ export async function GET(request: NextRequest) {
   if (await auth()) {
     return NextResponse.redirect(`${base}/discover`);
   }
-  if (request.headers.get("sec-fetch-dest") !== "iframe") {
+  if (
+    request.headers.get("sec-fetch-dest") !== "iframe" ||
+    !rateLimit(`demo-ip:${getClientIp(request.headers)}`, 100, 60 * 60 * 1000)
+  ) {
     return NextResponse.redirect(`${base}/login`);
   }
   const [user] = await db

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPresignedGetUrl } from "@/lib/s3";
+import { getPresignedGetUrl, PRESIGN_REUSE_SEC } from "@/lib/s3";
 import { resolveShareToken } from "@/lib/shares";
 
 // Public, UNAUTHENTICATED cover art behind a share token (full art, not the
@@ -17,6 +17,6 @@ export async function GET(
   }
   const { url } = await getPresignedGetUrl(track.artS3Key);
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, max-age=3000");
+  res.headers.set("Cache-Control", `private, max-age=${PRESIGN_REUSE_SEC}`);
   return res;
 }

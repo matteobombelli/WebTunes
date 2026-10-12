@@ -39,8 +39,18 @@ function openDb(): Promise<IDBDatabase> {
         db.createObjectStore(PLAYLISTS, { keyPath: "id" });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    // A failed open or a lost connection (WebKit drops it after backgrounding)
+    // must not be cached, or every later call fails until a reload.
+    req.onsuccess = () => {
+      req.result.onclose = () => {
+        dbPromise = null;
+      };
+      resolve(req.result);
+    };
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error);
+    };
   });
   return dbPromise;
 }
@@ -54,7 +64,14 @@ function asPromise<T>(req: IDBRequest<T>): Promise<T> {
 
 async function store(name: string, mode: IDBTransactionMode) {
   const db = await openDb();
-  return db.transaction(name, mode).objectStore(name);
+  try {
+    return db.transaction(name, mode).objectStore(name);
+  } catch (err) {
+    // A connection closed without a close event: reopen once.
+    if ((err as DOMException)?.name !== "InvalidStateError") throw err;
+    dbPromise = null;
+    return (await openDb()).transaction(name, mode).objectStore(name);
+  }
 }
 
 export async function getDownloadedTracks(): Promise<DownloadedTrack[]> {

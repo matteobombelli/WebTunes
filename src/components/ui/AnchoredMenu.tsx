@@ -121,12 +121,27 @@ export function useAnchoredMenu({
       }
       close();
     };
+    // Capture sees every scroll, including the menu's (or its portalled
+    // submenu's) own overflowing list.
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        (menuRef.current?.contains(target) ||
+          (ignoreOutsideSelector &&
+            target instanceof Element &&
+            target.closest(ignoreOutsideSelector)))
+      ) {
+        return;
+      }
+      close();
+    };
     document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
     window.addEventListener("resize", close, { passive: true });
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
     };
   }, [anchored, close, ignoreOutsideSelector, open]);

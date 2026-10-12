@@ -832,14 +832,15 @@ async function importCandidate(candidate: SuggestedImport): Promise<void> {
           if (progress === lastProgress || now - lastProgressAt < 1000) return;
           lastProgress = progress;
           lastProgressAt = now;
-          void db
-            .update(suggestedImports)
+          db.update(suggestedImports)
             .set({
               progress,
               leaseExpiresAt: new Date(Date.now() + LEASE_MS),
               updatedAt: new Date(),
             })
-            .where(eq(suggestedImports.id, candidate.id));
+            .where(eq(suggestedImports.id, candidate.id))
+            // Drizzle queries are lazy: without then/catch this never runs.
+            .catch(() => {});
         },
       })
     );

@@ -13,9 +13,18 @@ const SHELL_CACHE = "wt-shell-v2";
 // state (caches + IndexedDB are keyed only by track id, with no access check)
 // when a DIFFERENT user signs in on a shared device.
 const LAST_USER_KEY = "wt-last-user";
+// The account this JS heap last rendered. Sign-out/sign-in are soft
+// navigations, so module-level stores (player queue, exclusions, uploads,
+// imports) would otherwise carry the previous account's state into the next.
+let heapUserId: string | null = null;
 
 export default function ServiceWorkerRegistrar({ userId }: { userId: string }) {
   useEffect(() => {
+    if (heapUserId && heapUserId !== userId) {
+      location.reload(); // the fresh load runs the persistent purge below
+      return;
+    }
+    heapUserId = userId;
     void (async () => {
       // Account-switch guard: if a different user signed in on this profile,
       // hard-purge the previous user's downloads BEFORE hydrating the store, so

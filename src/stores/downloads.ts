@@ -111,7 +111,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
           // Delta-merge just this track instead of re-reading all of IndexedDB
           // after every item (a 50-track playlist would otherwise do 50 full
           // scans). Playlists don't change here; storage updates once at drain.
-          const rec = await getDownloadedTrack(next.track.id);
+          let rec = await getDownloadedTrack(next.track.id);
+          // Its playlist was removed mid-download: removeTrack keeps it only
+          // while some downloaded playlist still references it.
+          if (rec && !rec.pinned) {
+            await offline.removeTrack(rec.id);
+            rec = await getDownloadedTrack(next.track.id);
+          }
           if (rec) set((s) => ({ tracks: { ...s.tracks, [rec.id]: rec } }));
         } catch (err) {
           // Skip the failed track and keep draining; it stays undownloaded
@@ -197,6 +203,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => {
     removePlaylist: async (playlistId) => {
       await offline.removePlaylist(playlistId);
       await refresh();
+      // Unpinned queued members are only needed by a remaining playlist.
+      const referenced = new Set(
+        Object.values(get().playlists).flatMap((p) => p.trackIds)
+      );
+      set((s) => ({
+        queue: s.queue.filter((q) => q.pin || referenced.has(q.track.id)),
+      }));
     },
 
     removeAll: async () => {

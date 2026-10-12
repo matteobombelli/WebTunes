@@ -5,6 +5,8 @@
 // - grants left with no live token (every refresh token expired or was
 //   revoked), then registered clients no grant references. The one-day grace
 //   keeps a grant whose code is mid-exchange and a client mid-authorization.
+// - expired login sessions (Auth.js deletes one only when it is presented
+//   again, so abandoned ones - notably every /demo visit - otherwise remain)
 //   node scripts/purge-mcp-state.mjs
 // DATABASE_URL comes from the process environment when set, otherwise the first
 // env file present.
@@ -44,6 +46,7 @@ const purges = [
   ["undo-log action(s)", "DELETE FROM mcp_actions WHERE created_at < now() - interval '30 days'"],
   ["expired authorization code(s)", "DELETE FROM oauth_codes WHERE expires_at < now()"],
   ["expired token(s)", "DELETE FROM oauth_tokens WHERE expires_at < now()"],
+  ["expired login session(s)", "DELETE FROM sessions WHERE expires < now()"],
   [
     "dead grant(s)",
     `DELETE FROM oauth_grants g

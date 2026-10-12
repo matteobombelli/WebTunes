@@ -9,6 +9,7 @@ import {
   updatePlaylist,
 } from "@/lib/playlists";
 import { deleteObjectsBestEffort } from "@/lib/s3";
+import { getDisplayName } from "@/lib/users";
 
 type Params = RouteContext<"/api/playlists/[id]">;
 
@@ -57,7 +58,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       { status: 403 }
     );
   }
-  return NextResponse.json(await toPlaylistDTO(result.playlist));
+  // Editors are the owner or a collaborator; role null would mean read-only.
+  const isOwner = result.playlist.ownerId === user.id;
+  return NextResponse.json(
+    await toPlaylistDTO(
+      result.playlist,
+      undefined,
+      isOwner ? null : await getDisplayName(result.playlist.ownerId),
+      isOwner ? "owner" : "collaborator"
+    )
+  );
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {

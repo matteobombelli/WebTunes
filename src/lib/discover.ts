@@ -295,18 +295,19 @@ export async function listFriendsTop(
  * shared recency rule (see topTracksByRecency), filtered to what the *viewer* can
  * access. The caller must have verified friendship; the friend is then in the
  * viewer's friendIds, so the viewer's own access predicate correctly drops the
- * friend's private tracks and anything else the viewer can't reach.
+ * friend's private tracks and anything else the viewer can't reach. Like other
+ * profile views it skips the duplicate filter, which would drop (not replace)
+ * the friend's copy of a song the viewer also owns.
  */
 export async function listUserTopTracks(
   targetUserId: string,
-  viewerId: string,
-  hideFriendDuplicates: boolean
+  viewerId: string
 ): Promise<TrackDTO[]> {
   const friendIds = await friendIdsOf(viewerId);
   return topTracksByRecency({
     listenerIds: [targetUserId],
     viewerId,
-    accessClause: accessWhere(viewerId, friendIds, hideFriendDuplicates),
+    accessClause: accessWhere(viewerId, friendIds, false),
   });
 }
 

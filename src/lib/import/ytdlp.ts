@@ -218,6 +218,8 @@ export async function downloadAudio(opts: {
     "--no-simulate",
     "--print",
     "after_move:filepath",
+    // --print also implies --quiet, which hides progress unless forced back.
+    "--progress",
     "--newline",
     "--progress-template",
     "download:PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes,progress.total_bytes_estimate)s",

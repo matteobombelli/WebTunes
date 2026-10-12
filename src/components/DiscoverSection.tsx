@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckIcon, PlayIcon, PlusIcon, ShuffleIcon, XIcon } from "@/components/icons";
 import TrackArt from "@/components/TrackArt";
 import MobileSwipeTrack from "@/components/MobileSwipeAction";
@@ -64,6 +64,8 @@ export default function DiscoverSection({
 }) {
   const current = useCurrentTrack();
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // A Retry after a failed add must not create another empty playlist.
+  const savedPlaylistIdRef = useRef<string | null>(null);
 
   // Random: the whole section is one big, easy-to-press "Play Radio" button.
   if (radioSeeds !== undefined) {
@@ -115,13 +117,16 @@ export default function DiscoverSection({
     if (saveState === "saving") return;
     setSaveState("saving");
     try {
-      const name = `${title} (${new Date().toLocaleDateString()})`.slice(0, 100);
-      const playlist = await api<PlaylistDTO>("/playlists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      await api(`/playlists/${playlist.id}/tracks`, {
+      if (!savedPlaylistIdRef.current) {
+        const name = `${title} (${new Date().toLocaleDateString()})`.slice(0, 100);
+        const playlist = await api<PlaylistDTO>("/playlists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        savedPlaylistIdRef.current = playlist.id;
+      }
+      await api(`/playlists/${savedPlaylistIdRef.current}/tracks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackIds: pool.slice(0, 500).map((t) => t.id) }),

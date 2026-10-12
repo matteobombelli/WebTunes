@@ -15,6 +15,7 @@ import {
   PRESIGN_REUSE_SEC,
   uploadObject,
 } from "@/lib/s3";
+import { getDisplayName } from "@/lib/users";
 
 // Stable per-playlist cover URL (mirrors the track /art route): the client keys
 // on this URL while the presigned redirect target rotates per request, so a
@@ -89,5 +90,14 @@ export async function POST(
   if (playlist.coverS3Key && playlist.coverS3Key !== s3Key) {
     await deleteObject(playlist.coverS3Key).catch(() => {});
   }
-  return NextResponse.json(await toPlaylistDTO(updated));
+  // Editors are the owner or a collaborator; role null would mean read-only.
+  const isOwner = updated.ownerId === user.id;
+  return NextResponse.json(
+    await toPlaylistDTO(
+      updated,
+      undefined,
+      isOwner ? null : await getDisplayName(updated.ownerId),
+      isOwner ? "owner" : "collaborator"
+    )
+  );
 }

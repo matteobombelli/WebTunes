@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPresignedGetUrl } from "@/lib/s3";
+import { getPresignedGetUrl, PRESIGN_REUSE_SEC } from "@/lib/s3";
 import { resolveShareToken } from "@/lib/shares";
 
 // Public, UNAUTHENTICATED audio stream behind a share token. Mirrors
@@ -17,8 +17,8 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const { url } = await getPresignedGetUrl(track.s3Key);
-  // Per-browser cache under the 1h presign TTL, like the authed stream route.
+  // Cached for the presign reuse window, like the authed stream route.
   const res = NextResponse.redirect(url, 302);
-  res.headers.set("Cache-Control", "private, max-age=3000");
+  res.headers.set("Cache-Control", `private, max-age=${PRESIGN_REUSE_SEC}`);
   return res;
 }

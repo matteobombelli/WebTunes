@@ -529,8 +529,9 @@ export default function PlayerBar({
         : null;
     // Listen sessions follow queue slots, including adjacent duplicate tracks.
     finishListenSession(audio);
-    // Adjacent duplicates reuse the loaded source but restart as a new slot.
-    if (loadedTrackIdRef.current === track.id) {
+    // Adjacent duplicates reuse the loaded source but restart as a new slot;
+    // a source that failed to load is reloaded instead (play() would reject).
+    if (loadedTrackIdRef.current === track.id && !audio.error) {
       const loadedDuration =
         Number.isFinite(audio.duration) && audio.duration > 0
           ? audio.duration
@@ -670,12 +671,14 @@ export default function PlayerBar({
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Release the keep-alive context when the player unmounts.
+  // Release the keep-alive context and any download blob when the player unmounts.
   useEffect(() => {
     return () => {
       clearSilenceCap();
       keepAliveRef.current?.close().catch(() => {});
       keepAliveRef.current = null;
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     };
   }, []);
 
@@ -789,6 +792,7 @@ export default function PlayerBar({
     if (audio && seekRequest !== null) {
       restoredPositionRef.current = null; // a deliberate seek cancels a pending restore
       audio.currentTime = seekRequest;
+      freshLoadRef.current = false; // stop onPlaying's cold-start snap-to-0
       resetListenSample(audio); // moving the playhead is not listening time
       _clearSeek();
       updatePositionState(); // reflect the seek in the OS scrubber immediately

@@ -10,6 +10,7 @@ import {
   updateTrackMetadata,
   type OwnedTrackResult,
 } from "@/lib/tracks";
+import { getDisplayName } from "@/lib/users";
 
 type Params = RouteContext<"/api/tracks/[id]">;
 
@@ -56,7 +57,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (result.status === "forbidden") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  return NextResponse.json(toTrackDTO(result.track));
+  // ownerName null means "the viewer's own track" in the DTO contract.
+  const { track } = result;
+  const ownerName =
+    track.ownerId === user.id ? null : await getDisplayName(track.ownerId);
+  return NextResponse.json(toTrackDTO(track, ownerName));
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {

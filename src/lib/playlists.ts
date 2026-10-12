@@ -285,12 +285,24 @@ export async function getPlaylistTrackIds(
 export type ReorderPlaylistTracksResult =
   | { status: "not_found" }
   | { status: "invalid" }
-  | { status: "ok"; before: string[] };
+  | { status: "ok"; before: string[]; after: string[] };
+
+function isPermutationOf(ids: string[], of: string[]): boolean {
+  const set = new Set(ids);
+  const ofSet = new Set(of);
+  return (
+    ids.length === set.size && // no duplicates
+    set.size === ofSet.size &&
+    ids.every((id) => ofSet.has(id))
+  );
+}
 
 /**
- * `trackIds` must be a permutation of the playlist's CURRENT members - a
- * partial / padded / duplicated list is rejected so positions can't end up
- * colliding or non-contiguous (the web client always sends the full list).
+ * `trackIds` must be a permutation of the playlist's CURRENT members, or of
+ * the members visible to the caller (what getPlaylistTracks returns); hidden
+ * members then keep their slots. A partial / padded / duplicated list is
+ * rejected so positions can't end up colliding or non-contiguous. `after` is
+ * the resulting full order.
  */
 export function reorderPlaylistTracks(
   playlistId: string,
@@ -303,17 +315,35 @@ export function reorderPlaylistTracks(
       return { status: "not_found" };
     }
     const members = await tx
-      .select({ trackId: playlistTracks.trackId })
+      .select({
+        trackId: playlistTracks.trackId,
+        ownerId: tracks.ownerId,
+        isPrivate: tracks.isPrivate,
+        suggestedImportId: tracks.suggestedImportId,
+      })
       .from(playlistTracks)
+      .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
       .where(eq(playlistTracks.playlistId, playlistId))
       .orderBy(asc(playlistTracks.position));
-    const submittedSet = new Set(trackIds);
-    const memberSet = new Set(members.map((m) => m.trackId));
-    const isPermutation =
-      trackIds.length === submittedSet.size && // no duplicates
-      submittedSet.size === memberSet.size &&
-      [...submittedSet].every((tid) => memberSet.has(tid));
-    if (!isPermutation) return { status: "invalid" };
+    const before = members.map((m) => m.trackId);
+    let after: string[];
+    if (isPermutationOf(trackIds, before)) {
+      after = trackIds;
+    } else {
+      const friendIds = await friendIdsOf(userId);
+      const visible = members.filter((m) =>
+        canAccessTrackWithFriends(userId, m, friendIds)
+      );
+      if (!isPermutationOf(trackIds, visible.map((m) => m.trackId))) {
+        return { status: "invalid" };
+      }
+      const visibleSet = new Set(trackIds);
+      let next = 0;
+      after = before.map((id) => (visibleSet.has(id) ? trackIds[next++] : id));
+    }
+    if (after.every((id, i) => id === before[i])) {
+      return { status: "ok", before, after };
+    }
 
     // One set-based statement instead of one UPDATE per track: a drag-drop in a
     // large playlist would otherwise hold the transaction (and row locks) across
@@ -322,12 +352,12 @@ export function reorderPlaylistTracks(
     // which Postgres can't cast to uuid[].
     await tx.execute(sql`
       update ${playlistTracks} set "position" = v.ord - 1
-      from unnest(${sql.param(trackIds)}::uuid[]) with ordinality as v(track_id, ord)
+      from unnest(${sql.param(after)}::uuid[]) with ordinality as v(track_id, ord)
       where ${playlistTracks.playlistId} = ${playlistId}
         and ${playlistTracks.trackId} = v.track_id
     `);
     await touchPlaylist(tx, playlistId);
-    return { status: "ok", before: members.map((m) => m.trackId) };
+    return { status: "ok", before, after };
   });
 }
 

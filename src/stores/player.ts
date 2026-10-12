@@ -686,11 +686,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           unshuffledQueue: null,
         });
       } else if (s.unshuffledQueue) {
-        const restoredIndex = s.unshuffledQueue.indexOf(current);
+        // Pre-shuffle order for what is still unplayed. Ad-hoc queues have no
+        // context to hold never-played tracks, so they all stay upcoming -
+        // including those that preceded the current track before the shuffle.
+        const playedUids = new Set(history.map((it) => it.uid));
+        const upcoming = s.unshuffledQueue.filter(
+          (it) => !playedUids.has(it.uid) && it.uid !== current.uid
+        );
         set({
           shuffled: false,
-          queue: s.unshuffledQueue,
-          index: restoredIndex >= 0 ? restoredIndex : 0,
+          queue: [...history, current, ...upcoming],
+          index: s.index,
           unshuffledQueue: null,
         });
       } else {

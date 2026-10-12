@@ -195,18 +195,25 @@ export default function PlaylistDetail({
     }
   };
 
+  // Serialized so rapid drags reach the server in order (the last one wins).
+  const reorderChainRef = useRef<Promise<void>>(Promise.resolve());
   const reorderTracks = useCallback(
-    async (trackIds: string[]) => {
-      try {
-        await api(`/playlists/${playlist.id}/tracks`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackIds }),
-        });
-      } finally {
-        // Resync even on failure so a rejected reorder reverts the optimistic order.
-        router.refresh();
-      }
+    (trackIds: string[]) => {
+      reorderChainRef.current = reorderChainRef.current.then(async () => {
+        try {
+          await api(`/playlists/${playlist.id}/tracks`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackIds }),
+          });
+        } catch {
+          useToastStore.getState().show("Couldn’t reorder playlist");
+        } finally {
+          // Resync even on failure so a rejected reorder reverts the optimistic order.
+          router.refresh();
+        }
+      });
+      return reorderChainRef.current;
     },
     [playlist.id, router]
   );
@@ -251,7 +258,10 @@ export default function PlaylistDetail({
               type="file"
               accept="image/*"
               hidden
-              onChange={(e) => uploadCover(e.target.files?.[0])}
+              onChange={(e) => {
+                void uploadCover(e.target.files?.[0]);
+                e.target.value = ""; // allow re-selecting the same file
+              }}
             />
           </>
         ) : (
