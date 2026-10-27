@@ -14,7 +14,7 @@ export function getAppBaseUrl(headers?: Headers): string {
     // separate basePath in lib/auth.ts), so append BASE_PATH ourselves. Stay
     // idempotent if AUTH_URL ever already carries the basePath and/or /api/auth.
     const base = authUrl.replace(/\/api\/auth\/?$/, "").replace(/\/$/, "");
-    return base.endsWith(BASE_PATH) ? base : `${base}${BASE_PATH}`;
+    return BASE_PATH && !base.endsWith(BASE_PATH) ? `${base}${BASE_PATH}` : base;
   }
 
   if (process.env.NODE_ENV === "production") {
