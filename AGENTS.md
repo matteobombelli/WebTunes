@@ -9,7 +9,7 @@ Already adopted conventions:
 - `src/proxy.ts`, not `middleware.ts`.
 - Async page/route `params` and async `cookies()` / `headers()`.
 - Generated `RouteContext<"/api/...">` types for dynamic route handlers.
-- The app always runs under base path `/projects/webtunes`, including development.
+- The app is served from the root of `webtunes.matteob.dev` (`BASE_PATH` in `src/lib/base-path.ts` is empty), including development. Code that builds URLs still goes through `BASE_PATH` so a prefix can come back.
 
 ## Purpose and commands
 
@@ -34,7 +34,7 @@ TypeScript and ESLint must remain clean. Production builds must not require inte
 - `src/app/api/`: intentionally reusable JSON API for web and future mobile clients. Do not delete an endpoint merely because the web client does not call it.
 - `src/app/(app)/`: authenticated server pages; `src/app/(auth)/`: unauthenticated flows.
 - `src/components/`: client UI. `src/stores/player.ts` owns queue intent; `PlayerBar` owns the only track `<audio>` element.
-- `src/lib/offline/`: IndexedDB and Cache Storage logic. `public/sw.js` contains matching cache names and the hard-coded base path.
+- `src/lib/offline/`: IndexedDB and Cache Storage logic. `public/sw.js` contains matching cache names and a manual copy of `BASE_PATH`.
 - `src/lib/import/ytdlp.ts`: the only module allowed to spawn yt-dlp.
 
 Keep routes thin: authenticate, validate, call shared logic, map the response.
@@ -65,7 +65,7 @@ Keep routes thin: authenticate, validate, call shared logic, map the response.
 ## MCP and OAuth
 
 - `/api/mcp` (`src/lib/mcp/server.ts`) is a stateless MCP server. Tools stay thin: validate, call `src/lib`, map. It accepts only bearer tokens from the in-app OAuth 2.1 server in `src/lib/oauth/`, whose audience (`resource`) must equal the MCP URL.
-- Discovery lives under the base path (`/projects/webtunes/.well-known/*`), because Caddy owns root-level paths. Clients reach it through the 401 `WWW-Authenticate` `resource_metadata` and the OIDC path-append fallback. The OIDC-only metadata fields exist solely for client schema validation; no ID tokens are issued.
+- Discovery lives at the origin root (`/.well-known/*`, routes in `src/app/.well-known/`); the issuer is `https://webtunes.matteob.dev`. Clients reach it through the 401 `WWW-Authenticate` `resource_metadata`. The OIDC-only metadata fields exist solely for client schema validation; no ID tokens are issued.
 - OAuth codes, access tokens and refresh tokens are bearer secrets. Store only sha256 hashes and never log them. Refresh tokens rotate, and reusing one revokes the grant. Password reset deletes grants.
 - The consent page never redirects to the client before user interaction: every request error is shown on the page, and only the consent action (after Allow or Deny, re-validating the request) returns a `redirect_uri` navigation. It navigates to the client client-side, because CSP `form-action 'self'` blocks redirects that follow a form submission. It sends `frame-ancestors 'none'`.
 - Scopes are `library:read` and `library:write`. Write tools are registered only for write grants. Demo accounts can grant read only.
