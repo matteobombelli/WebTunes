@@ -3,7 +3,7 @@
     {
       "AllowedOrigins": [
         "https://matteob.dev",
-        "https://apps.matteob.dev"
+        "https://webtunes.matteob.dev"
       ],
       "AllowedMethods": ["GET", "HEAD"],
       "AllowedHeaders": ["*"],

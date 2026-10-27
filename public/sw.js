@@ -27,7 +27,7 @@
 //                 only the next few tracks (pruned client-side); ephemeral and
 //                 safe to drop. Written by src/lib/offline/prefetch.ts, read here.
 
-const BASE_PATH = "/projects/webtunes";
+const BASE_PATH = ""; // keep in sync with src/lib/base-path.ts
 const SHELL_CACHE = "wt-shell-v2";
 const AUDIO_CACHE = "wt-audio";
 const ART_CACHE = "wt-art";

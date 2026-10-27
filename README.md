@@ -4,11 +4,11 @@ A self-hosted, web-based music app. Each user has a personal library stored in S
 playable in the browser, organized into playlists, and automatically shared with
 friends. Search covers title, artist, album, and lyrics.
 
-Production target: https://apps.matteob.dev/projects/webtunes
+Production target: https://webtunes.matteob.dev
 
 ## Stack
 
-- Next.js (App Router, TypeScript) with basePath `/projects/webtunes`
+- Next.js (App Router, TypeScript); `src/lib/base-path.ts` can put the app under a subpath
 - PostgreSQL via Drizzle ORM (full-text search with a generated tsvector + GIN index)
 - Auth.js (NextAuth v5) credentials login with database sessions
 - S3-compatible object storage (MinIO in dev, Cloudflare R2 in prod), presigned URLs for streaming
@@ -22,10 +22,9 @@ docker compose up -d        # Postgres :5432 + MinIO :9000 (console :9001)
 cp .env.example .env.local  # then set AUTH_SECRET (openssl rand -base64 32)
 npm install
 npx drizzle-kit migrate
-npm run dev                 # http://localhost:3000/projects/webtunes
+npm run dev                 # http://localhost:3000
 ```
 
-Note the basePath: the app lives under `/projects/webtunes` even in dev.
 
 ## Demo accounts
 
@@ -91,7 +90,7 @@ minimum.
   as Claude can search, build playlists, read stats, import and triage
   suggestions for a signed-in user. It authenticates with a built-in OAuth 2.1
   server (`src/lib/oauth/`). Connect by adding the URL
-  `https://<host>/projects/webtunes/api/mcp` as a custom connector (Claude) or
+  `https://webtunes.matteob.dev/api/mcp` as a custom connector (Claude) or
   with `claude mcp add --transport http webtunes <url>` (Claude Code), then log
   in and approve. Every change made through MCP is recorded and can be undone
   for 30 days, from the `undo_action` tool or from Settings, which also lists

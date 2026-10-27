@@ -40,7 +40,7 @@ const adapter = DrizzleAdapter(db, {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter,
   // Route handlers receive URLs with the Next basePath already stripped, so
-  // Auth.js sees /api/auth/* regardless of the public /projects/webtunes prefix.
+  // Auth.js sees /api/auth/* regardless of any public basePath prefix.
   basePath: "/api/auth",
   // Strategy is intentionally NOT set: with an adapter present it defaults to
   // "database" at runtime, but setting it explicitly trips Auth.js's
@@ -125,8 +125,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     redirect: async ({ url, baseUrl }) => {
       const origin = new URL(baseUrl).origin;
       const target = url.startsWith("/") ? new URL(url, origin) : new URL(url);
-      if (target.origin !== origin) return `${origin}${BASE_PATH}`;
-      if (!target.pathname.startsWith(BASE_PATH)) {
+      if (target.origin !== origin) return `${origin}${BASE_PATH || "/"}`;
+      if (BASE_PATH && !target.pathname.startsWith(BASE_PATH)) {
         target.pathname =
           BASE_PATH + (target.pathname === "/" ? "" : target.pathname);
       }

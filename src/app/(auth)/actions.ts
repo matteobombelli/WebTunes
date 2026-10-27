@@ -21,12 +21,12 @@ export type AuthFormState = {
 };
 
 // Only same-app relative paths. Browsers read "//host", "/\host" and paths
-// with stripped control characters as protocol-relative; the basePath is
-// re-added by Auth.js's redirect callback, so a prefixed path is refused.
+// with stripped control characters as protocol-relative; the basePath (when
+// set) is re-added by Auth.js's redirect callback, so a prefixed path is refused.
 function safeNextPath(raw: FormDataEntryValue | null): string | null {
   if (typeof raw !== "string" || !raw.startsWith("/")) return null;
   if (raw.startsWith("//") || /[\\\u0000-\u001f]/.test(raw)) return null;
-  if (raw === BASE_PATH || raw.startsWith(`${BASE_PATH}/`)) return null;
+  if (BASE_PATH && (raw === BASE_PATH || raw.startsWith(`${BASE_PATH}/`))) return null;
   return raw;
 }
 

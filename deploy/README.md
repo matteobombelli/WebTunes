@@ -113,27 +113,6 @@ sudo systemctl start webtunes-purge-mcp.service  # run once, now
 journalctl -u webtunes-purge-mcp.service    # logs (rows purged per kind)
 ```
 
-## Optional: root-level OAuth discovery for the MCP endpoint
-
-MCP clients find the authorization server through the `WWW-Authenticate`
-header and the OIDC path-append URL
-(`/projects/webtunes/.well-known/openid-configuration`), which the app serves
-itself. Strict clients that only try the RFC 8414 / RFC 9728 path-insert URLs
-ask for root-level paths, which Caddy owns. To serve those too, add to the
-`apps.matteob.dev` site block (replace the upstream with the one WebTunes
-already uses):
-
-```caddy
-handle /.well-known/oauth-authorization-server/projects/webtunes {
-	rewrite * /projects/webtunes/.well-known/oauth-authorization-server
-	reverse_proxy <webtunes upstream>
-}
-handle /.well-known/oauth-protected-resource/projects/webtunes/api/mcp {
-	rewrite * /projects/webtunes/.well-known/oauth-protected-resource
-	reverse_proxy <webtunes upstream>
-}
-```
-
 ## Daily yt-dlp self-update (in-site importer)
 
 The in-site importer (`src/lib/import/`) shells out to the yt-dlp standalone
